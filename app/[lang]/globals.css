@@ -1,26 +1,43 @@
+/* app/globals.css */
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Brand Colors - Al Mizan Palette */
+  --color-bg-light: #FCFFFF;
+  --color-primary-dark: #0D2527;
+  --color-primary: #173C3F;
+  --color-primary-mid: #306B6F;
+  --color-primary-light: #418387;
+  --color-accent: #589C9F;
+  --color-accent-light: #9BCFCF;
+  
+  /* Text Colors */
+  --color-text-dark: #0D2527;
+  --color-text-medium: #306B6F;
+  --color-text-light: #6B8E8F;
+  
+  /* UI */
+  --background: #FCFFFF;
+  --foreground: #0D2527;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Arabic font override */
+[dir="rtl"] body {
+  font-family: var(--font-cairo), system-ui, sans-serif;
+}
+
+@layer utilities {
+  .font-cairo {
+    font-family: var(--font-cairo), system-ui, sans-serif;
+  }
+  
+  .font-inter {
+    font-family: var(--font-inter), system-ui, sans-serif;
+  }
 }
