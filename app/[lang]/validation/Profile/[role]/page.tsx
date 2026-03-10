@@ -31,7 +31,7 @@ export default function ProfilePage() {
 
   const handleModifier = () => {
     if (isEditing) {
-      // Sauvegarder les modifications
+       
       console.log('Profil mis à jour:', profile);
       setIsEditing(false);
     } else {
@@ -48,7 +48,7 @@ export default function ProfilePage() {
     <div className="space-y-6">
      
 
-      {/* Photo de profil */}
+      { }
       <div className="val-profile-section">
         <h2 className="val-profile-section-title">Photo de profil</h2>
         
@@ -85,7 +85,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Informations sur le profil */}
+      { }
       <div className="val-profile-section">
         <h2 className="val-profile-section-title">Informations sur le profil</h2>
         

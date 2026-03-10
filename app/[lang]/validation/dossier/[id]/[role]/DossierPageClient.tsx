@@ -17,16 +17,16 @@ export default function DossierPage({ role }: DossierPageProps) {
 
   return (
     <div className="space-y-6">
-      {/* Navigation Tabs */}
+      { }
       <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* FileDetails avec logique intégrée du DocumentViewer */}
+      { }
       <FileDetails 
         activeTab={activeTab} 
         role={role}
         onDownload={() => console.log('Télécharger')}
         onTransmit={() => console.log('Transmettre')}
-        // ← Fonction qui rend le DocumentViewer
+         
         renderDocumentViewer={() => (
           <DocumentViewer
           />

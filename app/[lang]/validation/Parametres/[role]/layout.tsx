@@ -28,12 +28,12 @@ export default async function ParametresLayout({
       style={{ backgroundColor: 'var(--color-blue-0)' }}
     >
       
-      {/* Sidebar */}
+      { }
       <div className="hidden md:block">
         <Sidebar lang={lang} role={userRole} />
       </div>
 
-      {/* Main */}
+      { }
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         <ParametresHeader lang={lang} role={userRole} dict={dict} />
 

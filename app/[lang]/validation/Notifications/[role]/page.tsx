@@ -16,7 +16,7 @@ export default async function NotificationsPage({ params }: PageProps) {
     <div className="space-y-6">
       
 
-      {/* Liste des notifications */}
+      { }
       <NotificationsList />
     </div>
   );

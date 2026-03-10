@@ -12,20 +12,20 @@ type ReferenceTab = 'loi-23-12' | 'loi-17-18' | 'faq';
 type UserRole = 'commission' | 'validator';
 
 export default async function ReferencesPage({ params, searchParams }: PageProps) {
-  // Récupération des paramètres
+   
   const { lang, role } = await params;
   const { tab } = await searchParams;
 
-  // Validation du rôle
+   
   const userRole: UserRole = ['commission', 'validator'].includes(role) ? (role as UserRole) : 'commission';
 
-  // Définition de l'onglet actif
+   
   const currentTab: ReferenceTab =
     ['loi-23-12', 'loi-17-18', 'faq'].includes(tab as string)
       ? (tab as ReferenceTab)
       : 'loi-23-12';
 
-  // FAQ Data
+   
   const faqData = [
     { question: 'What is this first question ?', answer: 'This is the answer to the first question. It provides detailed information about the topic.' },
     { question: 'What is this second question ?', answer: 'This is the answer to the second question. It explains the process and requirements.' },
@@ -34,7 +34,7 @@ export default async function ReferencesPage({ params, searchParams }: PageProps
     { question: 'What is this last question ?', answer: 'This is the answer to the last question. It summarizes key points and next steps.' },
   ];
 
-  // Chemins des PDFs
+   
   const pdfPaths: Record<Exclude<ReferenceTab, 'faq'>, string> = {
     'loi-23-12': '/documents/loi-23-12.pdf',
     'loi-17-18': '/documents/loi-17-18.pdf',
@@ -42,7 +42,7 @@ export default async function ReferencesPage({ params, searchParams }: PageProps
 
   return (
     <div className="space-y-6">
-      {/* Navigation Tabs */}
+      { }
       <div className="val-tabs-container">
         <div className="flex items-center gap-6">
           {(['loi-23-12', 'loi-17-18', 'faq'] as ReferenceTab[]).map((tabName) => (
@@ -63,7 +63,7 @@ export default async function ReferencesPage({ params, searchParams }: PageProps
         </div>
       </div>
 
-      {/* Contenu */}
+      { }
       <div className="val-references-content">
         {currentTab === 'faq' ? (
           <div className="val-faq-list">

@@ -5,7 +5,7 @@ import '../validation.css';
 
 
 
-// Données de démonstration (à remplacer par des données réelles)
+ 
 const dossierInfo: DossierInfo = {
   operateurEconomique: 'Opérateur économique',
   operateur: 'Opérateur',
@@ -69,7 +69,7 @@ const validators: Validator[] = [
 export default function AffectationDossierPage() {
   return (
     <div className="space-y-6">
-        {/* Informations du dossier */}
+        { }
 <div className="val-dossier-info">
   <div className="val-dossier-info-grid">
     <div className="val-dossier-info-column">
@@ -116,7 +116,7 @@ export default function AffectationDossierPage() {
   </div>
 </div>
 
-      {/* Liste des validateurs */}
+      { }
 <ValidatorList 
   validators={validators}/>
     </div>

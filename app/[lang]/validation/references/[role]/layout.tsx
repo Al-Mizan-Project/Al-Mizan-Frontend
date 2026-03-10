@@ -20,7 +20,7 @@ export default async function ReferencesLayout({
   const locale = lang as Locale;
   const dict = await getDictionary(locale);
 
-  // Forcer le rôle à correspondre au type
+   
   const userRole = (role as 'commission' | 'validator') || 'validator';
 
   return (
@@ -29,7 +29,7 @@ export default async function ReferencesLayout({
       style={{ backgroundColor: 'var(--color-blue-0)' }}
     >
 
-      {/* Sidebar */}
+      { }
       <div className="hidden md:block">
         <Sidebar 
           lang={lang}
@@ -37,7 +37,7 @@ export default async function ReferencesLayout({
         />
       </div>
 
-      {/* Content */}
+      { }
       <div className="flex-1 flex flex-col overflow-hidden w-full">
 
         <ReferencesHeader

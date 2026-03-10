@@ -19,7 +19,7 @@ export default async function ProfileLayout({
   const locale = lang as Locale;
   const dict = await getDictionary(locale);
 
-  // Forcer le rôle à correspondre au type 'commission' | 'validator'
+   
   const userRole = (role as 'commission' | 'validator') || 'validator';
 
   return (
@@ -27,12 +27,12 @@ export default async function ProfileLayout({
       className="flex h-screen overflow-hidden validation-theme"
       style={{ backgroundColor: 'var(--color-blue-0)' }}
     >
-      {/* Sidebar */}
+      { }
       <div className="hidden md:block">
         <Sidebar lang={lang} role={userRole} />
       </div>
       
-      {/* Main content */}
+      { }
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         <ProfileHeader lang={lang} role={userRole} dict={dict} />
 

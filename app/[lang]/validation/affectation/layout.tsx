@@ -24,20 +24,21 @@ export default async function DossierLayout({
       dir={lang === 'ar' ? 'rtl' : 'ltr'}
       style={{ backgroundColor: 'var(--color-blue-0)' }}
     >
-      {/* Sidebar */}
+      { }
       <div className="hidden md:block">
 <Sidebar lang={lang} role="commission" />
       </div>
       
       <div className="flex-1 flex flex-col overflow-hidden w-full">
-        {/* FileHeader avec l'ID correct */}
+        { }
         <FileHeader 
           lang={lang} 
           dict={dict}
-          dossierId={`Référence Dossier ${id}`}  // ✅ id est maintenant une string
+          role='commission'
+          dossierId={`Référence Dossier ${id}`}   
         />
         
-        {/* Main Content */}
+        { }
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="w-full max-w-[1440px] mx-auto">
             {children}
