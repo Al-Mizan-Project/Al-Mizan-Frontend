@@ -1,5 +1,93 @@
 {
   "title": "Bonjour le monde",
   "subtitle": "Le texte est aligné à gauche.",
-  "button": "Suivant"
+  "button": "Suivant",
+  
+  "common": {
+    "title": "EL MIZAN",
+    "subtitle": "Commission de Validation",
+    "button": "Action",
+    "search": "Rechercher...",
+    "noResults": "Aucun résultat trouvé",
+    "resetFilters": "Réinitialiser les filtres",
+    "actions": {
+      "view": "Voir",
+      "assign": "Affecter",
+      "reassign": "Réaffecter",
+      "transmit": "Transmettre",
+      "download": "Télécharger"
+    },
+    "status": {
+      "waiting": "En Attente",
+      "inProgress": "En Cours",
+      "delayed": "En Retard",
+      "ready": "Prêt",
+      "submitted": "Soumis"
+    }
+  },
+  "dashboard": {
+    "title": "Vue Globale",
+    "subtitle": "Tableau de bord de la commission de validation",
+    "tabs": {
+      "overview": "Aperçu",
+      "waiting": "En Attente",
+      "inProgress": "En Cours",
+      "delayed": "En Retard",
+      "ready": "Prêts"
+    },
+    "stats": {
+      "waitingAssignment": "Dossiers en attente d'affectation",
+      "inValidation": "Dossiers en cours de validation",
+      "delayed": "Dossiers en retard",
+      "readyToTransmit": "Dossiers prêt à transmettre à l'administration"
+    },
+    "charts": {
+      "delayByDuration": "Dossiers en retards par durée",
+      "byEmployee": "Dossiers affectés par employés",
+      "numberOfDelayed": "Numero de dossiers en retard",
+      "inEvaluation": "En cours d'évaluation",
+      "delayed": "En retard",
+      "readyToTransmit": "Prêt à transmettre"
+    },
+    "navigation": {
+      "globalView": "Vue globale",
+      "files": "Dossiers",
+      "assignment": "Affectation des dossiers",
+      "history": "Historique des évaluations",
+      "references": "Références réglementaires"
+    }
+  },
+  
+  "dossier": {
+    "operator": "OPÉRATEUR ÉCONOMIQUE",
+    "tabs": {
+      "financial": "Offre Financière",
+      "technical": "Offre Technique",
+      "call": "Appel d'Offre",
+      "reports": "Rapports d'évaluation",
+      "decision": "Décision de Validation"
+    },
+    "details": {
+      "file": "Dossier",
+      "economicOperator": "Opérateur économique",
+      "validationDeadline": "Délais de validation",
+      "contractingService": "Service Contractant",
+      "evaluator": "Evaluateur",
+      "domain": "Domaine",
+      "validationStage": "Etape de validation",
+      "document": "Document",
+      "status": "Status",
+      "download": "Télécharger",
+      "pending": "En attente",
+      "ready": "Prêt"
+    },
+    "viewer": {
+      "zoom": "Zoom",
+      "page": "Page",
+      "previous": "Précédent",
+      "next": "Suivant"
+    }
+  }
+
+
 }

@@ -1,5 +1,119 @@
 {
   "title": "مرحباً بالعالم",
   "subtitle": "النص محاذى لليمين.",
-  "button": "التالي"
+  "button": "التالي",
+  
+  "common": {
+    "title": "الميزان",
+    "subtitle": "لجنة التحقق",
+    "button": "إجراء",
+    "search": "بحث...",
+    "noResults": "لم يتم العثور على نتائج",
+    "resetFilters": "إعادة تعيين الفلاتر",
+    "actions": {
+      "view": "عرض",
+      "assign": "تعيين",
+      "reassign": "إعادة تعيين",
+      "transmit": "إرسال",
+      "download": "تحميل"
+    }
+  },
+  "dashboard": {
+  "title": "نظرة شاملة",
+    "navigation": {
+    "globalView": "العرض الشامل",
+    "files": "الملفات",
+    "assignment": "تعيين الملفات",
+    "history": "سجل التقييمات",
+    "references": "المراجع التنظيمية"
+  },
+    "tabs": {
+      "overview": "نظرة عامة",
+      "waiting": "في الانتظار",
+      "inProgress": "قيد المعالجة",
+      "delayed": "متأخر",
+      "ready": "جاهز للإرسال"
+    },
+    "stats": {
+      "waitingAssignment": "في انتظار التعيين",
+      "inValidation": "قيد التحقق",
+      "delayed": "متأخر",
+      "readyToTransmit": "جاهز للإرسال"
+    },
+    "charts": {
+      "delayByDuration": "التأخير حسب المدة",
+      "numberOfDelayed": "عدد الملفات المتأخرة",
+      "byEmployee": "حسب الموظف",
+      "inEvaluation": "قيد التقييم",
+      "delayed": "متأخر",
+      "readyToTransmit": "جاهز للإرسال"
+    }
+  },
+  "files": {
+    "table": {
+      "headers": {
+        "file": "الملف",
+        "validator": "المحقق",
+        "economicOperator": "المتعامل الاقتصادي",
+        "submissionDate": "تاريخ الإيداع",
+        "assignmentDate": "تاريخ التعيين",
+        "delayDays": "أيام التأخير",
+        "validationDeadline": "آخر أجل للتحقق",
+        "status": "الحالة",
+        "actions": "إجراءات"
+      },
+      "status": {
+        "En Attente": "في الانتظار",
+        "En Cours": "قيد المعالجة",
+        "En Retard": "متأخر",
+        "Prêt": "جاهز"
+      },
+      "actions": {
+        "assign": "تعيين",
+        "reassign": "إعادة تعيين",
+        "transmit": "إرسال",
+        "view": "عرض"
+      },
+      "pagination": {
+        "previous": "السابق",
+        "next": "التالي",
+        "page": "صفحة",
+        "of": "من"
+      }
+    }
+  },
+  
+  "dossier": {
+    "operator": "المتعامل الاقتصادي",
+    "tabs": {
+      "financial": "العرض المالي",
+      "technical": "العرض التقني",
+      "call": "طلب العروض",
+      "reports": "تقارير التقييم",
+      "decision": "قرار التحقق"
+    },
+    "details": {
+      "file": "الملف",
+      "economicOperator": "المتعامل الاقتصادي",
+      "validationDeadline": "آخر أجل للتحقق",
+      "contractingService": "الخدمة المتعاقدة",
+      "evaluator": "المقيّم",
+      "domain": "المجال",
+      "validationStage": "مرحلة التحقق",
+      "document": "المستند",
+      "status": "الحالة",
+      "download": "تحميل",
+      "pending": "في الانتظار",
+      "ready": "جاهز"
+    },
+    "viewer": {
+      "zoom": "تكبير",
+      "page": "صفحة",
+      "previous": "السابق",
+      "next": "التالي"
+    }
+  }
+
 }
+
+
