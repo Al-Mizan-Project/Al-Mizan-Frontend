@@ -1,5 +1,305 @@
 {
+  "selectOrg": {
+    "title": "تسجيل منظمة جديدة",
+    "subtitle": "سجل كيانك لإدارة إجراءاتك على منصة الميزان. يمكنك بعد ذلك دعوة وإدارة أعضاء المنظمة.",
+    "types": {
+      "contractant": {
+        "title": "الخدمة المتعاقدة",
+        "description": "الوزارات والمؤسسات العمومية والإدارات"
+      },
+      "operateur": {
+        "title": "المتعامل الاقتصادي",
+        "description": "المؤسسات والمقاولات ومقدمي الخدمات"
+      },
+      "commission": {
+        "title": "لجنة التحقق الخارجية",
+        "description": "هيئات الرقابة والتقييم"
+      },
+      "tutelle": {
+        "title": "الوصاية",
+        "description": "سلطات الإشراف والتنظيم"
+      }
+    },
+    "select": "اختيار",
+    "info": "اختر نوع المنظمة الذي يناسب كيانك"
+  },
+  "register": {
+    "serviceContractant": {
+      "title": "تصريح - الخدمة المتعاقدة",
+      "subtitle": "يرجى ملء النموذج أدناه لتسجيل هيئتك العمومية",
+      "sections": {
+        "general": "المعلومات العامة",
+        "classification": "التصنيف والفئة",
+        "authority": "سلطة الوصاية",
+        "documents": "الوثائق الرسمية"
+      },
+      "fields": {
+        "nomOfficiel": "الاسم الرسمي للهيئة",
+        "nomOfficielPlaceholder": "مثال: وزارة الداخلية",
+        "adresseSiege": "عنوان المقر",
+        "adresseSiegePlaceholder": "مثال: 1 شارع ديدوش مراد، الجزائر الوسطى",
+        "emailContact": "البريد الإلكتروني الرسمي",
+        "emailContactPlaceholder": "contact@exemple.gov.dz",
+        "typeEntite": "نوع الهيئة",
+        "typeEntitePlaceholder": "اختر النوع",
+        "categorie": "الفئة",
+        "categoriePlaceholder": "اختر الفئة",
+        "codeOrdonnateur": "رمز الآمر بالصرف",
+        "codeOrdonnateurPlaceholder": "مثال: ORD-2026-001",
+        "nomTutelle": "اسم الوصاية",
+        "nomTutellePlaceholder": "مثال: رئاسة الحكومة",
+        "identiteAutorite": "هوية السلطة",
+        "identiteAutoritePlaceholder": "اسم ومنصب المسؤول",
+        "acteOfficiel": "القرار الرسمي / مرسوم الإنشاء",
+        "acteOfficielHelp": "صيغة PDF فقط. الحجم الأقصى: 10 ميجا بايت"
+      },
+      "categories": {
+        "ministere": "وزارة",
+        "directionGenerale": "مديرية عامة",
+        "etablissementPublic": "مؤسسة عمومية",
+        "wilaya": "ولاية",
+        "commune": "بلدية",
+        "epe": "مؤسسة عمومية اقتصادية",
+        "epic": "مؤسسة عمومية ذات طابع صناعي وتجاري",
+        "epa": "مؤسسة عمومية ذات طابع إداري"
+      },
+      "save": "حفظ",
+      "cancel": "إلغاء",
+      "success": "تم تسجيل المنظمة بنجاح",
+      "error": "خطأ في التسجيل",
+      "confirmSubmit": "هل أنت متأكد من رغبتك في حفظ هذه المنظمة؟"
+    },
+    "operateurEconomique": {
+      "title": "تصريح - المتعامل الاقتصادي",
+      "subtitle": "يرجى ملء النموذج أدناه لتسجيل مؤسستك",
+      "sections": {
+        "general": "المعلومات العامة",
+        "identification": "التعريف الجبائي والتجاري",
+        "social": "الانتماءات الاجتماعية",
+        "banking": "المعلومات البنكية",
+        "documents": "الوثائق الإدارية"
+      },
+      "fields": {
+        "nomOfficiel": "الاسم التجاري / الاسم الرسمي",
+        "nomOfficielPlaceholder": "مثال: شركة مثال للتكنولوجيا ذات مسؤولية محدودة",
+        "adresseSiege": "عنوان المقر الاجتماعي",
+        "adresseSiegePlaceholder": "مثال: 15 شارع محمد بلوزداد، الجزائر",
+        "emailContact": "البريد الإلكتروني المهني",
+        "emailContactPlaceholder": "contact@entreprise.dz",
+        "typeEntite": "الشكل القانوني",
+        "typeEntitePlaceholder": "اختر النوع",
+        "nif": "رقم التعريف الجبائي",
+        "nifPlaceholder": "مثال: 001234567890123",
+        "registreCommerce": "رقم السجل التجاري",
+        "registreCommercePlaceholder": "مثال: 16/00-1234567A12",
+        "rib": "البيان التعريفي البنكي",
+        "ribPlaceholder": "مثال: 00115451510000234567",
+        "casnosNumero": "رقم الكاسنوس",
+        "casnosNumeroPlaceholder": "رقم الانتماء للكاسنوس",
+        "casnosDate": "تاريخ صلاحية الكاسنوس",
+        "cnasNumero": "رقم الضمان الاجتماعي",
+        "cnasNumeroPlaceholder": "رقم الانتماء للضمان الاجتماعي",
+        "cnasDate": "تاريخ صلاحية الضمان الاجتماعي",
+        "extraitRole": "مستخلص الدور (وصل جبائي)",
+        "extraitRoleHelp": "صيغة PDF فقط. الحجم الأقصى: 5 ميجا بايت",
+        "certificatCasnos": "شهادة الانتماء للكاسنوس",
+        "certificatCasnosHelp": "صيغة PDF فقط. الحجم الأقصى: 5 ميجا بايت",
+        "certificatCnas": "شهادة الانتماء للضمان الاجتماعي",
+        "certificatCnasHelp": "صيغة PDF فقط. الحجم الأقصى: 5 ميجا بايت",
+        "registreCommerceScan": "السجل التجاري (مسح ضوئي)",
+        "registreCommerceScanHelp": "صيغة PDF أو صورة. الحجم الأقصى: 10 ميجا بايت"
+      },
+      "entityTypes": {
+        "sar": "شركة ذات مسؤولية محدودة",
+        "eurl": "مؤسسة ذات شخص واحد ذات مسؤولية محدودة",
+        "spa": "شركة مساهمة",
+        "snc": "شركة ذات اسم جماعي",
+        "sca": "شركة توصية بالأسهم",
+        "personnePhysique": "شخص طبيعي",
+        "groupement": "مجموعة مؤسسات",
+        "autre": "أخرى"
+      },
+      "save": "حفظ",
+      "cancel": "إلغاء",
+      "success": "تم تسجيل المنظمة بنجاح",
+      "error": "خطأ في التسجيل",
+      "validation": {
+        "nifInvalid": "يجب أن يحتوي NIF على 15 رقمًا",
+        "rcInvalid": "رقم السجل التجاري غير صالح",
+        "ribInvalid": "يجب أن يحتوي RIB على 20 رقمًا",
+        "casnosInvalid": "رقم الكاسنوس غير صالح",
+        "cnasInvalid": "رقم الضمان الاجتماعي غير صالح"
+      }
+    },
+    "commissionExterne": {
+      "title": "تصريح - لجنة التحقق الخارجية",
+      "subtitle": "يرجى ملء النموذج أدناه لتسجيل لجنة التقييم الخاصة بك",
+      "sections": {
+        "general": "المعلومات العامة",
+        "competence": "مستوى الاختصاص",
+        "composition": "تشكيلة اللجنة"
+      },
+      "fields": {
+        "nomOfficiel": "الاسم الرسمي للجنة",
+        "nomOfficielPlaceholder": "مثال: لجنة تقييم الصفقات العمومية",
+        "adresseSiege": "عنوان المقر",
+        "adresseSiegePlaceholder": "مثال: 10 شارع الشهداء، الجزائر الوسطى",
+        "emailContact": "البريد الإلكتروني الرسمي",
+        "emailContactPlaceholder": "commission@exemple.gov.dz",
+        "niveauCompetence": "مستوى الاختصاص",
+        "niveauCompetencePlaceholder": "اختر المستوى",
+        "seuilCompetenceFinanciere": "الحد الأدنى للاختصاص المالي (دج)",
+        "seuilCompetenceFinancierePlaceholder": "مثال: 10000000",
+        "decisionCreation": "القرار / المرسوم الإنشائي",
+        "decisionCreationHelp": "صيغة PDF فقط. الحجم الأقصى: 10 ميجا بايت",
+        "nomCommission": "اسم اللجنة",
+        "nomCommissionPlaceholder": "مثال: اللجنة القطاعية للأشغال العمومية"
+      },
+      "niveaux": {
+        "communale": "بلدية",
+        "wilaya": "ولاية",
+        "sectorielle": "قطاعية",
+        "nationale": "وطنية"
+      },
+      "save": "حفظ",
+      "cancel": "إلغاء"
+    },
+    "tutelle": {
+      "title": "تصريح - سلطة الوصاية",
+      "subtitle": "يرجى ملء النموذج أدناه لتسجيل سلطة الوصاية",
+      "sections": {
+        "general": "المعلومات العامة",
+        "authority": "سلطة الإشراف",
+        "documents": "الوثائق الرسمية"
+      },
+      "fields": {
+        "nomTutelle": "اسم سلطة الوصاية",
+        "nomTutellePlaceholder": "مثال: وزارة المالية",
+        "adresseSiege": "عنوان المقر",
+        "adresseSiegePlaceholder": "مثال: حي بشير الحدادن، الجزائر",
+        "emailContact": "البريد الإلكتروني الرسمي",
+        "emailContactPlaceholder": "tutelle@exemple.gov.dz",
+        "identiteAutorite": "هوية السلطة",
+        "identiteAutoritePlaceholder": "الاسم والمنصب (مثال: السيد الوزير)",
+        "acteOfficiel": "القرار الرسمي للإنشاء",
+        "acteOfficielHelp": "الجريدة الرسمية أو المرسوم الإنشائي. صيغة PDF فقط. الحجم الأقصى: 10 ميجا بايت",
+        "nomOfficiel": "الاسم الرسمي الكامل",
+        "nomOfficielPlaceholder": "مثال: وزارة الداخلية والجماعات المحلية"
+      },
+      "save": "حفظ",
+      "cancel": "إلغاء"
+    }
+  },
   "title": "مرحباً بالعالم",
   "subtitle": "النص محاذى لليمين.",
-  "button": "التالي"
+  "button": "التالي",
+  "common": {
+    "title": "الميزان",
+    "subtitle": "لجنة التحقق",
+    "button": "إجراء",
+    "search": "بحث...",
+    "noResults": "لم يتم العثور على نتائج",
+    "resetFilters": "إعادة تعيين الفلاتر",
+    "actions": {
+      "view": "عرض",
+      "assign": "تعيين",
+      "reassign": "إعادة تعيين",
+      "transmit": "إرسال",
+      "download": "تحميل"
+    }
+  },
+  "dashboard": {
+    "title": "نظرة شاملة",
+    "navigation": {
+      "globalView": "العرض الشامل",
+      "files": "الملفات",
+      "assignment": "تعيين الملفات",
+      "history": "سجل التقييمات",
+      "references": "المراجع التنظيمية"
+    },
+    "tabs": {
+      "overview": "نظرة عامة",
+      "waiting": "في الانتظار",
+      "inProgress": "قيد المعالجة",
+      "delayed": "متأخر",
+      "ready": "جاهز للإرسال"
+    },
+    "stats": {
+      "waitingAssignment": "في انتظار التعيين",
+      "inValidation": "قيد التحقق",
+      "delayed": "متأخر",
+      "readyToTransmit": "جاهز للإرسال"
+    },
+    "charts": {
+      "delayByDuration": "التأخير حسب المدة",
+      "numberOfDelayed": "عدد الملفات المتأخرة",
+      "byEmployee": "حسب الموظف",
+      "inEvaluation": "قيد التقييم",
+      "delayed": "متأخر",
+      "readyToTransmit": "جاهز للإرسال"
+    }
+  },
+  "files": {
+    "table": {
+      "headers": {
+        "file": "الملف",
+        "validator": "المحقق",
+        "economicOperator": "المتعامل الاقتصادي",
+        "submissionDate": "تاريخ الإيداع",
+        "assignmentDate": "تاريخ التعيين",
+        "delayDays": "أيام التأخير",
+        "validationDeadline": "آخر أجل للتحقق",
+        "status": "الحالة",
+        "actions": "إجراءات"
+      },
+      "status": {
+        "En Attente": "في الانتظار",
+        "En Cours": "قيد المعالجة",
+        "En Retard": "متأخر",
+        "Prêt": "جاهز"
+      },
+      "actions": {
+        "assign": "تعيين",
+        "reassign": "إعادة تعيين",
+        "transmit": "إرسال",
+        "view": "عرض"
+      },
+      "pagination": {
+        "previous": "السابق",
+        "next": "التالي",
+        "page": "صفحة",
+        "of": "من"
+      }
+    }
+  },
+  "dossier": {
+    "operator": "المتعامل الاقتصادي",
+    "tabs": {
+      "financial": "العرض المالي",
+      "technical": "العرض التقني",
+      "call": "طلب العروض",
+      "reports": "تقارير التقييم",
+      "decision": "قرار التحقق"
+    },
+    "details": {
+      "file": "الملف",
+      "economicOperator": "المتعامل الاقتصادي",
+      "validationDeadline": "آخر أجل للتحقق",
+      "contractingService": "الخدمة المتعاقدة",
+      "evaluator": "المقيّم",
+      "domain": "المجال",
+      "validationStage": "مرحلة التحقق",
+      "document": "المستند",
+      "status": "الحالة",
+      "download": "تحميل",
+      "pending": "في الانتظار",
+      "ready": "جاهز"
+    },
+    "viewer": {
+      "zoom": "تكبير",
+      "page": "صفحة",
+      "previous": "السابق",
+      "next": "التالي"
+    }
+  }
 }

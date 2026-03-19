@@ -1,5 +1,280 @@
 {
+  "selectOrg": {
+    "title": "Déclarer une nouvelle organisation",
+    "subtitle": "Enregistrez votre entité afin de gérer vos procédures sur la plateforme Al-Mizan. Vous pouvez ensuite inviter et gérer les membres de l'organisation.",
+    "types": {
+      "contractant": {
+        "title": "Service contractant",
+        "description": "Ministères, EPA, EPIC et administrations publiques"
+      },
+      "operateur": {
+        "title": "Opérateur économique",
+        "description": "Entreprises, PME et prestataires de services"
+      },
+      "commission": {
+        "title": "Commission de validation externe",
+        "description": "Organismes de contrôle et d'évaluation"
+      },
+      "tutelle": {
+        "title": "Tutelle",
+        "description": "Autorités de supervision et de régulation"
+      }
+    },
+    "select": "Sélectionner",
+    "info": "Choisissez le type d'organisation qui correspond à votre entité"
+  },
+  "register": {
+    "serviceContractant": {
+      "title": "Déclaration - Service Contractant",
+      "subtitle": "Veuillez remplir le formulaire ci-dessous pour enregistrer votre entité publique",
+      "sections": {
+        "general": "Informations Générales",
+        "classification": "Classification & Catégorie",
+        "authority": "Autorité de Tutelle",
+        "documents": "Documents Officiels"
+      },
+      "fields": {
+        "nomOfficiel": "Nom officiel de l'entité",
+        "nomOfficielPlaceholder": "Ex: Ministère de l'Intérieur",
+        "adresseSiege": "Adresse du siège",
+        "adresseSiegePlaceholder": "Ex: 1 Rue Didouche Mourad, Alger Centre",
+        "emailContact": "Email de contact officiel",
+        "emailContactPlaceholder": "contact@exemple.gov.dz",
+        "typeEntite": "Type d'entité",
+        "typeEntitePlaceholder": "Sélectionnez le type",
+        "categorie": "Catégorie",
+        "categoriePlaceholder": "Sélectionnez la catégorie",
+        "codeOrdonnateur": "Code Ordonnateur",
+        "codeOrdonnateurPlaceholder": "Ex: ORD-2026-001",
+        "nomTutelle": "Nom de la tutelle",
+        "nomTutellePlaceholder": "Ex: Présidence du Gouvernement",
+        "identiteAutorite": "Identité de l'autorité",
+        "identiteAutoritePlaceholder": "Nom et fonction du responsable",
+        "acteOfficiel": "Acte officiel / Arrêté de création",
+        "acteOfficielHelp": "Format PDF uniquement. Taille max: 10MB"
+      },
+      "categories": {
+        "ministere": "Ministère",
+        "directionGenerale": "Direction Générale",
+        "etablissementPublic": "Établissement Public",
+        "wilaya": "Wilaya",
+        "commune": "Commune",
+        "epe": "Entreprise Publique Économique (EPE)",
+        "epic": "Établissement Public à Caractère Industriel et Commercial (EPIC)",
+        "epa": "Établissement Public à Caractère Administratif (EPA)"
+      },
+      "save": "Sauvegarder",
+      "cancel": "Annuler",
+      "success": "Organisation enregistrée avec succès",
+      "error": "Erreur lors de l'enregistrement",
+      "confirmSubmit": "Êtes-vous sûr de vouloir enregistrer cette organisation?"
+    },
+    "operateurEconomique": {
+      "title": "Déclaration - Opérateur Économique",
+      "subtitle": "Veuillez remplir le formulaire ci-dessous pour enregistrer votre entreprise",
+      "sections": {
+        "general": "Informations Générales",
+        "identification": "Identification Fiscale & Commerciale",
+        "social": "Affiliations Sociales",
+        "banking": "Informations Bancaires",
+        "documents": "Documents Administratifs"
+      },
+      "fields": {
+        "nomOfficiel": "Raison sociale / Nom officiel",
+        "nomOfficielPlaceholder": "Ex: SARL Example Technology",
+        "adresseSiege": "Adresse du siège social",
+        "adresseSiegePlaceholder": "Ex: 15 Rue Mohamed Belouizdad, Alger",
+        "emailContact": "Email de contact professionnel",
+        "emailContactPlaceholder": "contact@entreprise.dz",
+        "typeEntite": "Forme juridique",
+        "typeEntitePlaceholder": "Sélectionnez le type",
+        "nif": "Numéro d'Identification Fiscale (NIF)",
+        "nifPlaceholder": "Ex: 001234567890123",
+        "registreCommerce": "Numéro Registre de Commerce (RC)",
+        "registreCommercePlaceholder": "Ex: 16/00-1234567A12",
+        "rib": "Relevé d'Identité Bancaire (RIB)",
+        "ribPlaceholder": "Ex: 00115451510000234567",
+        "casnosNumero": "Numéro CASNOS",
+        "casnosNumeroPlaceholder": "Numéro d'affiliation CASNOS",
+        "casnosDate": "Date de validité CASNOS",
+        "cnasNumero": "Numéro CNAS",
+        "cnasNumeroPlaceholder": "Numéro d'affiliation CNAS",
+        "cnasDate": "Date de validité CNAS",
+        "extraitRole": "Extrait de rôle (Quittance fiscale)",
+        "extraitRoleHelp": "Format PDF uniquement. Taille max: 5MB",
+        "certificatCasnos": "Certificat d'affiliation CASNOS",
+        "certificatCasnosHelp": "Format PDF uniquement. Taille max: 5MB",
+        "certificatCnas": "Certificat d'affiliation CNAS",
+        "certificatCnasHelp": "Format PDF uniquement. Taille max: 5MB",
+        "registreCommerceScan": "Registre de Commerce (Scan)",
+        "registreCommerceScanHelp": "Format PDF ou Image. Taille max: 10MB"
+      },
+      "entityTypes": {
+        "sar": "Société à Responsibilité Limitée (SARL)",
+        "eurl": "Entreprise Unipersonnelle à Responsabilité Limitée (EURL)",
+        "spa": "Société Par Actions (SPA)",
+        "snc": "Société en Nom Collectif (SNC)",
+        "sca": "Société en Commandite par Actions (SCA)",
+        "personnePhysique": "Personne Physique",
+        "groupement": "Groupement d'entreprises",
+        "autre": "Autre"
+      },
+      "save": "Sauvegarder",
+      "cancel": "Annuler",
+      "success": "Organisation enregistrée avec succès",
+      "error": "Erreur lors de l'enregistrement",
+      "validation": {
+        "nifInvalid": "NIF doit contenir 15 chiffres",
+        "rcInvalid": "Numéro RC invalide",
+        "ribInvalid": "RIB doit contenir 20 chiffres",
+        "casnosInvalid": "Numéro CASNOS invalide",
+        "cnasInvalid": "Numéro CNAS invalide"
+      }
+    },
+    "commissionExterne": {
+      "title": "Déclaration - Commission de Validation Externe",
+      "subtitle": "Veuillez remplir le formulaire ci-dessous pour enregistrer votre commission d'évaluation",
+      "sections": {
+        "general": "Informations Générales",
+        "competence": "Niveau de Compétence",
+        "composition": "Composition de la Commission"
+      },
+      "fields": {
+        "nomOfficiel": "Nom officiel de la commission",
+        "nomOfficielPlaceholder": "Ex: Commission d'Évaluation des Marchés Publics",
+        "adresseSiege": "Adresse du siège",
+        "adresseSiegePlaceholder": "Ex: 10 Rue des Martyrs, Alger Centre",
+        "emailContact": "Email de contact officiel",
+        "emailContactPlaceholder": "commission@exemple.gov.dz",
+        "niveauCompetence": "Niveau de compétence",
+        "niveauCompetencePlaceholder": "Sélectionnez le niveau",
+        "seuilCompetenceFinanciere": "Seuil de compétence financière (DA)",
+        "seuilCompetenceFinancierePlaceholder": "Ex: 10000000",
+        "decisionCreation": "Décision/Arrêté de création",
+        "decisionCreationHelp": "Format PDF uniquement. Taille max: 10MB",
+        "nomCommission": "Nom de la commission",
+        "nomCommissionPlaceholder": "Ex: Commission Sectorielle des Travaux Publics"
+      },
+      "niveaux": {
+        "communale": "Communale",
+        "wilaya": "Wilaya",
+        "sectorielle": "Sectorielle",
+        "nationale": "Nationale"
+      },
+      "save": "Sauvegarder",
+      "cancel": "Annuler"
+    },
+    "tutelle": {
+      "title": "Déclaration - Autorité de Tutelle",
+      "subtitle": "Veuillez remplir le formulaire ci-dessous pour enregistrer l'autorité de tutelle",
+      "sections": {
+        "general": "Informations Générales",
+        "authority": "Autorité de Supervision",
+        "documents": "Documents Officiels"
+      },
+      "fields": {
+        "nomTutelle": "Nom de l'autorité de tutelle",
+        "nomTutellePlaceholder": "Ex: Ministère des Finances",
+        "adresseSiege": "Adresse du siège",
+        "adresseSiegePlaceholder": "Ex: Cité Bachir Ihaddaden, Alger",
+        "emailContact": "Email de contact officiel",
+        "emailContactPlaceholder": "tutelle@exemple.gov.dz",
+        "identiteAutorite": "Identité de l'autorité",
+        "identiteAutoritePlaceholder": "Nom et fonction du responsable (Ex: Le Ministre)",
+        "acteOfficiel": "Acte officiel de création",
+        "acteOfficielHelp": "Journal Officiel ou décret de création. Format PDF uniquement. Taille max: 10MB",
+        "nomOfficiel": "Nom officiel complet",
+        "nomOfficielPlaceholder": "Ex: Ministère de l'Intérieur et des Collectivités Locales"
+      },
+      "save": "Sauvegarder",
+      "cancel": "Annuler"
+    }
+  },
   "title": "Bonjour le monde",
   "subtitle": "Le texte est aligné à gauche.",
-  "button": "Suivant"
+  "button": "Suivant",
+  "common": {
+    "title": "EL MIZAN",
+    "subtitle": "Commission de Validation",
+    "button": "Action",
+    "search": "Rechercher...",
+    "noResults": "Aucun résultat trouvé",
+    "resetFilters": "Réinitialiser les filtres",
+    "actions": {
+      "view": "Voir",
+      "assign": "Affecter",
+      "reassign": "Réaffecter",
+      "transmit": "Transmettre",
+      "download": "Télécharger"
+    },
+    "status": {
+      "waiting": "En Attente",
+      "inProgress": "En Cours",
+      "delayed": "En Retard",
+      "ready": "Prêt",
+      "submitted": "Soumis"
+    }
+  },
+  "dashboard": {
+    "title": "Vue Globale",
+    "subtitle": "Tableau de bord de la commission de validation",
+    "tabs": {
+      "overview": "Aperçu",
+      "waiting": "En Attente",
+      "inProgress": "En Cours",
+      "delayed": "En Retard",
+      "ready": "Prêts"
+    },
+    "stats": {
+      "waitingAssignment": "Dossiers en attente d'affectation",
+      "inValidation": "Dossiers en cours de validation",
+      "delayed": "Dossiers en retard",
+      "readyToTransmit": "Dossiers prêt à transmettre à l'administration"
+    },
+    "charts": {
+      "delayByDuration": "Dossiers en retards par durée",
+      "byEmployee": "Dossiers affectés par employés",
+      "numberOfDelayed": "Numero de dossiers en retard",
+      "inEvaluation": "En cours d'évaluation",
+      "delayed": "En retard",
+      "readyToTransmit": "Prêt à transmettre"
+    },
+    "navigation": {
+      "globalView": "Vue globale",
+      "files": "Dossiers",
+      "assignment": "Affectation des dossiers",
+      "history": "Historique des évaluations",
+      "references": "Références réglementaires"
+    }
+  },
+  "dossier": {
+    "operator": "OPÉRATEUR ÉCONOMIQUE",
+    "tabs": {
+      "financial": "Offre Financière",
+      "technical": "Offre Technique",
+      "call": "Appel d'Offre",
+      "reports": "Rapports d'évaluation",
+      "decision": "Décision de Validation"
+    },
+    "details": {
+      "file": "Dossier",
+      "economicOperator": "Opérateur économique",
+      "validationDeadline": "Délais de validation",
+      "contractingService": "Service Contractant",
+      "evaluator": "Evaluateur",
+      "domain": "Domaine",
+      "validationStage": "Etape de validation",
+      "document": "Document",
+      "status": "Status",
+      "download": "Télécharger",
+      "pending": "En attente",
+      "ready": "Prêt"
+    },
+    "viewer": {
+      "zoom": "Zoom",
+      "page": "Page",
+      "previous": "Précédent",
+      "next": "Suivant"
+    }
+  }
 }
