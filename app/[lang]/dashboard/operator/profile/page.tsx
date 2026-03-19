@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faUser,
@@ -58,10 +58,22 @@ export default function ProfilePage({
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
-  useState(async () => {
-    const resolvedParams = await params;
-    setLang(resolvedParams.lang);
-  });
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadLang = async () => {
+      const resolvedParams = await params;
+      if (isMounted) {
+        setLang(resolvedParams.lang);
+      }
+    };
+
+    loadLang();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [params]);
 
   const isArabic = lang === 'ar';
 

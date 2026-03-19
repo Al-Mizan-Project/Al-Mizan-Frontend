@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent, ChangeEvent } from 'react';
+import { useEffect, useState, FormEvent, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -42,10 +42,22 @@ export default function SoumettreOffrePage({
 
   const [errors, setErrors] = useState<FormErrors>({});
 
-  useState(async () => {
-    const resolvedParams = await params;
-    setLang(resolvedParams.lang);
-  });
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadLang = async () => {
+      const resolvedParams = await params;
+      if (isMounted) {
+        setLang(resolvedParams.lang);
+      }
+    };
+
+    loadLang();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [params]);
 
   const isArabic = lang === 'ar';
 

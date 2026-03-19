@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/app/components/Header';
 import { InputField } from '@/app/components/forms/InputField';
@@ -52,10 +52,22 @@ export default function ServiceContractantRegistration({ params }: PageProps) {
   const [errors, setErrors] = useState<FormErrors>({});
 
   // Load lang
-  useState(async () => {
-    const resolvedParams = await params;
-    setLang(resolvedParams.lang);
-  });
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadLang = async () => {
+      const resolvedParams = await params;
+      if (isMounted) {
+        setLang(resolvedParams.lang);
+      }
+    };
+
+    loadLang();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [params]);
 
   const isArabic = lang === 'ar';
 

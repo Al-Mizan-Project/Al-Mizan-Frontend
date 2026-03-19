@@ -1,6 +1,6 @@
 'use client';
 import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
-import { useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faEnvelope, 
@@ -28,10 +28,22 @@ export default function LoginPage({ params }: PageProps) {
   const router = useRouter();
 
   // Load lang from params on mount
-  useState(async () => {
-    const resolvedParams = await params;
-    setLang(resolvedParams.lang);
-  });
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadLang = async () => {
+      const resolvedParams = await params;
+      if (isMounted) {
+        setLang(resolvedParams.lang);
+      }
+    };
+
+    loadLang();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [params]);
 
   const isArabic = lang === 'ar';
 
