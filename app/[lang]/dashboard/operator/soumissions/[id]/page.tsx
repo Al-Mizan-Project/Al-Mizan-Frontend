@@ -12,7 +12,8 @@ import {
   faTimesCircle,
   faExclamationTriangle,
   faChartLine,
-  faArrowLeft
+  faArrowLeft,
+  faSpinner
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -24,7 +25,17 @@ export default function SoumissionDetailPage({
 }) {
   const router = useRouter();
   const [lang, setLang] = useState<string>('');
+  const [submissionId, setSubmissionId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'details' | 'statut'>('details');
+  const [isAnalysing, setIsAnalysing] = useState(false);
+  const [analyseError, setAnalyseError] = useState<string>('');
+  const [analyseResult, setAnalyseResult] = useState<{
+    conformite_statut: string;
+    conformite_rapport?: {
+      missing_documents?: string[];
+      invalid_documents?: string[];
+    };
+  } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -33,6 +44,7 @@ export default function SoumissionDetailPage({
       const resolvedParams = await params;
       if (isMounted) {
         setLang(resolvedParams.lang);
+        setSubmissionId(resolvedParams.id);
       }
     };
 
@@ -65,12 +77,61 @@ export default function SoumissionDetailPage({
     motifRefus: 'Le certificat CNAS fourni est expiré depuis le 01/01/2026. Veuillez renouveler votre attestation pour les prochaines soumissions.',
     dateEvaluation: '2026-04-20T10:45:00',
     documents: [
-      { name: 'offre_technique.pdf', type: 'technique', size: '3.2 MB' },
-      { name: 'offre_financiere_chiffree', type: 'financiere', size: '1.8 MB', encrypted: true },
-      { name: 'extrait_role.pdf', type: 'administratif', size: '450 KB' },
-      { name: 'certificat_cnas.pdf', type: 'administratif', size: '380 KB' },
-      { name: 'registre_commerce.pdf', type: 'administratif', size: '520 KB' },
+      { idDocument: 101, name: 'offre_technique.pdf', type: 'technique', size: '3.2 MB' },
+      { idDocument: 102, name: 'offre_financiere_chiffree', type: 'financiere', size: '1.8 MB', encrypted: true },
+      { idDocument: 103, name: 'extrait_role.pdf', type: 'administratif', size: '450 KB' },
+      { idDocument: 104, name: 'certificat_cnas.pdf', type: 'administratif', size: '380 KB' },
+      { idDocument: 105, name: 'registre_commerce.pdf', type: 'administratif', size: '520 KB' },
     ]
+  };
+
+  const mapConformiteStatutToUi = (statut?: string) => {
+    const normalized = (statut || '').toUpperCase();
+    if (normalized === 'CONFORME') return 'conforme';
+    if (normalized === 'PIECES_MANQUANTES' || normalized === 'NON_CONFORME') return 'non_conforme';
+    return 'en_attente';
+  };
+
+  const triggerConformiteAuto = async () => {
+    if (!submissionId) return;
+
+    setAnalyseError('');
+    setIsAnalysing(true);
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_IA_SERVICE_URL || 'http://localhost:18088';
+      const payload = {
+        id_appel_offre: soumission.appelOffre.id,
+        provided_document_ids: soumission.documents.map((doc) => doc.idDocument),
+        perform_ocr: true,
+      };
+
+      const response = await fetch(
+        `${baseUrl}/ia/conformite/verifier-soumission-auto/${submissionId}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'La vérification automatique a échoué.');
+      }
+
+      const data = await response.json();
+      setAnalyseResult({
+        conformite_statut: data?.conformite_statut || '',
+        conformite_rapport: data?.conformite_rapport || {},
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      setAnalyseError(message);
+    } finally {
+      setIsAnalysing(false);
+    }
   };
 
   const getConformiteStatus = (status: string) => {
@@ -153,6 +214,10 @@ export default function SoumissionDetailPage({
   };
 
   const t = translations[lang as 'fr' | 'ar'] || translations.fr;
+
+  const effectiveConformiteAdmin = analyseResult
+    ? mapConformiteStatutToUi(analyseResult.conformite_statut)
+    : soumission.conformiteAdmin;
 
   const formatMontant = (montant: number) => {
     return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
@@ -290,16 +355,49 @@ export default function SoumissionDetailPage({
                 {/* Compliance Report */}
                 <div>
                   <h3 className="text-lg font-bold text-[#0D2527] mb-4">{t.rapportConformite}</h3>
+                  <div className="mb-4 flex items-center gap-3">
+                    <button
+                      onClick={triggerConformiteAuto}
+                      disabled={isAnalysing}
+                      className="px-4 py-2 rounded-lg bg-[#306B6F] hover:bg-[#173C3F] disabled:opacity-60 text-white text-sm font-semibold transition-colors"
+                    >
+                      {isAnalysing ? (
+                        <span className="inline-flex items-center gap-2">
+                          <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                          Analyse IA en cours...
+                        </span>
+                      ) : (
+                        'Lancer analyse de conformité (OCR/NLP)'
+                      )}
+                    </button>
+                    {analyseResult && (
+                      <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-md">
+                        Dernier statut IA: {analyseResult.conformite_statut}
+                      </span>
+                    )}
+                  </div>
+                  {analyseError && (
+                    <p className="mb-4 text-sm text-red-700 bg-red-100 rounded-lg px-3 py-2">{analyseError}</p>
+                  )}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                       <span className="font-medium text-gray-700">{t.conformiteAdmin}</span>
                       <span className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${
-                        getConformiteStatus(soumission.conformiteAdmin).bg
-                      } ${getConformiteStatus(soumission.conformiteAdmin).color}`}>
-                        <FontAwesomeIcon icon={getConformiteStatus(soumission.conformiteAdmin).icon} />
-                        {getConformiteStatus(soumission.conformiteAdmin).label}
+                        getConformiteStatus(effectiveConformiteAdmin).bg
+                      } ${getConformiteStatus(effectiveConformiteAdmin).color}`}>
+                        <FontAwesomeIcon icon={getConformiteStatus(effectiveConformiteAdmin).icon} />
+                        {getConformiteStatus(effectiveConformiteAdmin).label}
                       </span>
                     </div>
+
+                    {analyseResult?.conformite_rapport?.missing_documents && analyseResult.conformite_rapport.missing_documents.length > 0 && (
+                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                        <p className="text-sm font-semibold text-amber-800 mb-2">Pièces manquantes détectées</p>
+                        <p className="text-sm text-amber-700">
+                          {analyseResult.conformite_rapport.missing_documents.join(', ')}
+                        </p>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                       <span className="font-medium text-gray-700">{t.conformiteTechnique}</span>
