@@ -15,6 +15,7 @@ import {
   faCheckCircle
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import { fetchAppelsOffres } from '@/lib/operator-api';
 
 type AppelOffre = {
   id: number;
@@ -40,6 +41,9 @@ export default function AppelsOffresPage({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterWilaya, setFilterWilaya] = useState('all');
+  const [appelsOffres, setAppelsOffres] = useState<AppelOffre[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -60,51 +64,45 @@ export default function AppelsOffresPage({
 
   const isArabic = lang === 'ar';
 
-  // Mock data - Replace with API call
-  const appelsOffres: AppelOffre[] = [
-    {
-      id: 1,
-      reference: 'AO/N°01/2026',
-      titre: 'Acquisition de matériel informatique pour les lycées de la wilaya d\'Alger',
-      description: 'Fourniture et livraison de 500 ordinateurs portables, 100 imprimantes multifonctions et accessoires réseau',
-      montantEstime: 85000000,
-      datePublication: '2026-03-01T08:00:00',
-      dateLimiteSoumission: '2026-04-15T16:00:00',
-      dateOuverturePlis: '2026-04-16T10:00:00',
-      typeProcedure: 'Appel d\'offres ouvert',
-      serviceContractant: 'Direction de l\'Éducation d\'Alger',
-      wilaya: 'Alger',
-      statut: 'ouverte'
-    },
-    {
-      id: 2,
-      reference: 'AO/N°02/2026',
-      titre: 'Travaux de rénovation des routes communales',
-      description: 'Réhabilitation et bitumage de 15km de routes dans la commune de Hydra',
-      montantEstime: 120000000,
-      datePublication: '2026-02-28T09:00:00',
-      dateLimiteSoumission: '2026-03-20T16:00:00',
-      dateOuverturePlis: '2026-03-21T10:00:00',
-      typeProcedure: 'Appel d\'offres ouvert',
-      serviceContractant: 'APC Hydra',
-      wilaya: 'Alger',
-      statut: 'ouverte'
-    },
-    {
-      id: 3,
-      reference: 'AO/N°03/2026',
-      titre: 'Fourniture de médicaments et dispositifs médicaux',
-      description: 'Approvisionnement des hôpitaux publics en médicaments essentiels',
-      montantEstime: 250000000,
-      datePublication: '2026-03-02T08:00:00',
-      dateLimiteSoumission: '2026-03-25T16:00:00',
-      dateOuverturePlis: '2026-03-26T14:00:00',
-      typeProcedure: 'Appel d\'offres restreint',
-      serviceContractant: 'CHU Mustapha Pacha',
-      wilaya: 'Alger',
-      statut: 'ouverte'
-    },
-  ];
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAppels = async () => {
+      setLoading(true);
+      setLoadError('');
+      try {
+        const raw = await fetchAppelsOffres();
+        if (!isMounted) return;
+        const mapped: AppelOffre[] = raw.map((item) => ({
+          id: item.id_appel_offres,
+          reference: item.reference,
+          titre: item.titre,
+          description: item.description,
+          montantEstime: Number(item.montant_estime || 0),
+          datePublication: item.date_publication,
+          dateLimiteSoumission: item.date_limite_soumission,
+          dateOuverturePlis: item.date_ouverture_plis,
+          typeProcedure: item.type_procedure,
+          serviceContractant: `Service #${item.id_service_contractant}`,
+          wilaya: 'N/A',
+          statut: item.statut === 'PUBLIE' ? 'ouverte' : item.statut === 'CLOTURE_DEPOT' ? 'close' : 'en_evaluation',
+        }));
+        setAppelsOffres(mapped);
+      } catch (error) {
+        if (!isMounted) return;
+        const message = error instanceof Error ? error.message : 'Impossible de charger les appels d\'offres.';
+        setLoadError(message);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadAppels();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const formatMontant = (montant: number) => {
     return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
@@ -291,8 +289,18 @@ export default function AppelsOffresPage({
         </div>
       </div>
 
+      {loadError && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
+
       {/* Cards Grid */}
-      {filteredOffres.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500 text-lg">Chargement des appels d'offres...</p>
+        </div>
+      ) : filteredOffres.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-gray-500 text-lg">{t.aucunResultat}</p>
         </div>
