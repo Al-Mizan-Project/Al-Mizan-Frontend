@@ -14,6 +14,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { fetchAppelDocuments, fetchAppelOffreById, fetchDocumentsByIds } from '@/lib/operator-api';
 
 export default function AppelOffreDetailPage({
   params,
@@ -22,6 +23,23 @@ export default function AppelOffreDetailPage({
 }) {
   const router = useRouter();
   const [lang, setLang] = useState<string>('');
+  const [appelId, setAppelId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [offre, setOffre] = useState({
+    id: 1,
+    reference: 'AO/N°01/2026',
+    titre: 'Appel d\'offres',
+    description: '',
+    montantEstime: 0,
+    datePublication: new Date().toISOString(),
+    dateLimiteSoumission: new Date().toISOString(),
+    dateOuverturePlis: new Date().toISOString(),
+    typeProcedure: '',
+    serviceContractant: '',
+    wilaya: 'N/A',
+    documents: [] as { name: string; type: string; size: string }[],
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -30,6 +48,7 @@ export default function AppelOffreDetailPage({
       const resolvedParams = await params;
       if (isMounted) {
         setLang(resolvedParams.lang);
+        setAppelId(Number(resolvedParams.id));
       }
     };
 
@@ -42,25 +61,51 @@ export default function AppelOffreDetailPage({
 
   const isArabic = lang === 'ar';
 
-  // Mock data - Replace with API call using params.id
-  const offre = {
-    id: 1,
-    reference: 'AO/N°01/2026',
-    titre: 'Acquisition de matériel informatique pour les lycées de la wilaya d\'Alger',
-    description: 'Fourniture et livraison de 500 ordinateurs portables, 100 imprimantes multifonctions et accessoires réseau pour équiper les établissements scolaires secondaires de la wilaya d\'Alger, conformément aux spécifications techniques du CDC joint.',
-    montantEstime: 85000000,
-    datePublication: '2026-03-01T08:00:00',
-    dateLimiteSoumission: '2026-04-15T16:00:00',
-    dateOuverturePlis: '2026-04-16T10:00:00',
-    typeProcedure: 'Appel d\'offres ouvert',
-    serviceContractant: 'Direction de l\'Éducation d\'Alger',
-    wilaya: 'Alger',
-    documents: [
-      { name: 'Cahier des Charges', type: 'pdf', size: '2.5 MB' },
-      { name: 'Spécifications techniques', type: 'pdf', size: '1.8 MB' },
-      { name: 'Plan livraison', type: 'pdf', size: '850 KB' },
-    ]
-  };
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDetails = async () => {
+      if (!appelId) return;
+      setLoading(true);
+      setLoadError('');
+      try {
+        const appel = await fetchAppelOffreById(appelId);
+        const linkRows = await fetchAppelDocuments(appelId);
+        const docs = await fetchDocumentsByIds(linkRows.map((item) => item.id_document));
+        if (!isMounted) return;
+        setOffre({
+          id: appel.id_appel_offres,
+          reference: appel.reference,
+          titre: appel.titre,
+          description: appel.description,
+          montantEstime: Number(appel.montant_estime || 0),
+          datePublication: appel.date_publication,
+          dateLimiteSoumission: appel.date_limite_soumission,
+          dateOuverturePlis: appel.date_ouverture_plis,
+          typeProcedure: appel.type_procedure,
+          serviceContractant: `Service #${appel.id_service_contractant}`,
+          wilaya: 'N/A',
+          documents: docs.map((doc) => ({
+            name: doc.nom,
+            type: doc.type_document,
+            size: `${(doc.taille_fichier / 1024 / 1024).toFixed(2)} MB`,
+          })),
+        });
+      } catch (error) {
+        if (!isMounted) return;
+        const message = error instanceof Error ? error.message : 'Impossible de charger cet appel d\'offres.';
+        setLoadError(message);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadDetails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [appelId]);
 
   const getTimeRemaining = () => {
     const now = new Date();
@@ -151,6 +196,18 @@ export default function AppelOffreDetailPage({
       </div>
 
       <div className="max-w-5xl mx-auto">
+        {loadError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {loadError}
+          </div>
+        )}
+
+        {loading && (
+          <div className="mb-6 rounded-xl border border-[#9BCFCF] bg-[#FCFFFF] px-4 py-3 text-sm text-[#173C3F]">
+            Chargement des détails de l'appel d'offres...
+          </div>
+        )}
+
         {/* Header */}
         <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
           <div className="flex items-start justify-between mb-4">

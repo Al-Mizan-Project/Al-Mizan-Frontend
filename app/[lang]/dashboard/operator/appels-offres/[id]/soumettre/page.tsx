@@ -15,6 +15,13 @@ import {
   faInfoCircle
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import {
+  createSoumission,
+  fetchAppelOffreById,
+  fetchOperatorDocuments,
+  uploadDocument,
+} from '@/lib/operator-api';
+import { upsertStoredSubmission } from '@/lib/operator-submissions-store';
 
 type FormData = {
   offreTechnique: File | null;
@@ -31,8 +38,11 @@ export default function SoumettreOffrePage({
 }) {
   const router = useRouter();
   const [lang, setLang] = useState<string>('');
+  const [appelId, setAppelId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [step, setStep] = useState(1);
+  const [operatorId] = useState<number>(() => Number(process.env.NEXT_PUBLIC_OPERATOR_ID || 1));
   
   const [formData, setFormData] = useState<FormData>({
     offreTechnique: null,
@@ -41,6 +51,16 @@ export default function SoumettreOffrePage({
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
+  const [appelOffre, setAppelOffre] = useState({
+    id: 1,
+    reference: 'AO/N°--/----',
+    titre: 'Appel d\'offres',
+    montantEstime: 0,
+    dateLimiteSoumission: new Date().toISOString(),
+    dateOuverturePlis: new Date().toISOString(),
+    serviceContractant: 'Service #0',
+  });
+  const [documentsProfile, setDocumentsProfile] = useState<Array<{ id: number; name: string; type: string; valide: boolean }>>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -49,6 +69,7 @@ export default function SoumettreOffrePage({
       const resolvedParams = await params;
       if (isMounted) {
         setLang(resolvedParams.lang);
+        setAppelId(Number(resolvedParams.id));
       }
     };
 
@@ -61,24 +82,48 @@ export default function SoumettreOffrePage({
 
   const isArabic = lang === 'ar';
 
-  // Mock data - Replace with API call
-  const appelOffre = {
-    id: 1,
-    reference: 'AO/N°01/2026',
-    titre: 'Acquisition de matériel informatique pour les lycées de la wilaya d\'Alger',
-    montantEstime: 85000000,
-    dateLimiteSoumission: '2026-04-15T16:00:00',
-    dateOuverturePlis: '2026-04-16T10:00:00',
-    serviceContractant: 'Direction de l\'Éducation d\'Alger',
-  };
+  useEffect(() => {
+    let isMounted = true;
 
-  // Mock documents from operator profile
-  const documentsProfile = [
-    { name: 'registre_commerce.pdf', type: 'administratif', valide: true },
-    { name: 'certificat_cnas.pdf', type: 'administratif', valide: true },
-    { name: 'certificat_casnos.pdf', type: 'administratif', valide: true },
-    { name: 'extrait_role.pdf', type: 'administratif', valide: true },
-  ];
+    const loadData = async () => {
+      if (!appelId) return;
+      setLoadError('');
+      try {
+        const [appel, operatorDocs] = await Promise.all([
+          fetchAppelOffreById(appelId),
+          fetchOperatorDocuments(operatorId),
+        ]);
+        if (!isMounted) return;
+        setAppelOffre({
+          id: appel.id_appel_offres,
+          reference: appel.reference,
+          titre: appel.titre,
+          montantEstime: Number(appel.montant_estime || 0),
+          dateLimiteSoumission: appel.date_limite_soumission,
+          dateOuverturePlis: appel.date_ouverture_plis,
+          serviceContractant: `Service #${appel.id_service_contractant}`,
+        });
+        setDocumentsProfile(
+          operatorDocs.map((doc) => ({
+            id: doc.id_document,
+            name: doc.nom,
+            type: doc.type_document,
+            valide: true,
+          }))
+        );
+      } catch (error) {
+        if (!isMounted) return;
+        const message = error instanceof Error ? error.message : 'Impossible de charger les données de soumission.';
+        setLoadError(message);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [appelId, operatorId]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -116,20 +161,68 @@ export default function SoumettreOffrePage({
     setLoading(true);
 
     try {
-      // Simulate API call with encryption
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      console.log('Submitting offer:', {
-        appelOffreId: appelOffre.id,
-        offreTechnique: formData.offreTechnique?.name,
-        offreFinanciere: formData.offreFinanciere?.name,
-        documentsAdmin: documentsProfile.map(d => d.name),
-        timestamp: new Date().toISOString(),
+      const [techDoc, finDoc] = await Promise.all([
+        uploadDocument({
+          file: formData.offreTechnique as File,
+          relatedType: `soumission:${operatorId}`,
+          isEncrypted: false,
+        }),
+        uploadDocument({
+          file: formData.offreFinanciere as File,
+          relatedType: `soumission:${operatorId}`,
+          isEncrypted: true,
+        }),
+      ]);
+
+      const documentsBase = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8003';
+      const financialUrl = `${documentsBase}/api/documents/${finDoc.id_document}/`;
+
+      const created = await createSoumission({
+        id_appel_offre: appelOffre.id,
+        id_soumissionnaire: operatorId,
+        offre_financiere_chiffree_url: financialUrl,
+        cle_dechiffrement_hash: 'frontend-placeholder-key-hash',
       });
 
-      // Redirect to confirmation
+      upsertStoredSubmission({
+        id: created.id,
+        appelOffre: {
+          id: appelOffre.id,
+          reference: appelOffre.reference,
+          titre: appelOffre.titre,
+          serviceContractant: appelOffre.serviceContractant,
+          montantEstime: appelOffre.montantEstime,
+        },
+        dateSoumission: new Date().toISOString(),
+        montantSoumis: 0,
+        statut: 'soumise',
+        conformiteAdmin: 'en_attente',
+        conformiteTechnique: 'en_attente',
+        conformiteFinanciere: 'en_attente',
+        documents: [
+          {
+            idDocument: techDoc.id_document,
+            name: techDoc.nom,
+            type: 'technique',
+            size: `${(techDoc.taille_fichier / 1024 / 1024).toFixed(2)} MB`,
+          },
+          {
+            idDocument: finDoc.id_document,
+            name: finDoc.nom,
+            type: 'financiere',
+            size: `${(finDoc.taille_fichier / 1024 / 1024).toFixed(2)} MB`,
+            encrypted: true,
+          },
+          ...documentsProfile.map((doc) => ({
+            idDocument: doc.id,
+            name: doc.name,
+            type: 'administratif' as const,
+            size: 'N/A',
+          })),
+        ],
+      });
+
       router.push(`/${lang}/dashboard/operator/soumissions`);
-      
     } catch (error) {
       console.error('Submission error:', error);
       alert(isArabic ? 'حدث خطأ في التقديم' : 'Erreur lors de la soumission');
@@ -269,6 +362,12 @@ export default function SoumettreOffrePage({
         </div>
 
         {/* Header */}
+        {loadError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {loadError}
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
           <div className="flex items-start justify-between mb-4">
             <div>

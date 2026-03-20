@@ -17,6 +17,12 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import {
+  findStoredSubmissionById,
+  upsertStoredSubmission,
+  type StoredSubmission,
+} from '@/lib/operator-submissions-store';
+import { runConformiteAuto } from '@/lib/operator-api';
 
 export default function SoumissionDetailPage({
   params,
@@ -29,6 +35,7 @@ export default function SoumissionDetailPage({
   const [activeTab, setActiveTab] = useState<'details' | 'statut'>('details');
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [analyseError, setAnalyseError] = useState<string>('');
+  const [soumission, setSoumission] = useState<StoredSubmission | null>(null);
   const [analyseResult, setAnalyseResult] = useState<{
     conformite_statut: string;
     conformite_rapport?: {
@@ -57,33 +64,15 @@ export default function SoumissionDetailPage({
 
   const isArabic = lang === 'ar';
 
-  // Mock data - Replace with API call
-  const soumission = {
-    id: 1,
-    appelOffre: {
-      id: 1,
-      reference: 'AO/N°01/2026',
-      titre: 'Acquisition de matériel informatique pour les lycées de la wilaya d\'Alger',
-      description: 'Fourniture et livraison de 500 ordinateurs portables, 100 imprimantes multifonctions...',
-      montantEstime: 85000000,
-      serviceContractant: 'Direction de l\'Éducation d\'Alger'
-    },
-    dateSoumission: '2026-03-01T08:00:00',
-    montantSoumis: 72500000,
-    statut: 'refusee',
-    conformiteAdmin: 'non_conforme',
-    conformiteTechnique: 'conforme',
-    conformiteFinanciere: 'conforme',
-    motifRefus: 'Le certificat CNAS fourni est expiré depuis le 01/01/2026. Veuillez renouveler votre attestation pour les prochaines soumissions.',
-    dateEvaluation: '2026-04-20T10:45:00',
-    documents: [
-      { idDocument: 101, name: 'offre_technique.pdf', type: 'technique', size: '3.2 MB' },
-      { idDocument: 102, name: 'offre_financiere_chiffree', type: 'financiere', size: '1.8 MB', encrypted: true },
-      { idDocument: 103, name: 'extrait_role.pdf', type: 'administratif', size: '450 KB' },
-      { idDocument: 104, name: 'certificat_cnas.pdf', type: 'administratif', size: '380 KB' },
-      { idDocument: 105, name: 'registre_commerce.pdf', type: 'administratif', size: '520 KB' },
-    ]
-  };
+  useEffect(() => {
+    if (!submissionId) return;
+    const localItem = findStoredSubmissionById(Number(submissionId));
+    if (localItem) {
+      setSoumission(localItem);
+      return;
+    }
+    setSoumission(null);
+  }, [submissionId]);
 
   const mapConformiteStatutToUi = (statut?: string) => {
     const normalized = (statut || '').toUpperCase();
@@ -98,34 +87,29 @@ export default function SoumissionDetailPage({
     setAnalyseError('');
     setIsAnalysing(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_IA_SERVICE_URL || 'http://localhost:18088';
-      const payload = {
-        id_appel_offre: soumission.appelOffre.id,
-        provided_document_ids: soumission.documents.map((doc) => doc.idDocument),
-        perform_ocr: true,
-      };
-
-      const response = await fetch(
-        `${baseUrl}/ia/conformite/verifier-soumission-auto/${submissionId}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'La vérification automatique a échoué.');
+      if (!soumission) {
+        throw new Error('Soumission introuvable dans l\'historique local.');
       }
 
-      const data = await response.json();
+      const data = await runConformiteAuto({
+        soumissionId: Number(submissionId),
+        idAppelOffre: soumission.appelOffre.id,
+        providedDocumentIds: soumission.documents.map((doc) => doc.idDocument),
+        performOcr: true,
+      });
+
       setAnalyseResult({
         conformite_statut: data?.conformite_statut || '',
         conformite_rapport: data?.conformite_rapport || {},
       });
+
+      const mappedStatus = mapConformiteStatutToUi(data?.conformite_statut || '');
+      const updatedSoumission: StoredSubmission = {
+        ...soumission,
+        conformiteAdmin: mappedStatus,
+      };
+      setSoumission(updatedSoumission);
+      upsertStoredSubmission(updatedSoumission);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur inconnue';
       setAnalyseError(message);
@@ -217,13 +201,22 @@ export default function SoumissionDetailPage({
 
   const effectiveConformiteAdmin = analyseResult
     ? mapConformiteStatutToUi(analyseResult.conformite_statut)
-    : soumission.conformiteAdmin;
+    : (soumission?.conformiteAdmin || 'en_attente');
 
   const formatMontant = (montant: number) => {
     return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
   };
 
   if (!lang) return null;
+  if (!soumission) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-3xl mx-auto rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+          Cette soumission n'est pas disponible localement. Soumettez une offre depuis la page d'appel d'offres pour la visualiser ici.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">

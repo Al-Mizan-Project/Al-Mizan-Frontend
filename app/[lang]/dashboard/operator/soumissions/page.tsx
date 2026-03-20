@@ -15,6 +15,7 @@ import {
   faFileSignature
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import { loadStoredSubmissions } from '@/lib/operator-submissions-store';
 
 type Soumission = {
   id: number;
@@ -43,6 +44,7 @@ export default function MesSoumissionsPage({
   const [lang, setLang] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatut, setFilterStatut] = useState('all');
+  const [soumissions, setSoumissions] = useState<Soumission[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -63,69 +65,24 @@ export default function MesSoumissionsPage({
 
   const isArabic = lang === 'ar';
 
-  // Mock data - Replace with API call
-  const soumissions: Soumission[] = [
-    {
-      id: 1,
-      appelOffreReference: 'AO/N°01/2026',
-      appelOffreTitre: 'Acquisition de matériel informatique pour les lycées de la wilaya d\'Alger',
-      serviceContractant: 'Direction de l\'Éducation d\'Alger',
-      dateSoumission: '2026-03-01T08:00:00',
-      montantSoumis: 72500000,
-      statut: 'refusee',
-      conformiteAdmin: 'non_conforme',
-      conformiteTechnique: 'conforme',
-      conformiteFinanciere: 'conforme',
-      motifRefus: 'Le certificat CNAS fourni est expiré depuis le 01/01/2026. Veuillez renouveler votre attestation pour les prochaines soumissions.',
-      dateEvaluation: '2026-04-20T10:45:00',
-    },
-    {
-      id: 2,
-      appelOffreReference: 'AO/N°02/2026',
-      appelOffreTitre: 'Travaux de rénovation des routes communales',
-      serviceContractant: 'APC Hydra',
-      dateSoumission: '2026-03-10T14:30:00',
-      montantSoumis: 115000000,
-      statut: 'en_evaluation',
-      conformiteAdmin: 'conforme',
-      conformiteTechnique: 'en_attente',
-      conformiteFinanciere: 'en_attente',
-    },
-    {
-      id: 3,
-      appelOffreReference: 'AO/N°05/2025',
-      appelOffreTitre: 'Fourniture de mobilier scolaire',
-      serviceContractant: 'Direction de l\'Éducation Oran',
-      dateSoumission: '2025-12-15T09:00:00',
-      montantSoumis: 45000000,
-      statut: 'attribuee',
-      conformiteAdmin: 'conforme',
-      conformiteTechnique: 'conforme',
-      conformiteFinanciere: 'conforme',
-      dateEvaluation: '2026-01-10T14:00:00',
-      noteTechnique: 85,
-      noteFinanciere: 90,
-      noteGlobale: 87.5,
-      rang: 1,
-    },
-    {
-      id: 4,
-      appelOffreReference: 'AO/N°03/2026',
-      appelOffreTitre: 'Maintenance des équipements médicaux',
-      serviceContractant: 'CHU Mustapha Pacha',
-      dateSoumission: '2026-03-05T11:00:00',
-      montantSoumis: 38000000,
-      statut: 'conforme',
-      conformiteAdmin: 'conforme',
-      conformiteTechnique: 'conforme',
-      conformiteFinanciere: 'conforme',
-      dateEvaluation: '2026-03-25T16:00:00',
-      noteTechnique: 78,
-      noteFinanciere: 82,
-      noteGlobale: 80,
-      rang: 3,
-    },
-  ];
+  useEffect(() => {
+    setSoumissions(
+      loadStoredSubmissions().map((item) => ({
+        id: item.id,
+        appelOffreReference: item.appelOffre.reference,
+        appelOffreTitre: item.appelOffre.titre,
+        serviceContractant: item.appelOffre.serviceContractant,
+        dateSoumission: item.dateSoumission,
+        montantSoumis: item.montantSoumis,
+        statut: item.statut,
+        conformiteAdmin: item.conformiteAdmin,
+        conformiteTechnique: item.conformiteTechnique,
+        conformiteFinanciere: item.conformiteFinanciere,
+        motifRefus: item.motifRefus,
+        dateEvaluation: item.dateEvaluation,
+      }))
+    );
+  }, []);
 
   const formatMontant = (montant: number) => {
     return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';

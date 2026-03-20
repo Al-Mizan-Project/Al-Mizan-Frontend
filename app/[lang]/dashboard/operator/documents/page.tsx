@@ -17,6 +17,11 @@ import {
   faCheckCircle,
   faTimesCircle
 } from '@fortawesome/free-solid-svg-icons';
+import {
+  deleteDocument,
+  fetchOperatorDocuments,
+  uploadDocument,
+} from '@/lib/operator-api';
 
 type Document = {
   id: number;
@@ -28,6 +33,7 @@ type Document = {
   statut: 'valide' | 'expire' | 'en_attente_validation';
   dateExpiration?: string;
   url: string;
+  relatedType: string;
 };
 
 export default function DocumentsPage({
@@ -38,6 +44,11 @@ export default function DocumentsPage({
   const [lang, setLang] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategorie, setFilterCategorie] = useState('all');
+  const [operatorId] = useState<number>(() => Number(process.env.NEXT_PUBLIC_OPERATOR_ID || 1));
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -58,53 +69,97 @@ export default function DocumentsPage({
 
   const isArabic = lang === 'ar';
 
-  // Mock data - Replace with API call
-  const documents: Document[] = [
-    {
-      id: 1,
-      nom: 'registre_commerce.pdf',
+  const documentsBase = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8003';
+
+  const toLocalDocument = (doc: {
+    id_document: number;
+    nom: string;
+    type_document: string;
+    taille_fichier: number;
+    ia_verif_statut: string | null;
+    related_type: string;
+  }): Document => {
+    const lowerName = doc.nom.toLowerCase();
+    let categorie = 'Autres documents';
+    if (lowerName.includes('registre')) categorie = 'Registre de Commerce';
+    else if (lowerName.includes('cnas')) categorie = 'CNAS';
+    else if (lowerName.includes('casnos')) categorie = 'CASNOS';
+    else if (lowerName.includes('role')) categorie = 'Extrait de rôle';
+
+    const iaStatus = (doc.ia_verif_statut || '').toUpperCase();
+    const statut: Document['statut'] = iaStatus === 'ANOMALY'
+      ? 'expire'
+      : iaStatus === 'PENDING'
+        ? 'en_attente_validation'
+        : 'valide';
+
+    return {
+      id: doc.id_document,
+      nom: doc.nom,
       type: 'administratif',
-      categorie: 'Registre de Commerce',
-      dateUpload: '2026-01-15T10:00:00',
-      taille: 524288,
-      statut: 'valide',
-      dateExpiration: '2027-01-15',
-      url: '/docs/registre_commerce.pdf'
-    },
-    {
-      id: 2,
-      nom: 'certificat_cnas.pdf',
-      type: 'administratif',
-      categorie: 'CNAS',
-      dateUpload: '2026-02-20T14:30:00',
-      taille: 389120,
-      statut: 'expire',
-      dateExpiration: '2026-01-01',
-      url: '/docs/certificat_cnas.pdf'
-    },
-    {
-      id: 3,
-      nom: 'certificat_casnos.pdf',
-      type: 'administratif',
-      categorie: 'CASNOS',
-      dateUpload: '2026-03-01T09:00:00',
-      taille: 412672,
-      statut: 'valide',
-      dateExpiration: '2027-03-01',
-      url: '/docs/certificat_casnos.pdf'
-    },
-    {
-      id: 4,
-      nom: 'extrait_role.pdf',
-      type: 'administratif',
-      categorie: 'Extrait de rôle',
-      dateUpload: '2026-02-15T11:00:00',
-      taille: 245760,
-      statut: 'valide',
-      dateExpiration: '2026-12-31',
-      url: '/docs/extrait_role.pdf'
-    },
-  ];
+      categorie,
+      dateUpload: new Date().toISOString(),
+      taille: doc.taille_fichier,
+      statut,
+      url: `${documentsBase}/api/documents/${doc.id_document}/`,
+      relatedType: doc.related_type,
+    };
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadDocuments = async () => {
+      setLoading(true);
+      setLoadError('');
+      try {
+        const docs = await fetchOperatorDocuments(operatorId);
+        if (!isMounted) return;
+        setDocuments(docs.map(toLocalDocument));
+      } catch (error) {
+        if (!isMounted) return;
+        const message = error instanceof Error ? error.message : 'Impossible de charger les documents.';
+        setLoadError(message);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadDocuments();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [operatorId]);
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const uploaded = await uploadDocument({
+        file,
+        relatedType: `operator:${operatorId}`,
+        isEncrypted: false,
+      });
+      setDocuments((prev) => [toLocalDocument(uploaded), ...prev]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Upload impossible.';
+      setLoadError(message);
+    } finally {
+      setIsUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDelete = async (documentId: number) => {
+    try {
+      await deleteDocument(documentId);
+      setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Suppression impossible.';
+      setLoadError(message);
+    }
+  };
 
   const formatTaille = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -229,11 +284,18 @@ export default function DocumentsPage({
           <h1 className="text-3xl font-bold text-[#0D2527] mb-2 font-cairo">{t.title}</h1>
           <p className="text-[#418387] font-cairo">{t.subtitle}</p>
         </div>
-        <button className="px-6 py-3 bg-[#306B6F] text-white rounded-xl font-bold hover:bg-[#173C3F] transition-colors flex items-center gap-2">
+        <label className="px-6 py-3 bg-[#306B6F] text-white rounded-xl font-bold hover:bg-[#173C3F] transition-colors flex items-center gap-2 cursor-pointer">
           <FontAwesomeIcon icon={faUpload} />
-          {t.upload}
-        </button>
+          {isUploading ? 'Upload...' : t.upload}
+          <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" className="hidden" onChange={handleUpload} />
+        </label>
       </div>
+
+      {loadError && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
 
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -283,7 +345,11 @@ export default function DocumentsPage({
       </div>
 
       {/* Documents Table */}
-      {filteredDocuments.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+          <p className="text-gray-500 text-lg">Chargement des documents...</p>
+        </div>
+      ) : filteredDocuments.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <p className="text-gray-500 text-lg">{t.aucunDocument}</p>
         </div>
@@ -337,10 +403,18 @@ export default function DocumentsPage({
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <button className="p-2 text-[#306B6F] hover:bg-[#FCFFFF] rounded-lg transition-colors">
+                          <a
+                            href={doc.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-2 text-[#306B6F] hover:bg-[#FCFFFF] rounded-lg transition-colors"
+                          >
                             <FontAwesomeIcon icon={faDownload} />
-                          </button>
-                          <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          </a>
+                          <button
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            onClick={() => handleDelete(doc.id)}
+                          >
                             <FontAwesomeIcon icon={faTrash} />
                           </button>
                         </div>
