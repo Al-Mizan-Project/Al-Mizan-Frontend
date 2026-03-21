@@ -182,6 +182,11 @@ export default function SoumettreOffrePage({
         id_soumissionnaire: operatorId,
         offre_financiere_chiffree_url: financialUrl,
         cle_dechiffrement_hash: 'frontend-placeholder-key-hash',
+        document_ids: [
+          techDoc.id_document,
+          finDoc.id_document,
+          ...documentsProfile.map((doc) => doc.id),
+        ],
       });
 
       upsertStoredSubmission({

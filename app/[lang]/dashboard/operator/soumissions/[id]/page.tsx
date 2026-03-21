@@ -22,7 +22,12 @@ import {
   upsertStoredSubmission,
   type StoredSubmission,
 } from '@/lib/operator-submissions-store';
-import { runConformiteAuto } from '@/lib/operator-api';
+import {
+  fetchAppelOffreById,
+  fetchDocumentsByIds,
+  fetchSoumissionById,
+  runConformiteAuto,
+} from '@/lib/operator-api';
 
 export default function SoumissionDetailPage({
   params,
@@ -35,6 +40,7 @@ export default function SoumissionDetailPage({
   const [activeTab, setActiveTab] = useState<'details' | 'statut'>('details');
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [analyseError, setAnalyseError] = useState<string>('');
+  const [loadError, setLoadError] = useState<string>('');
   const [soumission, setSoumission] = useState<StoredSubmission | null>(null);
   const [analyseResult, setAnalyseResult] = useState<{
     conformite_statut: string;
@@ -64,14 +70,83 @@ export default function SoumissionDetailPage({
 
   const isArabic = lang === 'ar';
 
+  const mapSoumissionStatutToUi = (statut?: string): StoredSubmission['statut'] => {
+    const normalized = String(statut || '').toUpperCase();
+    if (normalized === 'EN_EVALUATION' || normalized === 'EN_OUVERTURE') return 'en_evaluation';
+    if (normalized === 'EVALU_TERMINEE') return 'conforme';
+    if (normalized === 'RETRAITE') return 'refusee';
+    return 'soumise';
+  };
+
   useEffect(() => {
-    if (!submissionId) return;
-    const localItem = findStoredSubmissionById(Number(submissionId));
-    if (localItem) {
-      setSoumission(localItem);
-      return;
-    }
-    setSoumission(null);
+    let isMounted = true;
+
+    const loadSoumission = async () => {
+      if (!submissionId) return;
+      setLoadError('');
+      try {
+        const [backend, localItem] = await Promise.all([
+          fetchSoumissionById(Number(submissionId)),
+          Promise.resolve(findStoredSubmissionById(Number(submissionId))),
+        ]);
+        const appel = await fetchAppelOffreById(backend.id_appel_offre);
+        const linkedDocs = !localItem?.documents?.length && backend.document_ids?.length
+          ? await fetchDocumentsByIds(backend.document_ids)
+          : [];
+
+        const inferredDocuments = linkedDocs.map((doc) => ({
+          idDocument: doc.id_document,
+          name: doc.nom,
+          type: doc.is_encrypted
+            ? ('financiere' as const)
+            : doc.nom.toLowerCase().includes('tech')
+              ? ('technique' as const)
+              : ('administratif' as const),
+          size: `${(doc.taille_fichier / 1024 / 1024).toFixed(2)} MB`,
+          encrypted: doc.is_encrypted,
+        }));
+
+        if (!isMounted) return;
+        const merged: StoredSubmission = {
+          id: backend.id_soumission,
+          appelOffre: {
+            id: backend.id_appel_offre,
+            reference: localItem?.appelOffre.reference || appel.reference,
+            titre: localItem?.appelOffre.titre || appel.titre,
+            serviceContractant:
+              localItem?.appelOffre.serviceContractant || `Service #${appel.id_service_contractant}`,
+            montantEstime: localItem?.appelOffre.montantEstime || Number(appel.montant_estime || 0),
+          },
+          dateSoumission: backend.date_soumission,
+          montantSoumis: Number(backend.montant_financier || localItem?.montantSoumis || 0),
+          statut: mapSoumissionStatutToUi(backend.statut),
+          conformiteAdmin: mapConformiteStatutToUi(backend.conformite_statut || undefined),
+          conformiteTechnique: localItem?.conformiteTechnique || 'en_attente',
+          conformiteFinanciere: localItem?.conformiteFinanciere || 'en_attente',
+          motifRefus: localItem?.motifRefus,
+          dateEvaluation: localItem?.dateEvaluation,
+          documents: localItem?.documents?.length ? localItem.documents : inferredDocuments,
+        };
+        setSoumission(merged);
+        upsertStoredSubmission(merged);
+      } catch (error) {
+        if (!isMounted) return;
+        const localItem = findStoredSubmissionById(Number(submissionId));
+        if (localItem) {
+          setSoumission(localItem);
+          return;
+        }
+        const message = error instanceof Error ? error.message : 'Impossible de charger la soumission.';
+        setLoadError(message);
+        setSoumission(null);
+      }
+    };
+
+    loadSoumission();
+
+    return () => {
+      isMounted = false;
+    };
   }, [submissionId]);
 
   const mapConformiteStatutToUi = (statut?: string) => {
@@ -89,6 +164,9 @@ export default function SoumissionDetailPage({
     try {
       if (!soumission) {
         throw new Error('Soumission introuvable dans l\'historique local.');
+      }
+      if (!soumission.documents.length) {
+        throw new Error('Aucun document associé à cette soumission pour lancer l\'analyse IA.');
       }
 
       const data = await runConformiteAuto({
@@ -208,11 +286,20 @@ export default function SoumissionDetailPage({
   };
 
   if (!lang) return null;
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-3xl mx-auto rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          {loadError}
+        </div>
+      </div>
+    );
+  }
   if (!soumission) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-3xl mx-auto rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
-          Cette soumission n'est pas disponible localement. Soumettez une offre depuis la page d'appel d'offres pour la visualiser ici.
+          Soumission introuvable.
         </div>
       </div>
     );
