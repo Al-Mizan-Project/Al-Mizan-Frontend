@@ -16,6 +16,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import { loadStoredSubmissions } from '@/lib/operator-submissions-store';
+import { fetchAppelOffreById, fetchSoumissionsByOperator } from '@/lib/operator-api';
 
 type Soumission = {
   id: number;
@@ -44,7 +45,10 @@ export default function MesSoumissionsPage({
   const [lang, setLang] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatut, setFilterStatut] = useState('all');
+  const [operatorId] = useState<number>(() => Number(process.env.NEXT_PUBLIC_OPERATOR_ID || 1));
   const [soumissions, setSoumissions] = useState<Soumission[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -65,24 +69,83 @@ export default function MesSoumissionsPage({
 
   const isArabic = lang === 'ar';
 
+  const mapBackendStatusToUi = (status: string): Soumission['statut'] => {
+    const normalized = String(status || '').toUpperCase();
+    if (normalized === 'EN_EVALUATION' || normalized === 'EN_OUVERTURE') return 'en_evaluation';
+    if (normalized === 'EVALU_TERMINEE') return 'conforme';
+    if (normalized === 'RETRAITE') return 'refusee';
+    return 'soumise';
+  };
+
+  const mapConformiteToUi = (status: string | null): Soumission['conformiteAdmin'] => {
+    const normalized = String(status || '').toUpperCase();
+    if (normalized === 'CONFORME') return 'conforme';
+    if (normalized === 'NON_CONFORME' || normalized === 'PIECES_MANQUANTES') return 'non_conforme';
+    return 'en_attente';
+  };
+
   useEffect(() => {
-    setSoumissions(
-      loadStoredSubmissions().map((item) => ({
-        id: item.id,
-        appelOffreReference: item.appelOffre.reference,
-        appelOffreTitre: item.appelOffre.titre,
-        serviceContractant: item.appelOffre.serviceContractant,
-        dateSoumission: item.dateSoumission,
-        montantSoumis: item.montantSoumis,
-        statut: item.statut,
-        conformiteAdmin: item.conformiteAdmin,
-        conformiteTechnique: item.conformiteTechnique,
-        conformiteFinanciere: item.conformiteFinanciere,
-        motifRefus: item.motifRefus,
-        dateEvaluation: item.dateEvaluation,
-      }))
-    );
-  }, []);
+    let isMounted = true;
+
+    const loadData = async () => {
+      setLoading(true);
+      setLoadError('');
+      try {
+        const [backendSoumissions, localSoumissions] = await Promise.all([
+          fetchSoumissionsByOperator(operatorId),
+          Promise.resolve(loadStoredSubmissions()),
+        ]);
+
+        const appelIds = Array.from(new Set(backendSoumissions.map((s) => s.id_appel_offre)));
+        const appelsEntries = await Promise.all(
+          appelIds.map(async (id) => {
+            try {
+              const appel = await fetchAppelOffreById(id);
+              return [id, appel] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          })
+        );
+        const appelsMap = new Map(appelsEntries);
+        const localMap = new Map(localSoumissions.map((s) => [s.id, s]));
+
+        const mapped: Soumission[] = backendSoumissions.map((item) => {
+          const appel = appelsMap.get(item.id_appel_offre);
+          const local = localMap.get(item.id_soumission);
+          return {
+            id: item.id_soumission,
+            appelOffreReference: local?.appelOffre.reference || appel?.reference || `AO #${item.id_appel_offre}`,
+            appelOffreTitre: local?.appelOffre.titre || appel?.titre || `Appel d'offres #${item.id_appel_offre}`,
+            serviceContractant: local?.appelOffre.serviceContractant || (appel ? `Service #${appel.id_service_contractant}` : 'N/A'),
+            dateSoumission: item.date_soumission,
+            montantSoumis: Number(item.montant_financier || 0),
+            statut: mapBackendStatusToUi(item.statut),
+            conformiteAdmin: mapConformiteToUi(item.conformite_statut),
+            conformiteTechnique: local?.conformiteTechnique || 'en_attente',
+            conformiteFinanciere: local?.conformiteFinanciere || 'en_attente',
+            motifRefus: local?.motifRefus,
+            dateEvaluation: local?.dateEvaluation,
+          };
+        });
+
+        if (!isMounted) return;
+        setSoumissions(mapped);
+      } catch (error) {
+        if (!isMounted) return;
+        const message = error instanceof Error ? error.message : 'Impossible de charger les soumissions.';
+        setLoadError(message);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [operatorId]);
 
   const formatMontant = (montant: number) => {
     return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
@@ -254,8 +317,18 @@ export default function MesSoumissionsPage({
         </div>
       </div>
 
+      {loadError && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
+
       {/* Submissions List */}
-      {filteredSoumissions.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+          <p className="text-gray-500 text-lg">Chargement des soumissions...</p>
+        </div>
+      ) : filteredSoumissions.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <p className="text-gray-500 text-lg">{t.aucuneSoumission}</p>
         </div>
