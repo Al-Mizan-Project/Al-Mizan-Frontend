@@ -17,6 +17,17 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import {
+  findStoredSubmissionById,
+  upsertStoredSubmission,
+  type StoredSubmission,
+} from '@/lib/operator-submissions-store';
+import {
+  fetchAppelOffreById,
+  fetchDocumentsByIds,
+  fetchSoumissionById,
+  runConformiteAuto,
+} from '@/lib/operator-api';
 
 export default function SoumissionDetailPage({
   params,
@@ -29,6 +40,8 @@ export default function SoumissionDetailPage({
   const [activeTab, setActiveTab] = useState<'details' | 'statut'>('details');
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [analyseError, setAnalyseError] = useState<string>('');
+  const [loadError, setLoadError] = useState<string>('');
+  const [soumission, setSoumission] = useState<StoredSubmission | null>(null);
   const [analyseResult, setAnalyseResult] = useState<{
     conformite_statut: string;
     conformite_rapport?: {
@@ -57,33 +70,84 @@ export default function SoumissionDetailPage({
 
   const isArabic = lang === 'ar';
 
-  // Mock data - Replace with API call
-  const soumission = {
-    id: 1,
-    appelOffre: {
-      id: 1,
-      reference: 'AO/N°01/2026',
-      titre: 'Acquisition de matériel informatique pour les lycées de la wilaya d\'Alger',
-      description: 'Fourniture et livraison de 500 ordinateurs portables, 100 imprimantes multifonctions...',
-      montantEstime: 85000000,
-      serviceContractant: 'Direction de l\'Éducation d\'Alger'
-    },
-    dateSoumission: '2026-03-01T08:00:00',
-    montantSoumis: 72500000,
-    statut: 'refusee',
-    conformiteAdmin: 'non_conforme',
-    conformiteTechnique: 'conforme',
-    conformiteFinanciere: 'conforme',
-    motifRefus: 'Le certificat CNAS fourni est expiré depuis le 01/01/2026. Veuillez renouveler votre attestation pour les prochaines soumissions.',
-    dateEvaluation: '2026-04-20T10:45:00',
-    documents: [
-      { idDocument: 101, name: 'offre_technique.pdf', type: 'technique', size: '3.2 MB' },
-      { idDocument: 102, name: 'offre_financiere_chiffree', type: 'financiere', size: '1.8 MB', encrypted: true },
-      { idDocument: 103, name: 'extrait_role.pdf', type: 'administratif', size: '450 KB' },
-      { idDocument: 104, name: 'certificat_cnas.pdf', type: 'administratif', size: '380 KB' },
-      { idDocument: 105, name: 'registre_commerce.pdf', type: 'administratif', size: '520 KB' },
-    ]
+  const mapSoumissionStatutToUi = (statut?: string): StoredSubmission['statut'] => {
+    const normalized = String(statut || '').toUpperCase();
+    if (normalized === 'EN_EVALUATION' || normalized === 'EN_OUVERTURE') return 'en_evaluation';
+    if (normalized === 'EVALU_TERMINEE') return 'conforme';
+    if (normalized === 'RETRAITE') return 'refusee';
+    return 'soumise';
   };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSoumission = async () => {
+      if (!submissionId) return;
+      setLoadError('');
+      try {
+        const [backend, localItem] = await Promise.all([
+          fetchSoumissionById(Number(submissionId)),
+          Promise.resolve(findStoredSubmissionById(Number(submissionId))),
+        ]);
+        const appel = await fetchAppelOffreById(backend.id_appel_offre);
+        const linkedDocs = !localItem?.documents?.length && backend.document_ids?.length
+          ? await fetchDocumentsByIds(backend.document_ids)
+          : [];
+
+        const inferredDocuments = linkedDocs.map((doc) => ({
+          idDocument: doc.id_document,
+          name: doc.nom,
+          type: doc.is_encrypted
+            ? ('financiere' as const)
+            : doc.nom.toLowerCase().includes('tech')
+              ? ('technique' as const)
+              : ('administratif' as const),
+          size: `${(doc.taille_fichier / 1024 / 1024).toFixed(2)} MB`,
+          encrypted: doc.is_encrypted,
+        }));
+
+        if (!isMounted) return;
+        const merged: StoredSubmission = {
+          id: backend.id_soumission,
+          appelOffre: {
+            id: backend.id_appel_offre,
+            reference: localItem?.appelOffre.reference || appel.reference,
+            titre: localItem?.appelOffre.titre || appel.titre,
+            serviceContractant:
+              localItem?.appelOffre.serviceContractant || `Service #${appel.id_service_contractant}`,
+            montantEstime: localItem?.appelOffre.montantEstime || Number(appel.montant_estime || 0),
+          },
+          dateSoumission: backend.date_soumission,
+          montantSoumis: Number(backend.montant_financier || localItem?.montantSoumis || 0),
+          statut: mapSoumissionStatutToUi(backend.statut),
+          conformiteAdmin: mapConformiteStatutToUi(backend.conformite_statut || undefined),
+          conformiteTechnique: localItem?.conformiteTechnique || 'en_attente',
+          conformiteFinanciere: localItem?.conformiteFinanciere || 'en_attente',
+          motifRefus: localItem?.motifRefus,
+          dateEvaluation: localItem?.dateEvaluation,
+          documents: localItem?.documents?.length ? localItem.documents : inferredDocuments,
+        };
+        setSoumission(merged);
+        upsertStoredSubmission(merged);
+      } catch (error) {
+        if (!isMounted) return;
+        const localItem = findStoredSubmissionById(Number(submissionId));
+        if (localItem) {
+          setSoumission(localItem);
+          return;
+        }
+        const message = error instanceof Error ? error.message : 'Impossible de charger la soumission.';
+        setLoadError(message);
+        setSoumission(null);
+      }
+    };
+
+    loadSoumission();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [submissionId]);
 
   const mapConformiteStatutToUi = (statut?: string) => {
     const normalized = (statut || '').toUpperCase();
@@ -98,34 +162,32 @@ export default function SoumissionDetailPage({
     setAnalyseError('');
     setIsAnalysing(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_IA_SERVICE_URL || 'http://localhost:18088';
-      const payload = {
-        id_appel_offre: soumission.appelOffre.id,
-        provided_document_ids: soumission.documents.map((doc) => doc.idDocument),
-        perform_ocr: true,
-      };
-
-      const response = await fetch(
-        `${baseUrl}/ia/conformite/verifier-soumission-auto/${submissionId}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'La vérification automatique a échoué.');
+      if (!soumission) {
+        throw new Error('Soumission introuvable dans l\'historique local.');
+      }
+      if (!soumission.documents.length) {
+        throw new Error('Aucun document associé à cette soumission pour lancer l\'analyse IA.');
       }
 
-      const data = await response.json();
+      const data = await runConformiteAuto({
+        soumissionId: Number(submissionId),
+        idAppelOffre: soumission.appelOffre.id,
+        providedDocumentIds: soumission.documents.map((doc) => doc.idDocument),
+        performOcr: true,
+      });
+
       setAnalyseResult({
         conformite_statut: data?.conformite_statut || '',
         conformite_rapport: data?.conformite_rapport || {},
       });
+
+      const mappedStatus = mapConformiteStatutToUi(data?.conformite_statut || '');
+      const updatedSoumission: StoredSubmission = {
+        ...soumission,
+        conformiteAdmin: mappedStatus,
+      };
+      setSoumission(updatedSoumission);
+      upsertStoredSubmission(updatedSoumission);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur inconnue';
       setAnalyseError(message);
@@ -217,13 +279,31 @@ export default function SoumissionDetailPage({
 
   const effectiveConformiteAdmin = analyseResult
     ? mapConformiteStatutToUi(analyseResult.conformite_statut)
-    : soumission.conformiteAdmin;
+    : (soumission?.conformiteAdmin || 'en_attente');
 
   const formatMontant = (montant: number) => {
     return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
   };
 
   if (!lang) return null;
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-3xl mx-auto rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          {loadError}
+        </div>
+      </div>
+    );
+  }
+  if (!soumission) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-3xl mx-auto rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+          Soumission introuvable.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
