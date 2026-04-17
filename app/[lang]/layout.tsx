@@ -1,6 +1,7 @@
 import '@/lib/fontawesome';
-import './globals.css'; // Make sure path is correct
+import { Providers } from '@/app/providers';
 import { Inter, Cairo } from 'next/font/google';
+import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const cairo = Cairo({ subsets: ['arabic'], variable: '--font-cairo' });
@@ -18,7 +19,9 @@ export default async function RootLayout({
   return (
     <html lang={lang} dir={isAr ? 'rtl' : 'ltr'}>
       <body className={`${isAr ? cairo.className : inter.className} antialiased bg-gray-50`}>
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );
