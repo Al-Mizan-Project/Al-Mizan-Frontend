@@ -124,41 +124,93 @@ export default function ServiceContractantRegistration({ params }: PageProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+  
+  if (!validateForm()) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const token = localStorage.getItem('access_token');
     
-    if (!validateForm()) {
+    if (!token) {
+      alert(isArabic ? 'Veuillez vous connecter d\'abord' : 'Please login first');
+      router.push(`/${lang}/login`);
       return;
     }
 
-    setLoading(true);
+    console.log('Creating membre with token:', token.substring(0, 20) + '...');
 
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      console.log('Form Data:', formData);
-      
-      // TODO: Replace with actual API call
-      // const response = await fetch(`/api/register/contractant`, {
-      //   method: 'POST',
-      //   body: JSON.stringify(formData),
-      // });
+    // Step 1: Create Membre
+    const membreResponse = await fetch('http://localhost:18081/membres', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        nom: formData.nomOfficiel,
+        prenom: formData.nomOfficiel,
+        email: formData.emailContact,
+        telephone: formData.emailContact,
+        type_membre: 'service_contractant',
+      }),
+    });
 
-      setSubmitted(true);
-      
-      // Redirect after success
-      setTimeout(() => {
-        router.push(`/${lang}/dashboard`);
-      }, 2000);
-      
-    } catch (error) {
-      console.error('Registration error:', error);
-      alert(isArabic ? 'حدث خطأ في التسجيل' : 'Erreur lors de l\'enregistrement');
-    } finally {
-      setLoading(false);
+    console.log('Membre response status:', membreResponse.status);
+
+    if (!membreResponse.ok) {
+      const errorData = await membreResponse.json().catch(() => ({}));
+      console.error('Membre error:', errorData);
+      throw new Error(errorData.message || 'Failed to create membre');
     }
-  };
+
+    const membreData = await membreResponse.json();
+    console.log('Membre created:', membreData);
+    const idMembre = membreData.id_membre;
+
+   // Step 2: Create Organisation
+const orgResponse = await fetch('http://localhost:18081/organisations', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    nom_officiel: formData.nomOfficiel, 
+    adresse_siege: formData.adresseSiege,
+    email_contact: formData.emailContact,
+    type_entite: formData.categorie,     
+    code_ordonnateur: formData.codeOrdonnateur,
+    nom_tutelle: formData.nomTutelle,
+    identite_autorite: formData.identiteAutorite,
+    id_membre: idMembre,
+  }),
+});
+
+    if (!orgResponse.ok) {
+      const errorData = await orgResponse.json().catch(() => ({}));
+      console.error('Organisation error:', errorData);
+      throw new Error(errorData.message || 'Failed to create organisation');
+    }
+
+    setSubmitted(true);
+    
+    setTimeout(() => {
+      router.push(`/${lang}/dashboard`);
+    }, 2000);
+    
+  } catch (error: any) {
+    console.error('Registration error:', error);
+    alert(isArabic ? 'حدث خطأ في التسجيل' : 'Erreur lors de l\'enregistrement: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleChange = (field: keyof FormData, value: string | File | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));

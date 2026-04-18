@@ -184,52 +184,87 @@ export default function OperateurEconomiqueRegistration({ params }: PageProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+ const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+  
+  if (!validateForm()) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const token = localStorage.getItem('access_token');
     
-    if (!validateForm()) {
-      // Scroll to first error
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!token) {
+      alert(isArabic ? 'Veuillez vous connecter d\'abord' : 'Please login first');
+      router.push(`/${lang}/login`);
       return;
     }
 
-    setLoading(true);
+    // Step 1: Create Membre
+    const membreResponse = await fetch('http://localhost:18081/membres', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        nom: formData.nomOfficiel,
+        prenom: formData.nomOfficiel,
+        email: formData.emailContact,
+        telephone: '',
+        type_membre: 'operateur_economique',
+      }),
+    });
 
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      
-      console.log('Form Data:', formData);
-      
-      // TODO: Replace with actual API call
-      // const formDataToSend = new FormData();
-      // Object.entries(formData).forEach(([key, value]) => {
-      //   if (value instanceof File) {
-      //     formDataToSend.append(key, value);
-      //   } else {
-      //     formDataToSend.append(key, value);
-      //   }
-      // });
-      // 
-      // const response = await fetch(`/api/register/operateur`, {
-      //   method: 'POST',
-      //   body: formDataToSend,
-      // });
-
-      setSubmitted(true);
-      
-      // Redirect after success
-      setTimeout(() => {
-        router.push(`/${lang}/dashboard`);
-      }, 2000);
-      
-    } catch (error) {
-      console.error('Registration error:', error);
-      alert(isArabic ? 'حدث خطأ في التسجيل' : 'Erreur lors de l\'enregistrement');
-    } finally {
-      setLoading(false);
+    if (!membreResponse.ok) {
+      const errorData = await membreResponse.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to create membre');
     }
-  };
+
+    const membreData = await membreResponse.json();
+    const idMembre = membreData.id_membre;
+
+    // Step 2: Create Operateur Économique
+    const operateurResponse = await fetch('http://localhost:18081/operateurs-economiques', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        nom_officiel: formData.nomOfficiel,
+        adresse_siege: formData.adresseSiege,
+        email_contact: formData.emailContact,
+        type_entite: formData.typeEntite,
+        nif: formData.nif,
+        registre_commerce: formData.registreCommerce,
+        rib: formData.rib,
+        id_membre: idMembre,
+      }),
+    });
+
+    if (!operateurResponse.ok) {
+      const errorData = await operateurResponse.json().catch(() => ({}));
+      console.error('Operateur error:', errorData);
+      throw new Error(errorData.message || 'Failed to create operateur');
+    }
+
+    setSubmitted(true);
+    
+    setTimeout(() => {
+      router.push(`/${lang}/dashboard/operator`);
+    }, 2000);
+    
+  } catch (error: any) {
+    console.error('Registration error:', error);
+    alert(isArabic ? 'حدث خطأ في التسجيل' : 'Erreur lors de l\'enregistrement: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleChange = (field: keyof FormData, value: string | File | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));

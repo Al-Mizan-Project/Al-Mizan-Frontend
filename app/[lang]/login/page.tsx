@@ -2,6 +2,7 @@
 import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useState, FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   faEnvelope, 
   faLock, 
@@ -26,6 +27,7 @@ export default function LoginPage({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { login: authLogin } = useAuth();
 
   // Load lang from params on mount
   useEffect(() => {
@@ -47,37 +49,41 @@ export default function LoginPage({ params }: PageProps) {
 
   const isArabic = lang === 'ar';
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
 
-    // Basic validation
-    if (!email || !password) {
-      setError(isArabic ? 'هذا الحقل مطلوب' : 'Ce champ est obligatoire');
-      setLoading(false);
-      return;
-    }
 
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setError(isArabic ? 'عنوان بريد إلكتروني غير صالح' : 'Adresse e-mail invalide');
-      setLoading(false);
-      return;
-    }
 
-    // TODO: Replace with actual API call
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API
-      console.log('Login attempt:', { email, password, remember, lang });
-      
-      // Redirect to dashboard on success
-      router.push(`/${lang}/dashboard`);
-    } catch (err) {
+
+const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+  setError(null);
+  setLoading(true);
+
+ 
+  if (!email || !password) {
+    setError(isArabic ? 'هذا الحقل مطلوب' : 'Ce champ est obligatoire');
+    setLoading(false);
+    return;
+  }
+
+  if (!/\S+@\S+\.\S+/.test(email)) {
+    setError(isArabic ? 'عنوان بريد إلكتروني غير صالح' : 'Adresse e-mail invalide');
+    setLoading(false);
+    return;
+  }
+
+  try {
+    await authLogin(email, password);
+  
+  } catch (err: any) {
+    if (err.response?.status === 401) {
       setError(isArabic ? 'بيانات الدخول غير صحيحة' : 'Identifiants incorrects');
-    } finally {
-      setLoading(false);
+    } else {
+      setError(isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion');
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <main className="min-h-screen flex flex-col lg:flex-row bg-[#FCFFFF]">

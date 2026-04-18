@@ -97,30 +97,85 @@ export default function TutelleRegistration({ params }: PageProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+ const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+  
+  if (!validateForm()) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const token = localStorage.getItem('access_token');
     
-    if (!validateForm()) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!token) {
+      alert(isArabic ? 'Veuillez vous connecter d\'abord' : 'Please login first');
+      router.push(`/${lang}/login`);
       return;
     }
 
-    setLoading(true);
+    // Step 1: Create Membre
+    const membreResponse = await fetch('http://localhost:18081/membres', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        nom: formData.nomTutelle,
+        prenom: formData.nomOfficiel,
+        email: formData.emailContact,
+        telephone: '',
+        type_membre: 'tutelle',
+      }),
+    });
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('Form Data:', formData);
-      setSubmitted(true);
-      setTimeout(() => {
-        router.push(`/${lang}/dashboard`);
-      }, 2000);
-    } catch (error) {
-      console.error('Registration error:', error);
-      alert(isArabic ? 'حدث خطأ في التسجيل' : 'Erreur lors de l\'enregistrement');
-    } finally {
-      setLoading(false);
+    if (!membreResponse.ok) {
+      const errorData = await membreResponse.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to create membre');
     }
-  };
+
+    const membreData = await membreResponse.json();
+    const idMembre = membreData.id_membre;
+
+    // Step 2: Create Tutelle
+    const tutelleResponse = await fetch('http://localhost:18081/tutelles', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        nom_officiel: formData.nomOfficiel,
+        nom_tutelle: formData.nomTutelle,
+        adresse_siege: formData.adresseSiege,
+        email_contact: formData.emailContact,
+        identite_autorite: formData.identiteAutorite,
+        id_membre: idMembre,
+      }),
+    });
+
+    if (!tutelleResponse.ok) {
+      const errorData = await tutelleResponse.json().catch(() => ({}));
+      console.error('Tutelle error:', errorData);
+      throw new Error(errorData.message || 'Failed to create tutelle');
+    }
+
+    setSubmitted(true);
+    
+    setTimeout(() => {
+      router.push(`/${lang}/dashboard`);
+    }, 2000);
+    
+  } catch (error: any) {
+    console.error('Registration error:', error);
+    alert(isArabic ? 'حدث خطأ في التسجيل' : 'Erreur: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleChange = (field: keyof FormData, value: string | File | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
