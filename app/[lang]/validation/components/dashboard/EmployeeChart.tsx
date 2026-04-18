@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+
 import { 
   BarChart, 
   Bar, 
@@ -29,6 +31,15 @@ interface EmployeeChartProps {
 }
 
 export default function EmployeeChart({ data, title, legends ,lang}: EmployeeChartProps) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsMounted(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!isMounted) return <div className="h-[280px] w-full bg-slate-50 animate-pulse rounded-lg" />;
+
   return (
     <div className="val-chart-container p-6 w-full">
       <h3 className="val-subtitle mb-6">{title}</h3>
@@ -60,7 +71,7 @@ export default function EmployeeChart({ data, title, legends ,lang}: EmployeeCha
       </div>
       
       <div className="h-[280px] w-full" style={{ overflow: 'visible' }}>
-        <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+        <ResponsiveContainer width="100%" height="100%" minHeight={280} minWidth={0}>
           <BarChart 
             data={data} 
             margin={{ top: 10, right: 10, left: 0, bottom: 30 }}

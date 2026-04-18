@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { validationsApi } from '@/lib/api/validation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faDownload, 
@@ -37,9 +39,10 @@ interface FileDetailsProps {
   };
   lang?: string;
   role?: UserRole;
-  onDownload?: () => void;
+  onDownload?: (url: string) => void;
   onTransmit?: () => void;
   renderDocumentViewer?: () => React.ReactNode;
+  data?: any;
 }
 
 const tabData: Record<TabType, TabData> = { 
@@ -77,10 +80,13 @@ export default function FileDetails({
   role = 'commission', 
   onDownload, 
   onTransmit,
-  renderDocumentViewer 
+  renderDocumentViewer,
+  data
 }: FileDetailsProps) {
   const [activeReportSubTab, setActiveReportSubTab] = useState<ReportSubTab>('administrative');
   const [activeDecisionSubTab, setActiveDecisionSubTab] = useState<DecisionSubTab>('general');
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [isFinancialConform, setIsFinancialConform] = useState(true);
   const [isAbnormallyLow, setIsAbnormallyLow] = useState(false);
@@ -99,20 +105,92 @@ export default function FileDetails({
   const isDecisionTab = activeTab === 'decision';
   const isReportsTab = activeTab === 'reports';
 
+  const shouldShowDocumentViewer = activeTab !== 'decision' || (activeTab === 'decision' && activeDecisionSubTab === 'general');
+  const validatorNoButtons = isValidator && activeTab === 'call';
+  const validatorDownloadOnly = isValidator && (activeTab === 'financial' || activeTab === 'technical');
+  const validatorReportsDownloadOnly = isValidator && activeTab === 'reports';
+  const validatorFullButtons = isValidator && activeTab === 'decision';
+
   const getData = () => {
-    if (isReportsTab) return reportSubTabData[activeReportSubTab];
-    if (isDecisionTab && isValidator) return decisionSubTabData[activeDecisionSubTab];
-    return tabData[activeTab];
+    if (!data) return { fields: [] };
+    const { soumission, appelOffre, evaluations, validations, documents } = data;
+
+    // Helper to find a document by name or type
+    const findDoc = (type: string) => {
+      return documents?.find((d: any) => d.type_document?.toLowerCase().includes(type.toLowerCase()) || d.nom?.toLowerCase().includes(type.toLowerCase()));
+    };
+
+    const financialDoc = findDoc('financiere');
+    const technicalDoc = findDoc('technique');
+    const aoDoc = findDoc('cahier');
+
+    const commonFields = [
+      { label: 'Dossier', value: `AO-${appelOffre?.id_appel_offres}-${soumission?.id_soumission}` },
+      { label: 'Opérateur économique', value: `Opérateur #${soumission?.id_soumissionnaire}` },
+      { label: 'Service Contractant', value: `Service #${appelOffre?.id_service_contractant}` },
+      { label: 'Domaine', value: appelOffre?.titre || 'Non spécifié' },
+    ];
+
+    if (activeTab === 'financial') {
+      return { fields: [
+        ...commonFields,
+        { label: 'Document', value: 'Offre financière' },
+        { label: 'URL', value: soumission?.offre_financiere_chiffree_url || 'Non disponible' },
+        { label: 'Status', value: soumission?.statut }
+      ]};
+    }
+
+    if (activeTab === 'technical') {
+      return { fields: [
+        ...commonFields,
+        { label: 'Document', value: technicalDoc?.nom || 'Offre technique' },
+        { label: 'URL', value: technicalDoc?.storage_url || 'Non disponible' },
+        { label: 'Status', value: soumission?.statut }
+      ]};
+    }
+
+    if (activeTab === 'call') {
+      return { fields: [
+        { label: 'Dossier', value: appelOffre?.reference },
+        { label: 'Titre', value: appelOffre?.titre },
+        { label: 'Document', value: 'Cahier des charges' },
+        { label: 'URL', value: aoDoc?.storage_url || 'Non disponible' }
+      ]};
+    }
+
+    if (isReportsTab) {
+      const type = activeReportSubTab === 'administrative' ? 'administrative' : 'technique';
+      const evalItem = evaluations?.find((e: any) => e.type === type);
+      return { fields: [
+        ...commonFields,
+        { label: 'Type Rapport', value: activeReportSubTab === 'administrative' ? 'Administratif' : 'Technique' },
+        { label: 'Note', value: evalItem ? `${evalItem.note}/100` : 'Non évalué' },
+        { label: 'Commentaire', value: evalItem?.commentaire || 'Aucun' }
+      ]};
+    }
+
+    if (activeTab === 'decision') {
+      const validation = validations?.[0];
+      return { fields: [
+        ...commonFields,
+        { label: 'Statut Validation', value: validation?.is_validated ? 'Validé' : 'En attente/Rejeté' },
+        { label: 'Commentaire', value: validation?.commentaire || 'Aucun' }
+      ]};
+    }
+
+    return { fields: [] };
   };
 
-  const data = getData();
+  const currentData = getData();
 
-  const shouldShowDocumentViewer = isCommission || (isValidator && !isDecisionTab);
-
-  const validatorNoButtons = isValidator && (activeTab === 'financial' || activeTab === 'technical');
-  const validatorDownloadOnly = isValidator && activeTab === 'call';
-  const validatorReportsDownloadOnly = isValidator && isReportsTab;
-  const validatorFullButtons = false;
+  const handleDownload = () => {
+    const urlField = currentData.fields.find(f => f.label === 'URL');
+    if (urlField && urlField.value !== 'Non disponible') {
+      onDownload?.(urlField.value);
+    } else {
+      alert('Document non disponible pour le téléchargement');
+    }
+  };
  
 
   // ============================================
@@ -259,18 +337,39 @@ export default function FileDetails({
               <button
                 onClick={() => setShowModal(false)}
                 className="val-btn-secondary"
+                disabled={isSubmitting}
               >
                 Annuler
               </button>
               <button
-                onClick={() => {
-                  // Action de confirmation
-                  console.log('Dossier marqué comme prêt');
-                  setShowModal(false);
+                onClick={async () => {
+                  const validationId = data?.validations?.[0]?.id_validation;
+                  if (!validationId) {
+                    alert("ID de validation introuvable");
+                    return;
+                  }
+                  
+                  setIsSubmitting(true);
+                  try {
+                    if (decision === 'retenu') {
+                      await validationsApi.approveValidation(validationId);
+                    } else {
+                      await validationsApi.rejectValidation(validationId, motivation || avisFinal);
+                    }
+                    setShowModal(false);
+                    // Redirection vers le dashboard
+                    router.push(`/${lang}/validation/dashboard/validator`);
+                  } catch (err) {
+                    console.error("Erreur validation:", err);
+                    alert("Une erreur est survenue lors de la validation");
+                  } finally {
+                    setIsSubmitting(false);
+                  }
                 }}
-                className="val-btn-primary"
+                className={`val-btn-primary ${isSubmitting ? 'opacity-50 cursor-wait' : ''}`}
+                disabled={isSubmitting}
               >
-                Confirmer
+                {isSubmitting ? 'Traitement...' : 'Confirmer'}
               </button>
             </div>
           </div>
@@ -1011,7 +1110,7 @@ export default function FileDetails({
           renderConclusionContent()
         ) : (
           <div className="val-file-details-content">
-            {data.fields.map((field, index) => (
+            {(currentData?.fields || []).map((field: any, index: number) => (
               <div key={index} className="val-file-details-row">
                 <span className="val-file-details-label val-body-medium" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
                   {field.label}
@@ -1028,7 +1127,7 @@ export default function FileDetails({
           <>
             {isDecisionTab ? (
               <>
-                <button onClick={onDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
+                <button onClick={handleDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
                   <FontAwesomeIcon icon={faFileDownload} className="val-icon-16" />
                   {dict?.common?.actions?.download || 'Télécharger'}
                 </button>
@@ -1038,7 +1137,7 @@ export default function FileDetails({
                 </button>
               </>
             ) : (
-              <button onClick={onDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
+              <button onClick={handleDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
                 <FontAwesomeIcon icon={faDownload} className="val-icon-16" />
                 {dict?.common?.actions?.download || 'Télécharger'}
               </button>
@@ -1055,14 +1154,14 @@ export default function FileDetails({
             )}
             
             {validatorDownloadOnly && (
-              <button onClick={onDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
+              <button onClick={handleDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
                 <FontAwesomeIcon icon={faDownload} className="val-icon-16" />
                 {dict?.common?.actions?.download || 'Télécharger'}
               </button>
             )}
             
             {validatorReportsDownloadOnly && (
-              <button onClick={onDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
+              <button onClick={handleDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
                 <FontAwesomeIcon icon={faDownload} className="val-icon-16" />
                 {dict?.common?.actions?.download || 'Télécharger'}
               </button>
@@ -1070,7 +1169,7 @@ export default function FileDetails({
             
             {validatorFullButtons && (
               <>
-                <button onClick={onDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
+                <button onClick={handleDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
                   <FontAwesomeIcon icon={faFileDownload} className="val-icon-16" />
                   {dict?.common?.actions?.download || 'Télécharger'}
                 </button>

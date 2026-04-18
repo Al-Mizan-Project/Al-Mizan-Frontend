@@ -75,7 +75,7 @@ export default function DossierPage({ params }: DossierPageProps) {
 
     return MOCK_DATA.filter((item) => {
 
-      // recherche texte
+       
       if (
         filters.search &&
         !item.reference.toLowerCase().includes(filters.search.toLowerCase())
@@ -83,7 +83,7 @@ export default function DossierPage({ params }: DossierPageProps) {
         return false;
       }
 
-      // si validator → seulement ses dossiers
+       
       if (!isCommission && item.validator?.id !== 'V-01') {
         return false;
       }
@@ -96,14 +96,14 @@ export default function DossierPage({ params }: DossierPageProps) {
   return (
     <div className="val-dossiers-page">
 
-      {/* Filtres */}
+      { }
       <DossiersFilters
         onFiltersChange={handleFiltersChange}
         hasResults={hasResults}
         onExport={handleExport}
       />
 
-      {/* Tableau */}
+      { }
       {hasResults && filteredData.length > 0 ? (
 
         <div className="val-table-wrapper">

@@ -22,7 +22,7 @@ export default async function AffectationPage({ params, searchParams }: PageProp
 
   return (
     <div className="space-y-6">
-      {/* Onglets de navigation */}
+      { }
       <div className="val-tabs-container">
         <div className="flex items-center gap-6">
           <a
@@ -45,7 +45,7 @@ export default async function AffectationPage({ params, searchParams }: PageProp
         </div>
       </div>
 
-      {/* Contenu selon l'onglet */}
+      { }
       <div className="mt-6">
         {currentStatus === 'En Attente' ? (
           <EnAttenteView lang={lang} dict={dict} />

@@ -3,8 +3,8 @@ import { ReactNode } from 'react';
 import { getDictionary } from '@/lib/get-dictionary';
 import type { Locale } from '@/dictionaries/types';
 import Sidebar from '@/app/[lang]/validation/components/layout/Sidebar';
-import FileHeader from '../../../components/layout/FileHeader';
 import '../../../validation.css';
+import Header from '../../../components/layout/Header';
 
 interface DossierLayoutProps {
   children: ReactNode;
@@ -34,11 +34,7 @@ export default async function DossierLayout({
       
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         { }
-        <FileHeader 
-          lang={lang} 
-          role='commission'
-          dossierId={`Référence Dossier ${id}`}  
-        />
+        <Header variant="file" lang={lang} role='commission' dossierId={`Référence Dossier ${id}`} />
         
         { }
         <main className="flex-1 overflow-y-auto p-4 md:p-6">

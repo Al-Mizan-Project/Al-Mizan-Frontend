@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { fileRecord } from '../../types';
 
 interface FilesTableProps {
@@ -19,6 +20,8 @@ export default function FilesTable({
   onAffecter,
   viewMode = 'standard'
 }: FilesTableProps) {
+  const router = useRouter();
+
   const t = (path: string, fallback: string) => {
     const keys = path.split('.');
     let value: any = dict;
@@ -144,7 +147,11 @@ const getActionButton = (fileStatus: string) => {
             </tr>
           ) : (
             data.map((file) => (
-              <tr key={file.id} className="border-b border-gray-100 hover:bg-gray-50">
+              <tr 
+                key={file.id} 
+                className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                onClick={() => router.push(`/${lang}/validation/dossier/${file.rawId || file.id.replace('ID-', '')}/${viewMode === 'validateur' ? 'validator' : 'commission'}`)}
+              >
                 {/* COLONNE 1: Dossier */}
                 <td className="py-3 px-4">
                   <div className="flex items-center gap-2">
@@ -197,7 +204,7 @@ const getActionButton = (fileStatus: string) => {
                         {file.etape}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-2">
                         <button
                           onClick={() => onAffecter?.(file)}
@@ -206,7 +213,10 @@ const getActionButton = (fileStatus: string) => {
                           {getActionButton(status)}
                         </button>
                         {status === 'Prêt' && (
-                          <button className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-50 transition-colors">
+                          <button 
+                            onClick={() => router.push(`/${lang}/validation/dossier/${file.rawId || file.id.replace('ID-', '')}/commission`)}
+                            className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                          >
                             {t('files.table.actions.view', 'Voir')}
                           </button>
                         )}
