@@ -3,7 +3,7 @@ import { getDictionary } from '@/lib/get-dictionary';
 import type { Locale } from '@/dictionaries/types';  
 import '../../validation.css';  
 import Sidebar from '../../components/layout/Sidebar';
-import ReferencesHeader from '../../components/layout/ReferencesHeader';
+import Header from '../../components/layout/Header';
 
 interface ReferencesLayoutProps {
   children: ReactNode;
@@ -40,11 +40,7 @@ export default async function ReferencesLayout({
       { }
       <div className="flex-1 flex flex-col overflow-hidden w-full">
 
-        <ReferencesHeader
-          lang={lang}
-          role={userRole} 
-          dict={dict}
-        />
+       <Header variant="references" lang={lang} role={userRole} dict={dict} />
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="w-full max-w-[1440px] mx-auto">

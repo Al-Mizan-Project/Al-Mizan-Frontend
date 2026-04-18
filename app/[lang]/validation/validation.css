@@ -365,8 +365,9 @@
   }
 }
 .val-chart-container {
-  width: 414px;
-  height: 464px;
+  width: 100%;
+  max-width: 464px;
+  min-height: 464px;
   background-color: var(--color-white);
   border: 1px solid var(--color-gray-200);
 }

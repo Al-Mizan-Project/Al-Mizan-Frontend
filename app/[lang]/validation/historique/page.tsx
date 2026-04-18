@@ -15,7 +15,7 @@ export default async function HistoriqueValidationsPage({ params }: PageProps) {
   return (
     <div className="space-y-6">
 
-      {/* Vue principale */}
+      { }
       <HistoriqueValidationsView lang={lang} dict={dict} />
     </div>
   );
