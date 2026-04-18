@@ -9,20 +9,20 @@ import Pagination from '@/components/Pagination';
 interface User {
   id_utilisateur: number;
   id_role: number | null;
+  id_membre: number | null;
   email: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
-
 // We'll fetch roles separately to map id_role -> nom_role
 interface Role {
   id_role: number;
   nom_role: string;
 }
 
-type Statut = 'Actif' | 'Sans rôle';
-
-const STATUTS: ('Tous' | Statut)[] = ['Tous', 'Actif', 'Sans rôle'];
+type Statut = 'Actif' | 'Bloqué';
+const STATUTS: ('Tous' | Statut)[] = ['Tous', 'Actif', 'Bloqué'];
 
 const ROLE_BADGE: Record<string, string> = {
   'admin': 'bg-purple-50 text-purple-700 border border-purple-200',
@@ -32,8 +32,7 @@ const ROLE_BADGE: Record<string, string> = {
 const ROWS_PER_PAGE = 10;
 
 function getStatutFromUser(user: User): Statut {
-  if (!user.id_role) return 'Sans rôle';
-  return 'Actif';
+  return user.is_active ? 'Actif' : 'Bloqué';
 }
 
 function Dropdown<T extends string>({ label, options, value, onChange }: { label: string; options: T[]; value: T; onChange: (v: T) => void }) {
@@ -82,7 +81,7 @@ function ConfirmModal({ message, onConfirm, onCancel, danger = false }: { messag
   );
 }
 
-function UserDrawer({ user, roleName, onClose, onAction }: { user: User; roleName: string; onClose: () => void; onAction: (id: number, action: 'supprimer') => void }) {
+function UserDrawer({ user, roleName, onClose, onAction }: { user: User; roleName: string; onClose: () => void; onAction: (id: number, action: 'supprimer' | 'bloquer' | 'debloquer') => void }) {
   const initials = user.email?.[0]?.toUpperCase() || '?';
   return (
     <div className="fixed inset-0 z-40 flex">
@@ -118,6 +117,16 @@ function UserDrawer({ user, roleName, onClose, onAction }: { user: User; roleNam
         <div className="p-6 flex flex-col gap-2 mt-auto">
           <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Actions</h4>
           <button onClick={() => onAction(user.id_utilisateur, 'supprimer')} className="w-full py-2.5 rounded-xl text-sm font-bold border-2 border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600 transition-all">Supprimer</button>
+        <button
+  onClick={() => onAction(user.id_utilisateur, user.is_active ? 'bloquer' : 'debloquer')}
+  className={`w-full py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${
+    user.is_active
+      ? 'border-orange-300 text-orange-600 hover:bg-orange-50'
+      : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'
+  }`}
+>
+  {user.is_active ? 'Bloquer' : 'Débloquer'}
+</button>
         </div>
       </div>
     </div>
@@ -192,8 +201,10 @@ export default function UtilisateursView() {
   const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE);
   const paged = sorted.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
-  const applyAction = async (id: number, action: 'supprimer') => {
-    const user = users.find(u => u.id_utilisateur === id)!;
+  const applyAction = async (id: number, action: 'supprimer' | 'bloquer' | 'debloquer') => {
+  const user = users.find(u => u.id_utilisateur === id)!;
+  
+  if (action === 'supprimer') {
     setConfirmModal({
       message: `Supprimer définitivement le compte ${user.email} ? Cette action est irréversible.`,
       danger: true,
@@ -204,7 +215,22 @@ export default function UtilisateursView() {
         setSelectedUser(null);
       },
     });
-  };
+  }
+  
+  if (action === 'bloquer' || action === 'debloquer') {
+    const newState = action === 'debloquer';
+    setConfirmModal({
+      message: `${newState ? 'Débloquer' : 'Bloquer'} le compte ${user.email} ?`,
+      danger: !newState,
+      action: async () => {
+        await api.patch(`/users/${id}`, { is_active: newState });
+        await fetchData();
+        setConfirmModal(null);
+        setSelectedUser(null);
+      },
+    });
+  }
+};
 
   const resetFilters = () => { setSearch(''); setStatutFilter('Tous'); setPage(1); };
 

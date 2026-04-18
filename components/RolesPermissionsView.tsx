@@ -80,7 +80,7 @@ export default function RolesPermissionsView() {
 
   const handleRoleChange = async (userId: number, newRoleId: number) => {
     try {
-      await api.patch(`/users/${userId}/role`, { role_id: newRoleId });
+ await api.patch(`/users/${userId}/role`, { id_role: newRoleId });
       const { data } = await api.get('/users');
       setUsers(data);
     } catch {
@@ -140,11 +140,13 @@ export default function RolesPermissionsView() {
                           type="checkbox"
                           checked={isChecked}
                           disabled={!editMode}
-                         onChange={e => {
-        const newPerms = e.target.checked
-                             ? [...(rolePerms[role.id_role] || []), perm.id_permission]
-          : (rolePerms[role.id_role] || []).filter(id => id !== perm.id_permission);
-      }}
+                        onChange={e => {
+  const newPerms = e.target.checked
+    ? [...(rolePerms[role.id_role] || []), perm.id_permission]
+    : (rolePerms[role.id_role] || []).filter(id => id !== perm.id_permission);
+  setRolePerms(prev => ({ ...prev, [role.id_role]: newPerms }));
+  updateRolePermissions(role.id_role, newPerms);
+}}
     />
     {perm.nom_permission}
                       </label>

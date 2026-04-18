@@ -15,7 +15,7 @@ export interface Notification {
   description: string;
   dossierRef?: string;
   dossierId?: string;
-  createdAt: string;
+  createdAt: Date;
   read: boolean;
 }
 
@@ -48,7 +48,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       description: n.message || '',
       dossierRef: n.dossier_ref,
       dossierId: n.dossier_id,
-      createdAt: n.created_at,
+      createdAt: new Date(n.created_at),
       read: n.is_read,
     }));
     setNotifications(mapped);
