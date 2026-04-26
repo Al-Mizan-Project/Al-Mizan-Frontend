@@ -1,38 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { proxyRequest } from '../_utils';
 
 const CONTRACTANT_BASE = process.env.NEXT_PUBLIC_CONTRACTANT_SERVICE_URL || 'http://localhost:8000';
-const INTERNAL_TOKEN = process.env.SOUMISSIONS_INTERNAL_TOKEN || 'dev-internal-token';
 
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const path = searchParams.get('path'); // ex: commissions-evaluation/1/membres
-    
-    if (!path) {
-      return NextResponse.json({ error: 'Path parameter is required' }, { status: 400 });
-    }
+const options = {
+  baseUrl: CONTRACTANT_BASE,
+  requirePath: true,
+  errorLabel: 'ContractantProxy',
+};
 
-    const authHeader = req.headers.get('authorization') || '';
+export function GET(req: NextRequest) {
+  return proxyRequest(req, 'GET', options);
+}
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Internal-Service-Token': INTERNAL_TOKEN,
-      'Origin': 'http://localhost:8000',
-      'Referer': 'http://localhost:8000/',
-    };
+export function POST(req: NextRequest) {
+  return proxyRequest(req, 'POST', options);
+}
 
-    if (authHeader) {
-      headers['Authorization'] = authHeader;
-    }
+export function PATCH(req: NextRequest) {
+  return proxyRequest(req, 'PATCH', options);
+}
 
-    const upstream = await fetch(`${CONTRACTANT_BASE}/${path}`, {
-      method: 'GET',
-      headers,
-    });
-    
-    const data = await upstream.json();
-    return NextResponse.json(data, { status: upstream.status });
-  } catch (err) {
-    return NextResponse.json({ error: 'ContractantProxy error', detail: String(err) }, { status: 502 });
-  }
+export function PUT(req: NextRequest) {
+  return proxyRequest(req, 'PUT', options);
+}
+
+export function DELETE(req: NextRequest) {
+  return proxyRequest(req, 'DELETE', options);
 }
