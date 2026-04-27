@@ -1,8 +1,6 @@
 // src/lib/api/validations.ts
-import { apiClient } from './client';
 
 export interface CreateValidationData {
-  id_organisation: number;
   id_utilisateur: number;
   id_soumission: number;
   type: 'interne' | 'externe' | 'tutelle';
@@ -12,7 +10,7 @@ export interface CreateValidationData {
 
 export interface ValidationResponse {
   id_validation: number;
-  id_organisation: number;
+  id_utilisateur: number;
   id_soumission: number;
   type: string;
   is_validated: boolean;
@@ -23,20 +21,23 @@ export interface ValidationResponse {
 
 export const validationsApi = {
   async createValidation(data: CreateValidationData): Promise<ValidationResponse> {
-    const response = await fetch('/api/proxy/validations', {
+    const response = await fetch('/api/proxy/validations?path=validations', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to create validation via proxy');
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const msg = typeof errorData === 'object' ? JSON.stringify(errorData) : (errorData.detail || errorData.error || 'Failed to create validation');
+      throw new Error(msg);
+    }
     return response.json();
   },
 
   async getValidations(): Promise<ValidationResponse[]> {
-    const response = await fetch('/api/proxy/validations');
-    if (!response.ok) throw new Error('Failed to fetch validations via proxy');
+    const response = await fetch('/api/proxy/validations?path=validations');
+    if (!response.ok) throw new Error('Failed to fetch validations');
     return response.json();
   },
 
@@ -46,26 +47,31 @@ export const validationsApi = {
     return response.json();
   },
 
-  async approveValidation(id: number): Promise<ValidationResponse> {
+  async approveValidation(id: number, comment?: string): Promise<ValidationResponse> {
     const response = await fetch(`/api/proxy/validations?path=validations/${id}/approuver`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commentaire: comment }),
     });
-    if (!response.ok) throw new Error(`Failed to approve validation ${id}`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const msg = typeof errorData === 'object' ? JSON.stringify(errorData) : (errorData.detail || errorData.error || 'Failed to approve');
+      throw new Error(msg);
+    }
     return response.json();
   },
 
   async rejectValidation(id: number, comment?: string): Promise<ValidationResponse> {
     const response = await fetch(`/api/proxy/validations?path=validations/${id}/rejeter`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ commentaire: comment }),
     });
-    if (!response.ok) throw new Error(`Failed to reject validation ${id}`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const msg = typeof errorData === 'object' ? JSON.stringify(errorData) : (errorData.detail || errorData.error || 'Failed to reject');
+      throw new Error(msg);
+    }
     return response.json();
   },
 };

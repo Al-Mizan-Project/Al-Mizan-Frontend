@@ -66,11 +66,25 @@ export default function ValidationLoginPage({ params }: PageProps) {
       const base64Url = accessToken.split('.')[1];
       const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
       
+      const authHeaders = { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+      const userId = decoded.user_id || decoded.sub;
+
+      // Tentative de récupération du profil utilisateur pour obtenir id_membre
+      try {
+        const userRes = await fetch(`/api/proxy/auth?path=users/${userId}`, { headers: authHeaders });
+        if (userRes.ok) {
+          const userProfile = await userRes.json();
+          if (userProfile.id_membre) {
+            localStorage.setItem('membre_id', String(userProfile.id_membre));
+          }
+        }
+      } catch (_) { /* silencieux */ }
+
       // On vérifie le nom du rôle ou l'ID
       const roleName = (decoded.role || '').toLowerCase();
       const idRole = decoded.id_role || 0;
       
-      if (roleName.includes('commission') || idRole === 2 || idRole === 3) {
+      if (roleName.includes('commission') || roleName.includes('service contractant') || idRole === 1 || idRole === 2 || idRole === 3) {
         window.location.href = `/${lang}/validation/dashboard/commission`;
       } else {
         window.location.href = `/${lang}/validation/dashboard/validator`;

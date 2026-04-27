@@ -41,7 +41,7 @@ export interface Validator {
   prenom: string;
   matricule: string;
   chargeActuelle: number;
-  disponibilite: 'Recommandé' | 'Conflit' | 'Indisponible' |'Disponible';
+  disponibilite: 'Recommandé' | 'Conflit' | 'Indisponible' | 'Disponible' | 'Surchargé';
 }
 
 export interface DossierInfo {

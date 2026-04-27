@@ -13,6 +13,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 
 import { commissionRoutes, validatorRoutes } from '../../../validation/routes';
+import { useValidationAuth } from '../../context/ValidationAuthContext';
 
 type UserRole = 'commission' | 'validator';
 
@@ -21,39 +22,59 @@ interface SidebarProps {
   role: UserRole;
 }
 
-const getMenuItems = (role: UserRole, isAr: boolean) => {
+const getMenuItems = (role: UserRole, isAr: boolean, user: any) => {
   if (role === 'commission') {
-    return [
-      { icon: faHome,    label: isAr ? 'نظرة عامة'    : 'Vue globale',   href: commissionRoutes.dashboard },
-      { icon: faFolder,  label: isAr ? 'الملفات'       : 'Dossiers',      href: commissionRoutes.tousLesDossiers },
-      { icon: faUsers,   label: isAr ? 'تعيين الملفات' : 'Affectation',   href: commissionRoutes.affectationDossiers },
-      { icon: faHistory, label: isAr ? 'سجل التحققات'  : 'Historique',    href: commissionRoutes.historique },
-      { icon: faBook,    label: isAr ? 'المراجع'       : 'Références',    href: commissionRoutes.references },
+    const items = [
+      { icon: faHome, label: isAr ? 'نظرة عامة' : 'Vue globale', href: commissionRoutes.dashboard },
+      { icon: faFolder, label: isAr ? 'الملفات' : 'Dossiers', href: commissionRoutes.tousLesDossiers },
+      { icon: faUsers, label: isAr ? 'تعيين الملفات' : 'Affectation', href: commissionRoutes.affectationDossiers },
+      { icon: faHistory, label: isAr ? 'سجل التحققات' : 'Historique', href: commissionRoutes.historique },
+      { icon: faBook, label: isAr ? 'المراجع' : 'Références', href: commissionRoutes.references },
     ];
+
+    // Afficher Gestion des utilisateurs seulement pour Externe (6) et Tutelle (7)
+    if (user?.id_role === 6 || user?.id_role === 7) {
+      items.push({ 
+        icon: faUsers, 
+        label: isAr ? 'إدارة المستخدمين' : 'Gestion des utilisateurs', 
+        href: '/validation/users' 
+      });
+    }
+
+    return items;
   } else {
     return [
-      { icon: faHome,   label: isAr ? 'نظرتي الشخصية' : 'Vue personnelle', href: validatorRoutes.dashboard },
-      { icon: faFolder, label: isAr ? 'ملفاتي'         : 'Dossiers',       href: validatorRoutes.tousLesDossiers },
-      { icon: faBook,   label: isAr ? 'المراجع'        : 'Références',     href: validatorRoutes.references },
+      { icon: faHome, label: isAr ? 'نظرتي الشخصية' : 'Vue personnelle', href: validatorRoutes.dashboard },
+      { icon: faFolder, label: isAr ? 'ملفاتي' : 'Dossiers', href: validatorRoutes.tousLesDossiers },
+      { icon: faBook, label: isAr ? 'المراجع' : 'Références', href: validatorRoutes.references },
     ];
   }
 };
 
 export default function Sidebar({ lang, role }: SidebarProps) {
   const pathname = usePathname();
+  const { user } = useValidationAuth();
   const isAr = lang === 'ar';
-  const menuItems = getMenuItems(role, isAr);
+  const menuItems = getMenuItems(role, isAr, user);
 
   const searchPlaceholder = isAr ? 'بحث...' : 'Rechercher...';
 
   return (
     <aside className="val-sidebar flex flex-col" dir={isAr ? 'rtl' : 'ltr'}>
-      {/* Logo */}
-      <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--color-gray-200)' }}>
-        <div className="flex items-center gap-1">
-          <div className="w-6 h-6" style={{ backgroundColor: 'var(--color-gray-600)' }} />
-          <span className="val-logo ml-1">EL MIZAN</span>
-        </div>
+      {/* Logo Section */}
+      <div className="px-5 py-6 border-b" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <Link href={`/${lang}/validation/dashboard/${role}`} className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+          <div className="relative w-10 h-10 flex-shrink-0">
+            <img
+              src="/LogoAlMizan.png"
+              alt="Al Mizan Logo"
+              className="w-full h-full object-contain filter drop-shadow-md"
+            />
+          </div>
+          <span className="text-[20px] font-bold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-blue-9)' }}>
+            Al Mizan
+          </span>
+        </Link>
       </div>
 
       {/* Search */}

@@ -79,9 +79,8 @@ export default function DossierPage({ id, role }: DossierPageProps) {
         data={dossierData}
         onDownload={(url) => window.open(url, '_blank')}
         onTransmit={() => console.log('Transmettre')}
-        renderDocumentViewer={() => (
-          <DocumentViewer
-          />
+        renderDocumentViewer={(url?: string) => (
+          <DocumentViewer url={url} />
         )}
       />
     </div>
