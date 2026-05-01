@@ -17,7 +17,8 @@ type HeaderVariant =
   | 'notifications'
   | 'parametres'
   | 'profile'
-  | 'references';
+  | 'references'
+  | 'users';
 
 interface HeaderProps {
   lang: string;
@@ -104,6 +105,11 @@ function getHeaderContent(
     case 'references':
       return {
         title: isAr ? 'المراجع التنظيمية' : 'Références Réglementaires',
+      };
+
+    case 'users':
+      return {
+        title: isAr ? 'إدارة المستخدمين' : 'Gestion Utilisateurs',
       };
   }
 }

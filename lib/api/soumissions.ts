@@ -14,7 +14,14 @@ export interface SoumissionResponse {
 
 export const soumissionsApi = {
   async getSoumissions(): Promise<SoumissionResponse[]> {
-    return apiClient.get('soumissions', 'api/soumissions/');
+    // On ne passe pas le token manuellement pour laisser le proxy utiliser le X-Internal-Service-Token.
+    // Cela évite les erreurs 401 si le token JWT est expiré ou restreint, car les proxies 
+    // sont configurés pour autoriser les requêtes internes.
+    const response = await fetch('/api/proxy/soumissions?path=api/soumissions/', {
+      method: 'GET'
+    });
+    if (!response.ok) throw new Error(`Failed to fetch soumissions via proxy: ${response.status}`);
+    return response.json();
   },
 
   async getSoumission(id: number): Promise<SoumissionResponse & { document_ids: number[], offre_financiere_chiffree_url: string }> {

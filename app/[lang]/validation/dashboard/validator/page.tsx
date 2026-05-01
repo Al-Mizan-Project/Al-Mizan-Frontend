@@ -6,6 +6,13 @@ import FilesTable from '../../components/dashboard/FilesTable';
 import DelayChart from '../../components/dashboard/DelayChart';
 import { useValidationAuth } from '../../context/ValidationAuthContext';
 
+// Import des APIs officielles
+import { soumissionsApi } from '@/lib/api/soumissions';
+import { evaluationsApi } from '@/lib/api/evaluations';
+import { validationsApi } from '@/lib/api/validation';
+
+import '../../validation.css';
+
 type DashboardStatus = 'overview' | 'En Cours' | 'En Retard';
 
 interface ValidatorPageProps {
@@ -34,32 +41,29 @@ export default function ValidatorPage(props: ValidatorPageProps) {
       if (!token || !user) return;
 
       try {
-        const authHeaders: Record<string, string> = { 'Authorization': `Bearer ${token}` };
-
-        const [soums, evals, vals] = await Promise.all([
-          fetch('/api/proxy/soumissions', { headers: authHeaders }).then(r => r.json()),
-          fetch('/api/proxy/evaluations', { headers: authHeaders }).then(r => r.json()),
-          fetch('/api/proxy/validations', { headers: authHeaders }).then(r => r.json()),
+        // On utilise les APIs officielles qui gèrent le bypass 401 via proxy
+        const [soumissionsRaw, evaluationsRaw, validationsRaw] = await Promise.all([
+          soumissionsApi.getSoumissions(),
+          evaluationsApi.getEvaluations(),
+          validationsApi.getValidations(),
         ]);
 
-        const soumissions: any[] = Array.isArray(soums) ? soums : (soums.results ?? []);
-        const evaluations: any[] = Array.isArray(evals) ? evals : (evals.results ?? []);
-        const validations: any[] = Array.isArray(vals) ? vals : (vals.results ?? []);
-
-        // Pour le validateur, on ne s'intéresse qu'aux soumissions qui ont une évaluation ET une validation
-        const evaluatedSubmissions = soumissions.filter((s: any) =>
-          evaluations.some((e: any) => Number(e.id_soumission) === Number(s.id_soumission))
-        );
-
-        const validatorSubmissions: any[] = [];
+        const soumissions: any[] = Array.isArray(soumissionsRaw) ? soumissionsRaw : (soumissionsRaw as any).results ?? [];
+        const validations: any[] = Array.isArray(validationsRaw) ? validationsRaw : (validationsRaw as any).results ?? [];
 
         const CURRENT_VALIDATOR_ID = user.id_utilisateur;
+        const validatorSubmissions: any[] = [];
 
-        evaluatedSubmissions.forEach((s: any) => {
-          const val = validations.find((v: any) => Number(v.id_soumission) === Number(s.id_soumission));
+        // On parcourt toutes les soumissions
+        soumissions.forEach((s: any) => {
+          // Trouver la validation pour cette soumission assignée au validateur courant
+          const val = validations.find((v: any) => 
+            Number(v.id_soumission) === Number(s.id_soumission) && 
+            Number(v.id_utilisateur) === Number(CURRENT_VALIDATOR_ID) &&
+            !v.is_validated
+          );
 
-          // On s'intéresse uniquement aux validations assignées au validateur courant ET en attente
-          if (val && val.id_utilisateur === CURRENT_VALIDATOR_ID && !val.is_validated) {
+          if (val) {
             let subStatus: DashboardStatus = 'En Cours';
             let delayDays = 0;
 
@@ -79,27 +83,28 @@ export default function ValidatorPage(props: ValidatorPageProps) {
               reference: `Dossier ${s.id_soumission}`,
               economicOperator: 'Opérateur',
               validator: {
-                name: val.id_utilisateur ? `Validateur ${val.id_utilisateur}` : `Validateur ${val.id_validation}`,
+                name: `Moi (Expert #${CURRENT_VALIDATOR_ID})`,
                 id: `VAL-${val.id_validation}`
               },
-              submissionDate: s.date_soumission ? new Date(s.date_soumission).toISOString().split('T')[0] : '2026-02-01',
+              submissionDate: s.date_soumission ? new Date(s.date_soumission).toISOString().split('T')[0] : '—',
               assignmentDate: new Date(val.created_at).toISOString().split('T')[0],
               validationDeadline: deadline.toISOString().split('T')[0],
               status: subStatus,
               delayDays: delayDays > 0 ? delayDays : undefined,
-              etape: 'Validation',
+              etape: 'Validation en cours',
             });
           }
         });
 
         setAllSubmissions(validatorSubmissions);
       } catch (err) {
-        console.error('Failed to fetch dashboard data', err);
+        console.error('Erreur dashboard validateur:', err);
       } finally {
         setLoading(false);
       }
     }
-    if (!authLoading) {
+
+    if (!authLoading && token) {
       fetchData();
     }
   }, [token, user, authLoading]);
@@ -124,13 +129,13 @@ export default function ValidatorPage(props: ValidatorPageProps) {
 
   const dynamicDelayData = useMemo(() => {
     const delayed = allSubmissions.filter(s => s.status === 'En Retard');
-    let gt7 = 0; let b37 = 0; let lt3 = 0; let today = 0;
+    let gt7 = 0, b37 = 0, lt3 = 0, today = 0;
 
     delayed.forEach(s => {
       const dd = s.delayDays || 0;
       if (dd > 7) gt7++;
-      else if (dd >= 3 && dd <= 7) b37++;
-      else if (dd > 0 && dd < 3) lt3++;
+      else if (dd >= 3) b37++;
+      else if (dd > 0) lt3++;
       else today++;
     });
 
@@ -163,7 +168,7 @@ export default function ValidatorPage(props: ValidatorPageProps) {
       {currentStatus === 'overview' ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mt-6">
-            <StatCard title="Mes dossiers en cours de validation" value={stats.enCours} trend={stats.enCoursPct} />
+            <StatCard title="Mes dossiers en cours" value={stats.enCours} trend={stats.enCoursPct} />
             <StatCard title="Mes dossiers en retard" value={stats.enRetard} trend={stats.enRetardPct} />
           </div>
 
@@ -177,9 +182,11 @@ export default function ValidatorPage(props: ValidatorPageProps) {
           </div>
         </>
       ) : (
-        <div className="mt-6 bg-white rounded-lg shadow">
+        <div className="mt-6 bg-white rounded-lg shadow min-h-[300px]">
           {loading ? (
-            <div className="p-6 text-center text-gray-500">Chargement des données...</div>
+            <div className="p-12 text-center text-gray-500">Chargement de vos dossiers...</div>
+          ) : tableData.length === 0 ? (
+            <div className="p-20 text-center text-gray-400">Aucun dossier ne vous est affecté pour le moment.</div>
           ) : (
             <FilesTable
               data={tableData}

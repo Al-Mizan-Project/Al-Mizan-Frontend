@@ -8,103 +8,126 @@ import { validationsApi } from '@/lib/api/validation';
 import { contractantApi } from '@/lib/api/contractant';
 import { acteursApi } from '@/lib/api/acteurs';
 import { authApi } from '@/lib/api/auth';
+import { soumissionsApi } from '@/lib/api/soumissions';
+import { appelsApi } from '@/lib/api/appels';
 import { useValidationAuth } from '../../context/ValidationAuthContext';
 import '../../validation.css';
 
 export default function AffectationDossierPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
+  const SOUMISSION_ID = params.id ? parseInt(params.id as string, 10) : 0;
 
   const [validators, setValidators] = useState<Validator[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [serviceId, setServiceId] = useState<number | null>(null);
 
-  const { token, organisationId, isLoading: authLoading } = useValidationAuth();
-
-  const dossierInfo: DossierInfo = {
+  const [dossierInfo, setDossierInfo] = useState<DossierInfo>({
     operateurEconomique: `Dossier #${params.id}`,
     operateur: 'Chargement...',
-    delaisValidation: '10 jours',
-    serviceContractant: 'Service Principal',
-    domaine: 'Contrôle Interne',
-    etapeValidation: 'Validation Interne',
-  };
+    delaisValidation: '7 jours',
+    serviceContractant: 'Chargement...',
+    domaine: 'Commission Interne',
+    etapeValidation: 'Affectation des experts',
+  });
+
+  const { token, isLoading: authLoading } = useValidationAuth();
 
   useEffect(() => {
-    async function loadCommissionMembers() {
+    async function loadData() {
       setIsLoading(true);
       try {
-        const allUsers = await authApi.getUsers();
+        // 1. Récupérer la soumission et l'appel d'offre
+        const soumission = await soumissionsApi.getSoumission(SOUMISSION_ID);
+        const ao = await appelsApi.getAppelOffre(soumission.id_appel_offre);
+        const currentServiceId = ao.id_service_contractant;
+        setServiceId(currentServiceId);
 
-        const targetOrgId = organisationId || 30;
-        const commMembres = await contractantApi.getCommissionInterneMembres(targetOrgId);
+        setDossierInfo(prev => ({
+          ...prev,
+          operateur: `Soumission ${SOUMISSION_ID}`,
+          serviceContractant: `Service ID: ${currentServiceId}`,
+        }));
 
-        if (!commMembres || commMembres.length === 0) {
-          console.warn("Aucun membre trouvé pour la commission interne");
-          setValidators([]);
-          return;
+        // 2. Récupérer les données nécessaires pour la liste des validateurs
+        const [serviceComms, allUsers, allActeurs, allValidations] = await Promise.all([
+          contractantApi.getServiceCommissions(currentServiceId),
+          authApi.getUsers(),
+          acteursApi.getMembres(),
+          validationsApi.getValidations()
+        ]);
+
+        const commissionsInternes = serviceComms.commissions_internes || [];
+        
+        // 3. Collecter les membres de la commission interne
+        const commissionMembreIds = new Set<number>();
+        for (const comm of commissionsInternes) {
+          const links = await contractantApi.getCommissionInterneMembres(comm.id_comission_interne);
+          links.forEach((l: any) => commissionMembreIds.add(l.id_membre));
         }
 
-        const validatorList: Validator[] = await Promise.all(
-          commMembres.map(async (link: any) => {
-            try {
-              const membreData = await acteursApi.getMembre(link.id_membre);
-              const user = allUsers.find(u => u.id_membre === link.id_membre);
+        // 4. Construire la liste des validateurs avec filtrage et calcul de charge
+        const validatorList: Validator[] = [];
 
-              return {
-                id: String(user?.id_utilisateur || link.id_membre),
-                nom: membreData.nom || 'Inconnu',
-                prenom: membreData.prenom || '',
-                matricule: `INT-${link.id_membre}`,
-                chargeActuelle: 1,
-                disponibilite: 'Disponible'
-              };
-            } catch (e) {
-              return null;
-            }
-          })
-        ).then(list => list.filter((v): v is Validator => v !== null));
+        allUsers.forEach(user => {
+          // On ne garde que les utilisateurs qui sont membres de cette commission
+          if (!commissionMembreIds.has(user.id_membre)) return;
+
+          const membreData = allActeurs.find(m => m.id_membre === user.id_membre);
+          
+          // FILTRE : Exclure le Chef de commission / Président
+          const fonction = (membreData?.fonction || '').toLowerCase();
+          if (fonction.includes('chef') || fonction.includes('président') || fonction.includes('president')) {
+            return;
+          }
+
+          // CALCUL DE CHARGE : Compter les validations non terminées pour cet utilisateur
+          const charge = allValidations.filter(v => 
+            v.id_utilisateur === user.id_utilisateur && !v.is_validated
+          ).length;
+
+          validatorList.push({
+            id: String(user.id_utilisateur), // On utilise bien l'ID UTILISATEUR pour l'affectation
+            nom: membreData?.nom || 'Inconnu',
+            prenom: membreData?.prenom || '',
+            matricule: `EXP-${user.id_utilisateur}`,
+            chargeActuelle: charge,
+            disponibilite: charge > 3 ? 'Surchargé' : 'Disponible'
+          });
+        });
 
         setValidators(validatorList);
+
       } catch (err) {
-        console.error("Erreur chargement validateurs internes:", err);
-        setSubmitError("Impossible de charger les membres de la commission interne.");
+        console.error("Erreur chargement données affectation:", err);
+        setSubmitError("Impossible de charger les experts. Vérifiez la connexion au service.");
       } finally {
         setIsLoading(false);
       }
     }
 
-    if (!authLoading && token) {
-      loadCommissionMembers();
+    if (!authLoading && SOUMISSION_ID) {
+      loadData();
     }
-  }, [token, authLoading, organisationId]);
-
-  const SOUMISSION_ID = params.id ? parseInt(params.id as string, 10) : 0;
-  const ORGANISATION_ID = organisationId || 1;
+  }, [authLoading, SOUMISSION_ID]);
 
   const handleConfirmAffectation = async (validatorId: string) => {
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
-      const selectedValidator = validators.find(v => v.id === validatorId);
-
-      if (!selectedValidator) {
-        setSubmitError("Veuillez sélectionner un validateur.");
-        setIsSubmitting(false);
-        return;
-      }
-
+      // Création de la validation pour l'expert choisi
       await validationsApi.createValidation({
         id_utilisateur: Number(validatorId),
-        id_organisation: ORGANISATION_ID,
         id_soumission: SOUMISSION_ID,
         type: 'interne',
-        commentaire: `Affectation effectuée via le panel de commission interne.`,
+        commentaire: `Dossier affecté pour expertise.`,
         is_validated: false,
       });
 
+      // Redirection vers le dashboard commission
       router.push(`/fr/validation/dashboard/commission?status=En%20Cours`);
 
     } catch (err) {
@@ -118,15 +141,9 @@ export default function AffectationDossierPage() {
   return (
     <div className="space-y-6">
       {submitError && (
-        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg animate-in fade-in slide-in-from-top-2">
           <p className="font-medium">Erreur d'affectation</p>
           <p className="text-sm mt-1">{submitError}</p>
-          <button
-            onClick={() => setSubmitError(null)}
-            className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-          >
-            Fermer
-          </button>
         </div>
       )}
 
@@ -140,15 +157,9 @@ export default function AffectationDossierPage() {
               </p>
             </div>
             <div className="val-dossier-info-item">
-              <p className="val-dossier-info-label">Opérateur économique</p>
+              <p className="val-dossier-info-label">Opérateur</p>
               <p className="val-dossier-info-value">
                 {dossierInfo.operateur}
-              </p>
-            </div>
-            <div className="val-dossier-info-item">
-              <p className="val-dossier-info-label">Délais de validateur</p>
-              <p className="val-dossier-info-value">
-                {dossierInfo.delaisValidation}
               </p>
             </div>
           </div>
@@ -161,15 +172,9 @@ export default function AffectationDossierPage() {
               </p>
             </div>
             <div className="val-dossier-info-item">
-              <p className="val-dossier-info-label">Domaine</p>
-              <p className="val-dossier-info-value">
-                {dossierInfo.domaine}
-              </p>
-            </div>
-            <div className="val-dossier-info-item">
-              <p className="val-dossier-info-label">Etape de validation</p>
-              <p className="val-dossier-info-value">
-                {dossierInfo.etapeValidation}
+              <p className="val-dossier-info-label">Délai imparti</p>
+              <p className="val-dossier-info-value text-blue-600 font-medium">
+                {dossierInfo.delaisValidation}
               </p>
             </div>
           </div>
@@ -179,7 +184,7 @@ export default function AffectationDossierPage() {
       {isLoading ? (
         <div className="p-12 text-center bg-white rounded-lg shadow-sm border border-gray-100">
           <div className="animate-spin h-8 w-8 text-blue-600 mx-auto mb-4 border-4 border-t-transparent border-blue-600 rounded-full" />
-          <p className="text-gray-500 font-medium">Chargement des experts de la commission...</p>
+          <p className="text-gray-500 font-medium">Calcul de la charge des experts...</p>
         </div>
       ) : (
         <ValidatorList
@@ -190,13 +195,10 @@ export default function AffectationDossierPage() {
       )}
 
       {isSubmitting && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 shadow-xl flex items-center gap-3">
-            <svg className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span className="val-body-medium">Affectation en cours...</span>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 shadow-2xl flex flex-col items-center gap-4">
+            <div className="animate-spin h-10 w-10 text-blue-600 border-4 border-t-transparent border-blue-600 rounded-full" />
+            <span className="text-lg font-semibold text-gray-800">Finalisation de l'affectation...</span>
           </div>
         </div>
       )}
