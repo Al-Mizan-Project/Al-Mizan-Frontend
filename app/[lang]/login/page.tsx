@@ -10,13 +10,56 @@ import {
   faEyeSlash,
   faBuildingColumns 
 } from '@fortawesome/free-solid-svg-icons';
-import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 type PageProps = {
   params: Promise<{ lang: string }>;
 };
+
+// Mapping des rôles vers les URLs de redirection
+const ROLE_REDIRECTS: Record<string, string> = {
+  admin:                '/fr/system-admin',
+  operateur_economique: '/fr/dashboard/operator',
+  service_contractant:  '/fr/dashboard/contractant',
+  commission_externe:   '/fr/validation/dashboard/validator',
+  tutelle:              '/fr/validation/dashboard/validator',
+};
+
+/**
+ * Détermine l'URL de redirection selon le rôle extrait du token JWT.
+ * Accepte aussi bien les noms bruts (ex: "Commission Externe") que
+ * les formes normalisées (ex: "commission_externe").
+ */
+function getRedirectPath(roleName: string, idRole: number): string {
+  // Normalisation : minuscules + espaces → underscore
+  const normalized = roleName
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_');
+
+  // Correspondance exacte après normalisation
+  if (ROLE_REDIRECTS[normalized]) {
+    return ROLE_REDIRECTS[normalized];
+  }
+
+  // Correspondance partielle (fallback)
+  if (normalized.includes('admin'))                return ROLE_REDIRECTS.admin;
+  if (normalized.includes('operateur'))            return ROLE_REDIRECTS.operateur_economique;
+  if (normalized.includes('contractant'))          return ROLE_REDIRECTS.service_contractant;
+  if (normalized.includes('commission'))           return ROLE_REDIRECTS.commission_externe;
+  if (normalized.includes('tutelle'))              return ROLE_REDIRECTS.tutelle;
+
+  // Fallback par id_role si le nom ne correspond à rien
+  const idRoleMap: Record<number, string> = {
+    1: ROLE_REDIRECTS.admin,
+    2: ROLE_REDIRECTS.service_contractant,
+    3: ROLE_REDIRECTS.commission_externe,
+    4: ROLE_REDIRECTS.operateur_economique,
+    5: ROLE_REDIRECTS.tutelle,
+  };
+
+  return idRoleMap[idRole] ?? '/fr/dashboard/operator';
+}
 
 export default function LoginPage({ params }: PageProps) {
   const [lang, setLang] = useState<string>('');
@@ -26,122 +69,145 @@ export default function LoginPage({ params }: PageProps) {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
   const { login: authLogin } = useAuth();
 
-  // Load lang from params on mount
   useEffect(() => {
     let isMounted = true;
-
     const loadLang = async () => {
       const resolvedParams = await params;
-      if (isMounted) {
-        setLang(resolvedParams.lang);
-      }
+      if (isMounted) setLang(resolvedParams.lang);
     };
-
     loadLang();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [params]);
 
   const isArabic = lang === 'ar';
 
+ const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
 
-
-
-
-const handleSubmit = async (e: FormEvent) => {
-  e.preventDefault();
-  setError(null);
-  setLoading(true);
-
- 
-  if (!email || !password) {
-    setError(isArabic ? 'هذا الحقل مطلوب' : 'Ce champ est obligatoire');
-    setLoading(false);
-    return;
-  }
-
-  if (!/\S+@\S+\.\S+/.test(email)) {
-    setError(isArabic ? 'عنوان بريد إلكتروني غير صالح' : 'Adresse e-mail invalide');
-    setLoading(false);
-    return;
-  }
-
-  try {
-    await authLogin(email, password);
-  
-  } catch (err: any) {
-    if (err.response?.status === 401) {
-      setError(isArabic ? 'بيانات الدخول غير صحيحة' : 'Identifiants incorrects');
-    } else {
-      setError(isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion');
+    if (!email || !password) {
+      setError(isArabic ? 'هذا الحقل مطلوب' : 'Ce champ est obligatoire');
+      setLoading(false);
+      return;
     }
-  } finally {
-    setLoading(false);
-  }
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setError(isArabic ? 'عنوان بريد إلكتروني غير صالح' : 'Adresse e-mail invalide');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // 1. Appel à l'API de login
+      const response = await fetch('/api/proxy/auth?path=auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.detail || errorData.error || 'Identifiants incorrects');
+      }
+
+      const data = await response.json();
+      const accessToken  = data.access  || data.access_token;
+      const refreshToken = data.refresh || data.refresh_token;
+
+      if (!accessToken) {
+        throw new Error('Token non reçu dans la réponse du serveur');
+      }
+
+      // 1. Décodage du JWT
+      const base64Url = accessToken.split('.')[1];
+      const decoded   = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
+
+      // On sauvegarde l'id_membre pour un accès rapide si besoin
+      if (decoded.id_membre) {
+        localStorage.setItem('membre_id', String(decoded.id_membre));
+      }
+
+      // 2. On prépare l'objet utilisateur à partir des infos du token (ou de data.user si ton backend l'envoie)
+      const userData = {
+        email: decoded.email || email,
+        id_membre: decoded.id_membre,
+        role: decoded.role,
+        id_role: decoded.id_role
+      };
+
+      // 3. 🚀 On met à jour l'état global React (PLUS D'ERREUR CORS !)
+      authLogin(accessToken, refreshToken, userData);
+
+      // 4. Redirection gérée par la page (plus dynamique que le context)
+      const roleName = decoded.role || decoded.role_name || '';
+      const idRole   = decoded.id_role || 0;
+      const redirectPath = getRedirectPath(roleName, idRole);
+
+      window.location.href = redirectPath;
+
+    } catch (err: any) {
+      if (err.response?.status === 401 || err.message?.includes('Identifiants')) {
+        setError(isArabic ? 'بيانات الدخول غير صحيحة' : 'Identifiants incorrects');
+      } else {
+        setError(err.message || (isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion'));
+      }
+    } finally {
+      setLoading(false);
+    }
 };
 
   return (
     <main className="min-h-screen flex flex-col lg:flex-row bg-[#FCFFFF]">
-      
-      {/* Left Panel - Branding (Hidden on mobile) */}
+
+      {/* ── Left Panel – Branding ── */}
       <section className="hidden lg:flex lg:w-1/2 bg-[#0D2527] flex-col justify-center items-center p-12 text-white relative overflow-hidden">
-        {/* Decorative Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-10 right-10 w-32 h-32 border-2 border-[#9BCFCF] rounded-full"></div>
           <div className="absolute bottom-20 left-20 w-48 h-48 border-2 border-[#589C9F] rounded-full"></div>
         </div>
 
         <div className="relative z-10 text-center max-w-md">
-          {/* Ministry Logo - White Version */}
           <div className="mb-8 flex justify-center">
             <div className="w-24 h-24 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20">
               <FontAwesomeIcon icon={faBuildingColumns} className="text-[#9BCFCF] text-4xl" />
-              {/* Replace with actual logo: <Image src="/logos/ministry-white.svg" alt="وزارة المالية" width={96} height={96} /> */}
             </div>
           </div>
-          
+
           <h1 className="text-3xl font-bold mb-4 font-cairo">
             {isArabic ? 'منصة الميزان' : 'Plateforme Al-Mizan'}
           </h1>
           <p className="text-[#9BCFCF] text-lg leading-relaxed font-cairo">
-            {isArabic 
-              ? 'منصة ذكية وسيادية لإدارة الصفقات العمومية في الجزائر' 
-              : 'Plateforme intelligente et souveraine de gestion des marchés publics en Algérie'
-            }
+            {isArabic
+              ? 'منصة ذكية وسيادية لإدارة الصفقات العمومية في الجزائر'
+              : 'Plateforme intelligente et souveraine de gestion des marchés publics en Algérie'}
           </p>
-          
-          {/* Trust Badges */}
+
           <div className="mt-12 flex flex-col gap-3 text-sm text-[#589C9F]">
-            <div className="flex items-center gap-2 justify-center">
-              <span className="w-2 h-2 bg-[#9BCFCF] rounded-full"></span>
-              {isArabic ? 'متوافق مع القانون 23-12' : 'Conforme Loi 23-12'}
-            </div>
-            <div className="flex items-center gap-2 justify-center">
-              <span className="w-2 h-2 bg-[#9BCFCF] rounded-full"></span>
-              {isArabic ? 'حماية البيانات حسب القانون 18-07' : 'Protection des données Loi 18-07'}
-            </div>
-            <div className="flex items-center gap-2 justify-center">
-              <span className="w-2 h-2 bg-[#9BCFCF] rounded-full"></span>
-              {isArabic ? 'استضافة سيادية جزائرية' : 'Hébergement souverain algérien'}
-            </div>
+            {[
+              { ar: 'متوافق مع القانون 23-12',          fr: 'Conforme Loi 23-12' },
+              { ar: 'حماية البيانات حسب القانون 18-07', fr: 'Protection des données Loi 18-07' },
+              { ar: 'استضافة سيادية جزائرية',           fr: 'Hébergement souverain algérien' },
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-2 justify-center">
+                <span className="w-2 h-2 bg-[#9BCFCF] rounded-full"></span>
+                {isArabic ? item.ar : item.fr}
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Right Panel - Login Form */}
+      {/* ── Right Panel – Login Form ── */}
       <section className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-md">
-          
+
           {/* Mobile Logo */}
           <div className="lg:hidden flex justify-center mb-8">
             <div className="w-20 h-20 bg-[#0D2527] rounded-2xl flex items-center justify-center">
               <FontAwesomeIcon icon={faBuildingColumns} className="text-[#FCFFFF] text-3xl" />
-              {/* Replace with: <Image src="/logos/ministry-blue.svg" alt="وزارة المالية" width={80} height={80} /> */}
             </div>
           </div>
 
@@ -157,13 +223,10 @@ const handleSubmit = async (e: FormEvent) => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-            
-            {/* Email Field */}
+
+            {/* Email */}
             <div>
-              <label 
-                htmlFor="email" 
-                className="block text-sm font-medium text-[#173C3F] mb-2 font-cairo"
-              >
+              <label htmlFor="email" className="block text-sm font-medium text-[#173C3F] mb-2 font-cairo">
                 {isArabic ? 'البريد الإلكتروني' : 'Adresse e-mail'}
               </label>
               <div className="relative">
@@ -184,12 +247,9 @@ const handleSubmit = async (e: FormEvent) => {
               </div>
             </div>
 
-            {/* Password Field */}
+            {/* Password */}
             <div>
-              <label 
-                htmlFor="password" 
-                className="block text-sm font-medium text-[#173C3F] mb-2 font-cairo"
-              >
+              <label htmlFor="password" className="block text-sm font-medium text-[#173C3F] mb-2 font-cairo">
                 {isArabic ? 'كلمة المرور' : 'Mot de passe'}
               </label>
               <div className="relative">
@@ -203,7 +263,7 @@ const handleSubmit = async (e: FormEvent) => {
                   onChange={(e) => setPassword(e.target.value)}
                   className={`w-full ps-11 pe-12 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-[#306B6F] focus:border-[#306B6F] outline-none transition-all font-cairo
                     ${error && !password ? 'border-red-400 focus:ring-red-200' : 'border-[#9BCFCF]'}`}
-                  placeholder={isArabic ? '••••••••' : '••••••••'}
+                  placeholder="••••••••"
                   required
                   dir="ltr"
                 />
@@ -211,7 +271,7 @@ const handleSubmit = async (e: FormEvent) => {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute inset-y-0 inset-e-0 flex items-center pe-4 text-[#589C9F] hover:text-[#306B6F] transition-colors"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                 >
                   <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} className="w-4 h-4" />
                 </button>
@@ -231,8 +291,7 @@ const handleSubmit = async (e: FormEvent) => {
                   {isArabic ? 'تذكرني' : 'Se souvenir de moi'}
                 </span>
               </label>
-              
-              <Link 
+              <Link
                 href={`/${lang}/forgot-password`}
                 className="text-sm text-[#306B6F] hover:text-[#173C3F] font-medium font-cairo transition-colors text-end"
               >
@@ -240,14 +299,14 @@ const handleSubmit = async (e: FormEvent) => {
               </Link>
             </div>
 
-            {/* Error Message */}
+            {/* Error */}
             {error && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-cairo animate-pulse">
                 {error}
               </div>
             )}
 
-            {/* Submit Button */}
+            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -264,53 +323,43 @@ const handleSubmit = async (e: FormEvent) => {
               ) : (
                 <>
                   <span>{isArabic ? 'دخول' : 'Se connecter'}</span>
-                  {!isArabic && (
-  <FontAwesomeIcon icon={faArrowRight} />
-)}
+                  {!isArabic && <FontAwesomeIcon icon={faArrowRight} />}
                 </>
               )}
             </button>
           </form>
 
-         
-        {/* Footer */}
-<div className="mt-10 text-center">
-  <p className="text-sm text-[#6B8E8F] font-cairo">
-    {isArabic ? 'ليس لديك حساب؟' : 'Pas encore de compte ?'}{' '}
-    <Link 
-      href={`/${lang}/select-organization`}
-      className="text-[#306B6F] hover:text-[#173C3F] font-medium transition-colors"
-    >
-      {isArabic ? 'إنشاء منظمة' : 'Créer une organisation'}
-    </Link>
-  </p>
-            
+          {/* Footer */}
+          <div className="mt-10 text-center">
+            <p className="text-sm text-[#6B8E8F] font-cairo">
+              {isArabic ? 'ليس لديك حساب؟' : 'Pas encore de compte ?'}{' '}
+              <Link
+                href={`/${lang}/select-organization`}
+                className="text-[#306B6F] hover:text-[#173C3F] font-medium transition-colors"
+              >
+                {isArabic ? 'إنشاء منظمة' : 'Créer une organisation'}
+              </Link>
+            </p>
+
             {/* Language Switcher */}
             <div className="mt-6 flex justify-center gap-2">
-              <Link
-                href="/fr/login"
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  lang === 'fr' 
-                    ? 'bg-[#306B6F] text-white' 
-                    : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
-                }`}
-              >
-                Français
-              </Link>
-              <Link
-                href="/ar/login"
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  lang === 'ar' 
-                    ? 'bg-[#306B6F] text-white' 
-                    : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
-                }`}
-              >
-                العربية
-              </Link>
+              {(['fr', 'ar'] as const).map((l) => (
+                <Link
+                  key={l}
+                  href={`/${l}/login`}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    lang === l
+                      ? 'bg-[#306B6F] text-white'
+                      : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
+                  }`}
+                >
+                  {l === 'fr' ? 'Français' : 'العربية'}
+                </Link>
+              ))}
             </div>
           </div>
 
-          {/* Ministry Footer Logo - Blue Version */}
+          {/* Ministry Footer */}
           <div className="mt-12 flex justify-center opacity-60">
             <div className="flex items-center gap-2 text-[#418387] text-xs font-cairo">
               <FontAwesomeIcon icon={faBuildingColumns} className="w-4 h-4" />

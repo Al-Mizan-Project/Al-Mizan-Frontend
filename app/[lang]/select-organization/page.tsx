@@ -21,18 +21,6 @@ export default async function SelectOrganizationPage({
 
   const organizationTypes = [
     {
-      id: 'contractant',
-      icon: faFileContract,
-      color: 'bg-[#306B6F]',
-      lightColor: 'bg-[#FCFFFF]',
-      borderColor: 'border-[#9BCFCF]',
-      hoverColor: 'hover:border-[#589C9F]',
-      iconColor: 'text-[#306B6F]',
-      title: dict.selectOrg.types.contractant.title,
-      description: dict.selectOrg.types.contractant.description,
-      href:`/${lang}/register/contractant`
-    },
-    {
       id: 'operateur',
       icon: faBuilding,
       color: 'bg-[#418387]',
@@ -43,30 +31,6 @@ export default async function SelectOrganizationPage({
       title: dict.selectOrg.types.operateur.title,
       description: dict.selectOrg.types.operateur.description,
       href: `/${lang}/register/operateur`
-    },
-    {
-      id: 'commission',
-      icon: faClipboardCheck,
-      color: 'bg-[#589C9F]',
-      lightColor: 'bg-[#FCFFFF]',
-      borderColor: 'border-[#9BCFCF]',
-      hoverColor: 'hover:border-[#589C9F]',
-      iconColor: 'text-[#589C9F]',
-      title: dict.selectOrg.types.commission.title,
-      description: dict.selectOrg.types.commission.description,
-      href: `/${lang}/register/commission`
-    },
-    {
-      id: 'tutelle',
-      icon: faLandmark,
-      color: 'bg-[#173C3F]',
-      lightColor: 'bg-[#FCFFFF]',
-      borderColor: 'border-[#9BCFCF]',
-      hoverColor: 'hover:border-[#173C3F]',
-      iconColor: 'text-[#173C3F]',
-      title: dict.selectOrg.types.tutelle.title,
-      description: dict.selectOrg.types.tutelle.description,
-      href: `/${lang}/register/tutelle`
     },
   ];
 

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -66,7 +67,7 @@ async function resolveService(
   if (services.length === 0) {
     return {
       service: null as ServiceContractant | null,
-      warning: 'Aucun service contractant n’est exposé par le backend.',
+      warning: 'Aucun service contractant n\'est exposé par le backend.',
     };
   }
 
@@ -105,14 +106,14 @@ async function resolveService(
     return {
       service: services[0],
       warning:
-        'Le seul service contractant disponible a été utilisé, car le backend ne relie pas directement l’organisation au service.',
+        'Le seul service contractant disponible a été utilisé, car le backend ne relie pas directement l\'organisation au service.',
     };
   }
 
   return {
     service: null as ServiceContractant | null,
     warning:
-      'Impossible d’identifier automatiquement le service contractant, car le backend ne relie pas directement l’organisation au service.',
+      'Impossible d\'identifier automatiquement le service contractant, car le backend ne relie pas directement l\'organisation au service.',
   };
 }
 
@@ -131,6 +132,19 @@ export function ServiceContractantProvider({ children }: { children: React.React
   const [members, setMembers] = useState<ContractantMemberRecord[]>([]);
   const [serviceResolutionWarning, setServiceResolutionWarning] = useState('');
 
+  // ✅ Refs pour casser la chaîne de dépendances circulaires
+  const rolesRef = useRef<AuthRole[]>([]);
+  const currentUserRef = useRef<AuthUser | null>(null);
+  const currentPermissionsRef = useRef<AuthPermission[]>([]);
+  const organisationRef = useRef<Organisation | null>(null);
+
+  // Synchroniser les refs avec le state
+  useEffect(() => { rolesRef.current = roles; }, [roles]);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+  useEffect(() => { currentPermissionsRef.current = currentPermissions; }, [currentPermissions]);
+  useEffect(() => { organisationRef.current = organisation; }, [organisation]);
+
+  // ✅ loadMembers n'a plus aucune dépendance — utilise les refs
   const loadMembers = useCallback(
     async (
       organisationId: number | null,
@@ -144,11 +158,15 @@ export function ServiceContractantProvider({ children }: { children: React.React
         return;
       }
 
+      const effectiveRoles = rolesOverride ?? rolesRef.current;
+      const effectiveUser = currentUserOverride ?? currentUserRef.current;
+      const effectivePermissions = currentPermissionsOverride ?? currentPermissionsRef.current;
+
       const [organisationMembers, allUsers, rolePermissionsEntries] = await Promise.all([
         serviceContractantApi.getOrganisationMembres(organisationId),
         usersOverride ? Promise.resolve(usersOverride) : serviceContractantApi.getUsers(),
         Promise.allSettled(
-          (rolesOverride || roles).map(async (role) => ({
+          effectiveRoles.map(async (role) => ({
             roleId: role.id_role,
             permissions: await serviceContractantApi.getRolePermissions(role.id_role),
           }))
@@ -156,7 +174,7 @@ export function ServiceContractantProvider({ children }: { children: React.React
       ]);
 
       const usersByMemberId = new Map(allUsers.map((user) => [user.id_membre, user]));
-      const rolesById = new Map((rolesOverride || roles).map((role) => [role.id_role, role]));
+      const rolesById = new Map(effectiveRoles.map((role) => [role.id_role, role]));
       const rolePermissions = new Map<number, AuthPermission[]>();
 
       rolePermissionsEntries.forEach((entry) => {
@@ -169,8 +187,8 @@ export function ServiceContractantProvider({ children }: { children: React.React
         const linkedUser = usersByMemberId.get(organisationMember.id_membre) || null;
         const linkedRole = linkedUser ? rolesById.get(linkedUser.id_role) || null : null;
         const linkedPermissions =
-          linkedUser && currentUserOverride && linkedUser.id_utilisateur === currentUserOverride.id_utilisateur
-            ? currentPermissionsOverride || []
+          linkedUser && effectiveUser && linkedUser.id_utilisateur === effectiveUser.id_utilisateur
+            ? effectivePermissions
             : linkedUser
               ? rolePermissions.get(linkedUser.id_role) || []
               : [];
@@ -185,9 +203,10 @@ export function ServiceContractantProvider({ children }: { children: React.React
 
       setMembers(mergedMembers);
     },
-    [roles]
+    [] // ✅ tableau vide — plus de dépendances qui changent
   );
 
+  // ✅ refreshContext ne dépend plus que de loadMembers (qui est maintenant stable)
   const refreshContext = useCallback(async () => {
     setIsLoading(true);
     setError('');
@@ -250,21 +269,22 @@ export function ServiceContractantProvider({ children }: { children: React.React
     } finally {
       setIsLoading(false);
     }
-  }, [loadMembers]);
+  }, [loadMembers]); // ✅ loadMembers est stable → refreshContext est stable → useEffect ne reboucle pas
 
+  // ✅ refreshMembers utilise les refs, pas le state
   const refreshMembers = useCallback(async () => {
     await loadMembers(
-      organisation?.id_organisation || null,
+      organisationRef.current?.id_organisation || null,
       undefined,
-      roles,
-      currentUser,
-      currentPermissions
+      rolesRef.current,
+      currentUserRef.current,
+      currentPermissionsRef.current
     );
-  }, [currentPermissions, currentUser, loadMembers, organisation, roles]);
+  }, [loadMembers]); // ✅ stable
 
   useEffect(() => {
     void refreshContext();
-  }, [refreshContext]);
+  }, [refreshContext]); // ✅ refreshContext est maintenant stable → s'exécute une seule fois
 
   const value = useMemo<ContractantContextValue>(
     () => ({

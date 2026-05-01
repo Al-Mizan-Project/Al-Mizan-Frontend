@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppelOffre, Recours, Soumission } from '@/lib/api/service-contractant';
 import { serviceContractantApi } from '@/lib/api/service-contractant';
 import styles from './service-contractant.module.css';
@@ -21,11 +21,20 @@ export default function DashboardLiveSection() {
   const [contractsCount, setContractsCount] = useState(0);
   const [recoursCount, setRecoursCount] = useState(0);
 
+  // Guard : on mémorise le dernier id chargé pour éviter les appels redondants
+  const lastFetchedId = useRef<string | number | null>(null);
+
   useEffect(() => {
+    const currentId = service?.id_service ?? null;
+
+    // Si l'id n'a pas changé depuis le dernier fetch, on ne fait rien
+    if (currentId === lastFetchedId.current) return;
+
+    lastFetchedId.current = currentId;
     let isMounted = true;
 
     async function loadDashboard() {
-      if (!service) {
+      if (!currentId) {
         if (isMounted) {
           setAppels([]);
           setSoumissionsCount(0);
@@ -38,40 +47,46 @@ export default function DashboardLiveSection() {
 
       try {
         const [loadedAppels, loadedCommissions, loadedContracts] = await Promise.all([
-          serviceContractantApi.listAppels({ service_id: service.id_service }),
-          serviceContractantApi.getServiceCommissions(service.id_service),
+          serviceContractantApi.listAppels({ service_id: currentId }),
+          serviceContractantApi.getServiceCommissions(currentId),
           serviceContractantApi.listContrats().catch(() => []),
         ]);
 
         const soumissionsGroups = await Promise.all(
           loadedAppels.map((appel) =>
-            serviceContractantApi.listAppelSoumissions(appel.id_appel_offres).catch(() => [] as Soumission[])
+            serviceContractantApi
+              .listAppelSoumissions(appel.id_appel_offres)
+              .catch(() => [] as Soumission[])
           )
         );
 
         const flattenedSoumissions = soumissionsGroups.flat();
-        const loadedRecours = await serviceContractantApi.listRecours().catch(() => [] as Recours[]);
-        const filteredContracts = loadedContracts.filter(
-          (contrat) => contrat.id_service_contractants === service.id_service
-        );
-        const soumissionIds = new Set(flattenedSoumissions.map((soumission) => soumission.id_soumission));
-        const filteredRecours = loadedRecours.filter((recours) => soumissionIds.has(recours.id_soumission));
+        const loadedRecours = await serviceContractantApi
+          .listRecours()
+          .catch(() => [] as Recours[]);
 
-        if (!isMounted) {
-          return;
-        }
+        const filteredContracts = loadedContracts.filter(
+          (contrat) => contrat.id_service_contractants === currentId
+        );
+        const soumissionIds = new Set(
+          flattenedSoumissions.map((s) => s.id_soumission)
+        );
+        const filteredRecours = loadedRecours.filter((r) =>
+          soumissionIds.has(r.id_soumission)
+        );
+
+        if (!isMounted) return;
 
         setAppels(loadedAppels);
         setSoumissionsCount(flattenedSoumissions.length);
         setCommissionsCount(
-          loadedCommissions.commissions_evaluation.length + loadedCommissions.commissions_internes.length
+          loadedCommissions.commissions_evaluation.length +
+            loadedCommissions.commissions_internes.length
         );
         setContractsCount(filteredContracts.length);
         setRecoursCount(filteredRecours.length);
       } catch {
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
         setAppels([]);
         setSoumissionsCount(0);
         setCommissionsCount(0);
@@ -85,14 +100,18 @@ export default function DashboardLiveSection() {
     return () => {
       isMounted = false;
     };
-  }, [service]);
+  }); // Pas de tableau de dépendances — le guard useRef contrôle l'exécution
 
   const sortedAppels = useMemo(
     () =>
       [...appels]
         .sort((left, right) => {
-          const leftDate = new Date(left.updated_at || left.date_publication || 0).getTime();
-          const rightDate = new Date(right.updated_at || right.date_publication || 0).getTime();
+          const leftDate = new Date(
+            left.updated_at || left.date_publication || 0
+          ).getTime();
+          const rightDate = new Date(
+            right.updated_at || right.date_publication || 0
+          ).getTime();
           return rightDate - leftDate;
         })
         .slice(0, 4),
@@ -100,21 +119,35 @@ export default function DashboardLiveSection() {
   );
 
   const dashboardKpis = [
-    { label: 'Appels d’offres', value: String(appels.length) },
+    { label: 'Appels d\'offres', value: String(appels.length) },
     { label: 'Soumissions reçues', value: String(soumissionsCount) },
     { label: 'Commissions actives', value: String(commissionsCount) },
     { label: 'Contrats / recours', value: String(contractsCount + recoursCount) },
   ];
 
   const activityItems = [
-    service ? { title: `Service #${service.id_service} chargé`, badge: { label: 'Service', tone: 'info' as const } } : null,
+    service
+      ? {
+          title: `Service #${service.id_service} chargé`,
+          badge: { label: 'Service', tone: 'info' as const },
+        }
+      : null,
     appels[0]
-      ? { title: `Dernier AO mis à jour : ${appels[0].reference}`, badge: { label: 'AO', tone: 'success' as const } }
+      ? {
+          title: `Dernier AO mis à jour : ${appels[0].reference}`,
+          badge: { label: 'AO', tone: 'success' as const },
+        }
       : null,
     appels.length === 0
-      ? { title: 'Aucun appel d’offre encore relié à ce service', badge: { label: 'Info', tone: 'gray' as const } }
+      ? {
+          title: 'Aucun appel d\'offre encore relié à ce service',
+          badge: { label: 'Info', tone: 'gray' as const },
+        }
       : null,
-  ].filter(Boolean) as Array<{ title: string; badge: { label: string; tone: 'info' | 'success' | 'gray' } }>;
+  ].filter(Boolean) as Array<{
+    title: string;
+    badge: { label: string; tone: 'info' | 'success' | 'gray' };
+  }>;
 
   return (
     <>
@@ -133,7 +166,7 @@ export default function DashboardLiveSection() {
         <div className={styles.card}>
           <div className={cn(styles.cardHeader, styles.dashboardHeader)}>
             <div>
-              <h4>Appels d’offre récents</h4>
+              <h4>Appels d'offre récents</h4>
             </div>
           </div>
           <div className={styles.cardBodyCompact}>
@@ -151,7 +184,7 @@ export default function DashboardLiveSection() {
                 <tbody>
                   {sortedAppels.length === 0 ? (
                     <tr>
-                      <td colSpan={5}>Aucun appel d’offre disponible.</td>
+                      <td colSpan={5}>Aucun appel d'offre disponible.</td>
                     </tr>
                   ) : (
                     sortedAppels.map((offer) => (
@@ -165,7 +198,8 @@ export default function DashboardLiveSection() {
                           <Badge badge={toBadgeFromStatus(offer.statut)} compact />
                         </td>
                         <td>
-                          Publication {formatDateTime(offer.date_publication)} · Dépôt {formatDateTime(offer.date_limite_soumission)}
+                          Publication {formatDateTime(offer.date_publication)} · Dépôt{' '}
+                          {formatDateTime(offer.date_limite_soumission)}
                         </td>
                       </tr>
                     ))
@@ -179,7 +213,7 @@ export default function DashboardLiveSection() {
         <div className={styles.card}>
           <div className={styles.cardHeader}>
             <div>
-              <h4>Journal d’activité</h4>
+              <h4>Journal d'activité</h4>
             </div>
           </div>
           <div className={styles.cardBody}>

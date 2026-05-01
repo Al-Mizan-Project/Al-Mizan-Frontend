@@ -35,12 +35,10 @@ export default function ValidationLoginPage({ params }: PageProps) {
     setError(null);
 
     try {
-      // Correct path for login is auth/login according to backend docs
+      // 1. Requête de login
       const response = await fetch('/api/proxy/auth?path=auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
@@ -51,7 +49,6 @@ export default function ValidationLoginPage({ params }: PageProps) {
 
       const data = await response.json();
       
-      // Le backend Django renvoie "access" et "refresh"
       const accessToken = data.access || data.access_token;
       const refreshToken = data.refresh || data.refresh_token;
 
@@ -59,42 +56,37 @@ export default function ValidationLoginPage({ params }: PageProps) {
         throw new Error('Token non reçu dans la réponse du serveur');
       }
 
+      // 2. Sauvegarde des tokens
       localStorage.setItem('access_token', accessToken);
       if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
 
-      // Simple JWT decode to decide where to redirect
+      // 3. Décodage du JWT
       const base64Url = accessToken.split('.')[1];
       const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
       
-      const authHeaders = { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
-      const userId = decoded.user_id || decoded.sub;
+      // 🔥 NOUVEAU : On stocke l'id_membre DIRECTEMENT depuis le token
+      // Plus besoin de faire un 2ème appel API (fetch users/id) !
+      if (decoded.id_membre) {
+        localStorage.setItem('membre_id', String(decoded.id_membre));
+      }
 
-      // Tentative de récupération du profil utilisateur pour obtenir id_membre
-      try {
-        const userRes = await fetch(`/api/proxy/auth?path=users/${userId}`, { headers: authHeaders });
-        if (userRes.ok) {
-          const userProfile = await userRes.json();
-          if (userProfile.id_membre) {
-            localStorage.setItem('membre_id', String(userProfile.id_membre));
-          }
-        }
-      } catch (_) { /* silencieux */ }
-
-      // On vérifie le nom du rôle ou l'ID
+      // 4. On vérifie le nom du rôle ou l'ID (directement depuis le token aussi)
       const roleName = (decoded.role || '').toLowerCase();
       const idRole = decoded.id_role || 0;
       
-      if (roleName.includes('commission') || roleName.includes('service contractant') || idRole === 1 || idRole === 2 || idRole === 3) {
+      // 5. Redirection
+      if (roleName.includes('commission') || roleName.includes('contractant') || idRole === 1 || idRole === 2 || idRole === 3) {
         window.location.href = `/${lang}/validation/dashboard/commission`;
       } else {
         window.location.href = `/${lang}/validation/dashboard/validator`;
       }
+
     } catch (err: any) {
       setError(err.message || 'Une erreur est survenue');
     } finally {
       setLoading(false);
     }
-  };
+};
 
   return (
     <div className="validation-theme min-h-screen bg-[#FCFFFF] flex items-center justify-center p-6">
