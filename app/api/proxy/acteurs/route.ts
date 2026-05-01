@@ -1,34 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { proxyRequest } from '../_utils';
 
 const ACTEURS_BASE = process.env.NEXT_PUBLIC_ACTEURS_SERVICE_URL || 'http://localhost:8000';
-const INTERNAL_TOKEN = process.env.SOUMISSIONS_INTERNAL_TOKEN || 'dev-internal-token';
 
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const path = searchParams.get('path') || 'membres';
-    
-    const authHeader = req.headers.get('authorization') || '';
+const options = {
+  baseUrl: ACTEURS_BASE,
+  defaultPath: 'membres',
+  errorLabel: 'ActeursProxy',
+};
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Internal-Service-Token': INTERNAL_TOKEN,
-      'Origin': 'http://localhost:8000',
-      'Referer': 'http://localhost:8000/',
-    };
+export function GET(req: NextRequest) {
+  return proxyRequest(req, 'GET', options);
+}
 
-    if (authHeader) {
-      headers['Authorization'] = authHeader;
-    }
+export function POST(req: NextRequest) {
+  return proxyRequest(req, 'POST', options);
+}
 
-    const upstream = await fetch(`${ACTEURS_BASE}/${path}`, {
-      method: 'GET',
-      headers,
-    });
-    
-    const data = await upstream.json();
-    return NextResponse.json(data, { status: upstream.status });
-  } catch (err) {
-    return NextResponse.json({ error: 'ActeursProxy error', detail: String(err) }, { status: 502 });
-  }
+export function PATCH(req: NextRequest) {
+  return proxyRequest(req, 'PATCH', options);
+}
+
+export function PUT(req: NextRequest) {
+  return proxyRequest(req, 'PUT', options);
+}
+
+export function DELETE(req: NextRequest) {
+  return proxyRequest(req, 'DELETE', options);
 }

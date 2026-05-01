@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
 import { proxyRequest } from '../_utils';
 
-const EVALUATIONS_BASE = process.env.NEXT_PUBLIC_EVALUATIONS_SERVICE_URL || 'http://localhost:8000';
+const RECOURS_BASE = process.env.NEXT_PUBLIC_CONTRACTANT_SERVICE_URL || 'http://localhost:8000';
 
 const options = {
-  baseUrl: EVALUATIONS_BASE,
-  defaultPath: 'evaluations',
-  errorLabel: 'EvaluationsProxy',
+  baseUrl: RECOURS_BASE,
+  defaultPath: 'api/recours/',
+  errorLabel: 'RecoursProxy',
 };
 
 export function GET(req: NextRequest) {
