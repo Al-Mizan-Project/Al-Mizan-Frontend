@@ -20,6 +20,7 @@ export interface EmployeeData {
 
 export interface fileRecord{
     id : string;
+    rawId?: number | string; // Utilisé pour la navigation (ID backend dynamique)
     reference: string;
     economicOperator:string;
     validator?:{
@@ -40,7 +41,7 @@ export interface Validator {
   prenom: string;
   matricule: string;
   chargeActuelle: number;
-  disponibilite: 'Recommandé' | 'Conflit' | 'Indisponible' |'Disponible';
+  disponibilite: 'Recommandé' | 'Conflit' | 'Indisponible' | 'Disponible' | 'Surchargé';
 }
 
 export interface DossierInfo {
