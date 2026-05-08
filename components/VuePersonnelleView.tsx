@@ -4,17 +4,12 @@ import { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import DossierTable, { ActionConfig } from '@/components/DossierTable';
 import Pagination from '@/components/Pagination';
-import { DOSSIERS, Dossier } from '@/lib/dossiers-data';
+import { Dossier } from '@/lib/dossiers-data';
+import { useSoumissions } from '@/lib/soumissions-context';
 
 // ─── Mock: dossiers assigned to this evaluateur ───────────────────────────────
 // In real app this would be filtered by logged-in user id
-const MES_DOSSIERS = DOSSIERS.filter(d =>
-  ['REF-2024-0021', 'REF-2024-0022', 'REF-2024-0001', 'REF-2024-0011', 'REF-2024-0012',
-   'REF-2024-0013', 'REF-2024-0023', 'REF-2024-0024'].includes(d.reference)
-);
-
-const EN_COURS_DATA  = MES_DOSSIERS.filter(d => d.status === 'En cours');
-const EN_RETARD_DATA = MES_DOSSIERS.filter(d => d.status === 'En retard');
+// Now using all dossiers from API
 
 const RETARD_CHART_DATA = [
   { name: '> 7',        value: 3 },
@@ -73,20 +68,20 @@ function SummaryCard({ title, value, icon, accent }: { title: string; value: num
 }
 
 // ─── Aperçu content ───────────────────────────────────────────────────────────
-function ApercuContent() {
+function ApercuContent({ enCoursCount, enRetardCount }: { enCoursCount: number; enRetardCount: number }) {
   return (
     <div className="flex flex-col gap-6">
       {/* Summary cards */}
       <div className="flex gap-5">
         <SummaryCard
           title="Mes dossiers en cours d'évaluation"
-          value={EN_COURS_DATA.length}
+          value={enCoursCount}
           icon="🔄"
           accent="#00738C"
         />
         <SummaryCard
           title="Mes dossiers en retard"
-          value={EN_RETARD_DATA.length}
+          value={enRetardCount}
           icon="⚠️"
           accent="#EF4444"
         />
@@ -194,7 +189,14 @@ function TableContent({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function VuePersonnelleView() {
+  const { dossiers: MES_DOSSIERS, loading, error } = useSoumissions();
   const [activeTab, setActiveTab] = useState<'apercu' | 'en-cours' | 'en-retard'>('apercu');
+
+  if (loading) return <div className="p-6 text-gray-500">Chargement...</div>;
+  if (error)   return <div className="p-6 text-red-500">{error}</div>;
+
+  const EN_COURS_DATA  = MES_DOSSIERS.filter(d => d.status === 'En cours');
+  const EN_RETARD_DATA = MES_DOSSIERS.filter(d => d.status === 'En retard');
 
   const TABS = [
     { id: 'apercu'     as const, label: 'Aperçu',    badge: null },
@@ -233,7 +235,7 @@ export default function VuePersonnelleView() {
       </div>
 
       {/* Content */}
-      {activeTab === 'apercu' && <ApercuContent />}
+      {activeTab === 'apercu' && <ApercuContent enCoursCount={EN_COURS_DATA.length} enRetardCount={EN_RETARD_DATA.length} />}
       {activeTab === 'en-cours' && (
         <TableContent
           data={EN_COURS_DATA}

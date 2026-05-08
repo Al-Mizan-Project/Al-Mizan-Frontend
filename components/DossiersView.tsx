@@ -3,8 +3,9 @@
 import { useState, useMemo } from 'react';
 import DossierTable from '@/components/DossierTable';
 import Pagination from '@/components/Pagination';
-import { DOSSIERS, DossierStatus, DossierEtape, Dossier } from '@/lib/dossiers-data';
+import { DossierStatus, DossierEtape, Dossier } from '@/lib/dossiers-data';
 import AdminDossierDetailView from '@/components/AdminDossierDetailView';
+import { useSoumissions } from '@/lib/soumissions-context';
 
 const ROWS_PER_PAGE = 6;
 
@@ -24,6 +25,7 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function DossiersView() {
+  const { dossiers: DOSSIERS, loading, error } = useSoumissions();
   const [search,     setSearch]     = useState('');
   const [evaluateur, setEvaluateur] = useState('Tous');
   const [domaine,    setDomaine]    = useState('Tous');
@@ -32,6 +34,9 @@ export default function DossiersView() {
   const [currentPage, setCurrentPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedDossier, setSelectedDossier] = useState<Dossier | null>(null);
+
+  if (loading) return <div className="p-6 text-gray-500">Chargement...</div>;
+  if (error)   return <div className="p-6 text-red-500">{error}</div>;
 
   const actionConfig = {
     buttons: [
@@ -58,7 +63,7 @@ export default function DossiersView() {
       // evaluateur, domaine, periode are UI-only filters (no field in mock data)
       return matchSearch && matchStatut;
     });
-  }, [search, statut, evaluateur, domaine, periode]);
+  }, [search, statut, evaluateur, domaine, periode, DOSSIERS]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
 

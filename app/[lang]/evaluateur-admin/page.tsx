@@ -15,6 +15,7 @@ import { UserProfileProvider } from '@/lib/user-profile';
 import { HistoriqueProvider } from '@/lib/historique';
 import { DocumentStoreProvider } from '@/lib/document-store';
 import { Dossier } from '@/lib/dossiers-data';
+import { SoumissionsProvider } from '@/lib/soumissions-context';
 
 export type EvaluateurAdminPage = 'vue-personnelle' | 'mes-dossiers' | 'references';
 type OverlayPage = 'profil' | 'parametres' | 'notifications' | null;
@@ -103,6 +104,7 @@ function EvaluateurAdminDashboardInner() {
 
 export default function EvaluateurAdminDashboard() {
   return (
+    <SoumissionsProvider>
     <UserProfileProvider>
       <HistoriqueProvider>
         <DocumentStoreProvider>
@@ -112,5 +114,6 @@ export default function EvaluateurAdminDashboard() {
         </DocumentStoreProvider>
       </HistoriqueProvider>
     </UserProfileProvider>
+    </SoumissionsProvider>
   );
 }

@@ -4,8 +4,9 @@ import { useState, useMemo } from 'react';
 import SummaryCards from '@/components/SummaryCards';
 import BarCharts from '@/components/BarCharts';
 import TabPanel from '@/components/TabPanel';
-import { DOSSIERS, DossierStatus } from '@/lib/dossiers-data';
+import { DossierStatus } from '@/lib/dossiers-data';
 import { ActionConfig } from '@/components/DossierTable';
+import { useSoumissions } from '@/lib/soumissions-context';
 
 // ─── Action handlers ──────────────────────────────────────────────────────────
 const handleAffecter   = (d: any) => console.log('[Affecter]',   d.reference);
@@ -38,21 +39,25 @@ const TABS: TabDef[] = [
   { id: 'prets',       label: 'Prêts',       status: 'Prêt' },
 ];
 
-const STATUS_COUNTS: Record<string, number> = {
-  'en-attente': DOSSIERS.filter(d => d.status === 'En attente').length,
-  'en-cours':   DOSSIERS.filter(d => d.status === 'En cours').length,
-  'en-retard':  DOSSIERS.filter(d => d.status === 'En retard').length,
-  'prets':      DOSSIERS.filter(d => d.status === 'Prêt').length,
-};
-
 export default function VueGlobaleView() {
+  const { dossiers: DOSSIERS, loading, error } = useSoumissions();
   const [activeTab, setActiveTab] = useState('apercu');
+
+  const STATUS_COUNTS: Record<string, number> = {
+    'en-attente': DOSSIERS.filter(d => d.status === 'En attente').length,
+    'en-cours':   DOSSIERS.filter(d => d.status === 'En cours').length,
+    'en-retard':  DOSSIERS.filter(d => d.status === 'En retard').length,
+    'prets':      DOSSIERS.filter(d => d.status === 'Prêt').length,
+  };
 
   const filteredData = useMemo(() => {
     const tab = TABS.find(t => t.id === activeTab);
     if (!tab?.status) return [];
     return DOSSIERS.filter(d => d.status === tab.status);
-  }, [activeTab]);
+  }, [activeTab, DOSSIERS]);
+
+  if (loading) return <div className="p-6 text-gray-500">Chargement...</div>;
+  if (error)   return <div className="p-6 text-red-500">{error}</div>;
 
   return (
     <div className="flex flex-col gap-0">

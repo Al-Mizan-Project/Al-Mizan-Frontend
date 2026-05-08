@@ -1,51 +1,51 @@
 'use client';
+
 import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useState, FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useAuth } from '@/contexts/AuthContext';
-import {
-  faEnvelope,
-  faLock,
-  faEye,
+import { useAuth } from '@/lib/auth';  // ✅ new auth context
+import { 
+  faEnvelope, 
+  faLock, 
+  faEye, 
   faEyeSlash,
   faBuildingColumns
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type PageProps = {
   params: Promise<{ lang: string }>;
 };
 
+// Mapping des rôles vers les URLs de redirection (identique à l'original)
 const ROLE_REDIRECTS: Record<string, string> = {
-  admin: '/fr/system-admin',
-  operateur_economique: '/fr/dashboard/operator',
-  service_contractant: '/fr/dashboard/contractant',
-  commission_externe: '/fr/validation/dashboard/validator',
-  tutelle: '/fr/validation/dashboard/validator',
+  admin:                    '/fr/system-admin',
+  operateur_economique:     '/fr/dashboard/operator',
+  service_contractant:      '/fr/dashboard/contractant',
+  commission_externe:       '/fr/validation/dashboard/validator',
+  tutelle:                  '/fr/validation/dashboard/validator',
+  chef_commission:          '/fr/chef_com',
+  evaluateur:               '/fr/evaluateur',
+  evaluateur_administratif: '/fr/evaluateur-admin',
 };
 
-function getRedirectPath(roleName: string, idRole: number, fonction: string): string {
+function getRedirectPath(roleName: string, idRole: number): string {
   const normalized = roleName.toLowerCase().trim().replace(/\s+/g, '_');
-  const f = fonction.toLowerCase().trim();
-
-  if (normalized.includes('admin')) return ROLE_REDIRECTS.admin;
+  if (ROLE_REDIRECTS[normalized]) return ROLE_REDIRECTS[normalized];
+  if (normalized.includes('admin'))   return ROLE_REDIRECTS.admin;
   if (normalized.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
-
-  if (normalized.includes('contractant')) {
-    if (f.includes('responsable')) {
-      if (f.includes('commission')) return '/fr/validation/dashboard/commission';
-      return ROLE_REDIRECTS.service_contractant;
-    }
-    if (f.includes('membre')) return '/fr/validation/dashboard/validator';
-    return ROLE_REDIRECTS.service_contractant;
-  }
-
-  if (normalized.includes('commission') || normalized.includes('tutelle')) {
-    if (f.includes('responsable')) return '/fr/validation/dashboard/commission';
-    return '/fr/validation/dashboard/validator';
-  }
-
-  return ROLE_REDIRECTS[normalized] || '/fr/dashboard/operator';
+  if (normalized.includes('contractant')) return ROLE_REDIRECTS.service_contractant;
+  if (normalized.includes('commission')) return ROLE_REDIRECTS.commission_externe;
+  if (normalized.includes('tutelle')) return ROLE_REDIRECTS.tutelle;
+  const idRoleMap: Record<number, string> = {
+    1: ROLE_REDIRECTS.admin,
+    2: ROLE_REDIRECTS.service_contractant,
+    3: ROLE_REDIRECTS.commission_externe,
+    4: ROLE_REDIRECTS.operateur_economique,
+    5: ROLE_REDIRECTS.tutelle,
+  };
+  return idRoleMap[idRole] ?? '/fr/dashboard/operator';
 }
 
 export default function LoginPage({ params }: PageProps) {
@@ -56,7 +56,9 @@ export default function LoginPage({ params }: PageProps) {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { setSession } = useAuth();
+
+  const { login } = useAuth();      // ✅ new login function
+  const router = useRouter();
 
   useEffect(() => {
     let isMounted = true;
@@ -81,78 +83,42 @@ export default function LoginPage({ params }: PageProps) {
       return;
     }
 
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setError(isArabic ? 'عنوان بريد إلكتروني غير صالح' : 'Adresse e-mail invalide');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch('/api/proxy/auth?path=auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      // ✅ Appel à la nouvelle fonction login (gère token, refresh, user)
+      await login(email, password);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Identifiants incorrects');
-      }
+      // Après le login, récupérer le token stocké pour décoder le rôle
+      const token = localStorage.getItem('access_token');
+      if (!token) throw new Error('Token non trouvé après connexion');
 
-      const data = await response.json();
-      const accessToken = data.access || data.access_token;
-      const refreshToken = data.refresh || data.refresh_token;
-
-      const base64Url = accessToken.split('.')[1];
+      // Décoder le JWT pour obtenir le rôle
+      const base64Url = token.split('.')[1];
       const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
-
-      // Save tokens to localStorage
-      localStorage.setItem('access_token', accessToken);
-      if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
-      localStorage.setItem('user_id', String(decoded.user_id || ''));
-
-      // Get member ID
-      const idMembre = data.user?.id_membre || decoded.id_membre || decoded.membre_id;
-      if (idMembre) {
-        localStorage.setItem('id_membre', String(idMembre));
-        localStorage.setItem('membre_id', String(idMembre));
-      }
-
-      // Update global session
-      setSession(accessToken, refreshToken, {
-        id: decoded.user_id || 0,
-        email: decoded.email || email,
-        id_membre: idMembre,
-        role: decoded.role,
-        id_role: decoded.id_role
-      });
-
-      // Fetch member profile to determine fonction
-      let fonction = '';
-      if (idMembre) {
-        try {
-          const profileRes = await fetch(`/api/proxy/acteurs?path=membres/${idMembre}/`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-          });
-          if (profileRes.ok) {
-            const profileData = await profileRes.json();
-            fonction = profileData.fonction || (Array.isArray(profileData) ? profileData[0]?.fonction : '') || '';
-          }
-        } catch (err: any) {
-          console.error('Profile fetch error:', err.message);
-        }
-      }
-
       const roleName = decoded.role || decoded.role_name || '';
-      const idRole = decoded.id_role || 0;
-      const redirectPath = getRedirectPath(roleName, idRole, fonction);
-      window.location.href = redirectPath;
+      const idRole   = decoded.id_role || 0;
+      const redirectPath = getRedirectPath(roleName, idRole);
 
+      // Redirection finale
+      window.location.href = redirectPath;
     } catch (err: any) {
-      setError(err.message || 'Erreur de connexion');
+      const message = err.response?.data?.detail || err.message || (isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion');
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
+  // Le reste du JSX est strictement identique à votre version originale
   return (
     <main className="min-h-screen flex flex-col lg:flex-row bg-[#FCFFFF]">
 
-      {/* ── Left Panel – Branding ── */}
+      {/* Left Panel – Branding */}
       <section className="hidden lg:flex lg:w-1/2 bg-[#0D2527] flex-col justify-center items-center p-12 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-10 right-10 w-32 h-32 border-2 border-[#9BCFCF] rounded-full"></div>
@@ -190,7 +156,7 @@ export default function LoginPage({ params }: PageProps) {
         </div>
       </section>
 
-      {/* ── Right Panel – Login Form ── */}
+      {/* Right Panel – Login Form */}
       <section className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-md">
 

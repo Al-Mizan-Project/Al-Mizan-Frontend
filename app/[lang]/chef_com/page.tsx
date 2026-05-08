@@ -15,6 +15,7 @@ import { NotificationProvider } from '@/lib/notifications';
 import { UserProfileProvider, useUserProfile } from '@/lib/user-profile';
 import { HistoriqueProvider } from '@/lib/historique';
 import { DocumentStoreProvider } from '@/lib/document-store';
+import { SoumissionsProvider } from '@/lib/soumissions-context';
 
 export type SidebarPage = 'vue-globale' | 'dossiers' | 'affectation' | 'historique' | 'references';
 type OverlayPage = 'profil' | 'parametres' | 'notifications' | null;
@@ -54,6 +55,7 @@ export default function AdminDashboard() {
   };
 
   return (
+    <SoumissionsProvider>
     <UserProfileProvider>
     <HistoriqueProvider>
     <DocumentStoreProvider>
@@ -88,5 +90,6 @@ export default function AdminDashboard() {
     </DocumentStoreProvider>
     </HistoriqueProvider>
     </UserProfileProvider>
+    </SoumissionsProvider>
   );
 }
