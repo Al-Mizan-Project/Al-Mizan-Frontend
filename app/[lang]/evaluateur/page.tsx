@@ -13,6 +13,7 @@ import { NotificationProvider } from '@/lib/notifications';
 import { UserProfileProvider } from '@/lib/user-profile';
 import { HistoriqueProvider } from '@/lib/historique';
 import { DocumentStoreProvider } from '@/lib/document-store';
+import { SoumissionsProvider } from '@/lib/soumissions-context';
 
 export type EvaluateurPage = 'vue-personnelle' | 'mes-dossiers' | 'references';
 type OverlayPage = 'profil' | 'parametres' | 'notifications' | null;
@@ -74,6 +75,7 @@ function EvaluateurDashboardInner() {
 
 export default function EvaluateurDashboard() {
   return (
+    <SoumissionsProvider>
     <UserProfileProvider>
       <HistoriqueProvider>
     <DocumentStoreProvider>
@@ -83,5 +85,6 @@ export default function EvaluateurDashboard() {
       </DocumentStoreProvider>
       </HistoriqueProvider>
     </UserProfileProvider>
+    </SoumissionsProvider>
   );
 }

@@ -3,16 +3,11 @@
 import { useState, useMemo } from 'react';
 import DossierTable from '@/components/DossierTable';
 import Pagination from '@/components/Pagination';
-import { DOSSIERS, DossierStatus, Dossier } from '@/lib/dossiers-data';
+import { DossierStatus, Dossier } from '@/lib/dossiers-data';
 import DossierDetailView from '@/components/DossierDetailView';
+import { useSoumissions } from '@/lib/soumissions-context';
 
 const ROWS_PER_PAGE = 6;
-
-// Mock: dossiers assigned to this evaluateur
-const MES_DOSSIERS = DOSSIERS.filter(d =>
-  ['REF-2024-0021', 'REF-2024-0022', 'REF-2024-0001', 'REF-2024-0011', 'REF-2024-0012',
-   'REF-2024-0013', 'REF-2024-0023', 'REF-2024-0024'].includes(d.reference)
-);
 
 const DOMAINES = ['Tous', 'BTP', 'Industrie', 'Agriculture', 'Énergie', 'Santé', 'Technologie'];
 const PERIODES = ['Toutes', 'Ce mois', '3 derniers mois', '6 derniers mois', 'Cette année'];
@@ -26,6 +21,7 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
 };
 
 export default function MesDossiersView() {
+  const { dossiers: MES_DOSSIERS, loading, error } = useSoumissions();
   const [search,      setSearch]      = useState('');
   const [domaine,     setDomaine]     = useState('Tous');
   const [periode,     setPeriode]     = useState('Toutes');
@@ -33,6 +29,9 @@ export default function MesDossiersView() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedDossier, setSelectedDossier] = useState<Dossier | null>(null);
+
+  if (loading) return <div className="p-6 text-gray-500">Chargement...</div>;
+  if (error)   return <div className="p-6 text-red-500">{error}</div>;
 
   const actionConfig = {
     buttons: [
@@ -58,7 +57,7 @@ export default function MesDossiersView() {
       const matchStatut = statut === 'Tous' || d.status === statut;
       return matchSearch && matchStatut;
     });
-  }, [search, statut, domaine, periode]);
+  }, [search, statut, domaine, periode, MES_DOSSIERS]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
   const handleFilter = (fn: () => void) => { fn(); setCurrentPage(1); };

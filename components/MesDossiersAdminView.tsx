@@ -1,15 +1,9 @@
 'use client';
 
 import { useState, useMemo, useRef } from 'react';
-import { DOSSIERS, DossierStatus, Dossier } from '@/lib/dossiers-data';
+import { DossierStatus, Dossier } from '@/lib/dossiers-data';
 import Pagination from '@/components/Pagination';
-
-// ─── Same assigned pool ───────────────────────────────────────────────────────
-const ASSIGNED_REFS = [
-  'REF-2024-0022', 'REF-2024-0023', 'REF-2024-0024', 'REF-2024-0025', 'REF-2024-0026',
-  'REF-2024-0011', 'REF-2024-0012', 'REF-2024-0013', 'REF-2024-0014', 'REF-2024-0015',
-];
-const MY_DOSSIERS = DOSSIERS.filter(d => ASSIGNED_REFS.includes(d.reference));
+import { useSoumissions } from '@/lib/soumissions-context';
 
 const ROWS_PER_PAGE = 10;
 
@@ -100,6 +94,7 @@ function Dropdown<T extends string>({ label, options, value, onChange }: {
 interface Props { onVoirDossier: (d: Dossier) => void; }
 
 export default function MesDossiersAdminView({ onVoirDossier }: Props) {
+  const { dossiers: MY_DOSSIERS } = useSoumissions();
   const [search,  setSearch]  = useState('');
   const [domaine, setDomaine] = useState(DOMAINES[0]);
   const [status,  setStatus]  = useState<typeof STATUTS[number]>(STATUTS[0]);
@@ -123,7 +118,7 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
       // domaine filter is illustrative — no domaine field on Dossier yet
       return matchSearch && matchStatus && matchPeriode;
     });
-  }, [search, domaine, status, periode]);
+  }, [search, domaine, status, periode, MY_DOSSIERS]);
 
   const sorted = useMemo(() => {
     if (!sortBy) return filtered;

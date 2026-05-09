@@ -2,17 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { DOSSIERS, Dossier } from '@/lib/dossiers-data';
+import { Dossier } from '@/lib/dossiers-data';
 import Pagination from '@/components/Pagination';
-
-// ─── Assigned dossier pool for this evaluateur admin ─────────────────────────
-const ASSIGNED_REFS = [
-  'REF-2024-0022', 'REF-2024-0023', 'REF-2024-0024', 'REF-2024-0025', 'REF-2024-0026',
-  'REF-2024-0011', 'REF-2024-0012', 'REF-2024-0013', 'REF-2024-0014', 'REF-2024-0015',
-];
-const MY_DOSSIERS = DOSSIERS.filter(d => ASSIGNED_REFS.includes(d.reference));
-const EN_COURS    = MY_DOSSIERS.filter(d => d.status === 'En cours');
-const EN_RETARD   = MY_DOSSIERS.filter(d => d.status === 'En retard');
+import { useSoumissions } from '@/lib/soumissions-context';
 
 const ROWS_PER_PAGE = 10;
 
@@ -22,27 +14,8 @@ function joursDeRetard(d: Dossier): number {
   const delai    = parseInt(d.delaiEvaluation);
   const echeance = new Date(soumis.getTime() + delai * 24 * 60 * 60 * 1000);
   const diff = Math.floor((Date.now() - echeance.getTime()) / (1000 * 60 * 60 * 24));
-  return Math.max(1, diff); // always at least 1j if retard
+  return Math.max(1, diff);
 }
-
-function buildChartData() {
-  let gt7 = 0, b3_7 = 0, lt3 = 0, today = 0;
-  EN_RETARD.forEach(d => {
-    const j = joursDeRetard(d);
-    if (j === 0)     today++;
-    else if (j < 3)  lt3++;
-    else if (j <= 7) b3_7++;
-    else             gt7++;
-  });
-  return [
-    { label: '> 7',        value: gt7,   fill: '#EF4444' },
-    { label: '3–7',        value: b3_7,  fill: '#F97316' },
-    { label: '< 3',        value: lt3,   fill: '#EAB308' },
-    { label: "Aujourd'hui", value: today, fill: '#3B82F6' },
-  ];
-}
-
-const CHART_DATA = buildChartData();
 
 const STATUS_BADGE: Record<string, string> = {
   'En cours':   'text-blue-700',
@@ -71,10 +44,8 @@ function ColHeader({ label, sortKey, sortBy, sortDir, onSort }: {
 }) {
   const active = sortBy === sortKey;
   return (
-    <button
-      onClick={() => onSort(sortKey)}
-      className="flex items-center gap-1 text-xs font-bold text-gray-600 uppercase tracking-wider hover:text-[#1C4532] transition-colors"
-    >
+    <button onClick={() => onSort(sortKey)}
+      className="flex items-center gap-1 text-xs font-bold text-gray-600 uppercase tracking-wider hover:text-[#1C4532] transition-colors">
       {label}
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
         className={active ? 'text-[#1C4532]' : 'text-gray-400'}>
@@ -84,8 +55,8 @@ function ColHeader({ label, sortKey, sortBy, sortDir, onSort }: {
   );
 }
 
-// ─── En Cours table ───────────────────────────────────────────────────────────
-function EnCoursTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
+// ─── En Cours table (modified to accept data prop) ───────────────────────────
+function EnCoursTable({ onVoir, data }: { onVoir: (d: Dossier) => void; data: Dossier[] }) {
   const [sortBy,  setSortBy]  = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
   const [page,    setPage]    = useState(1);
@@ -96,7 +67,7 @@ function EnCoursTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
   };
 
   const sorted = useMemo(() => {
-    const list = [...EN_COURS];
+    const list = [...data];
     if (!sortBy) return list;
     return list.sort((a, b) => {
       const av = sortBy === 'reference' ? a.reference : sortBy === 'operateur' ? a.operateur
@@ -105,7 +76,7 @@ function EnCoursTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
                : sortBy === 'date' ? b.dateSoumission : sortBy === 'delai' ? b.delaiEvaluation : b.status;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
-  }, [sortBy, sortDir]);
+  }, [data, sortBy, sortDir]);
 
   const total = Math.ceil(sorted.length / ROWS_PER_PAGE);
   const paged = sorted.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
@@ -148,13 +119,13 @@ function EnCoursTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
           </tbody>
         </table>
       </div>
-      {total > 1 && <Pagination currentPage={page} totalPages={total} onPageChange={setPage} totalItems={EN_COURS.length} rowsPerPage={ROWS_PER_PAGE} />}
+      {total > 1 && <Pagination currentPage={page} totalPages={total} onPageChange={setPage} totalItems={data.length} rowsPerPage={ROWS_PER_PAGE} />}
     </div>
   );
 }
 
-// ─── En Retard table ──────────────────────────────────────────────────────────
-function EnRetardTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
+// ─── En Retard table (modified to accept data prop) ──────────────────────────
+function EnRetardTable({ onVoir, data }: { onVoir: (d: Dossier) => void; data: (Dossier & { joursRetard: number })[] }) {
   const [sortBy,  setSortBy]  = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
   const [page,    setPage]    = useState(1);
@@ -164,10 +135,8 @@ function EnRetardTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
     else { setSortBy(key); setSortDir('asc'); }
   };
 
-  const withRetard = useMemo(() => EN_RETARD.map(d => ({ ...d, joursRetard: joursDeRetard(d) })), []);
-
   const sorted = useMemo(() => {
-    const list = [...withRetard];
+    const list = [...data];
     if (!sortBy) return list;
     return list.sort((a, b) => {
       if (sortBy === 'retard') return sortDir === 'asc' ? a.joursRetard - b.joursRetard : b.joursRetard - a.joursRetard;
@@ -175,7 +144,7 @@ function EnRetardTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
       const bv = sortBy === 'reference' ? b.reference : sortBy === 'operateur' ? b.operateur : b.status;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
-  }, [sortBy, sortDir, withRetard]);
+  }, [data, sortBy, sortDir]);
 
   const total = Math.ceil(sorted.length / ROWS_PER_PAGE);
   const paged = sorted.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
@@ -218,25 +187,25 @@ function EnRetardTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
           </tbody>
         </table>
       </div>
-      {total > 1 && <Pagination currentPage={page} totalPages={total} onPageChange={setPage} totalItems={EN_RETARD.length} rowsPerPage={ROWS_PER_PAGE} />}
+      {total > 1 && <Pagination currentPage={page} totalPages={total} onPageChange={setPage} totalItems={data.length} rowsPerPage={ROWS_PER_PAGE} />}
     </div>
   );
 }
 
-// ─── Aperçu tab ───────────────────────────────────────────────────────────────
-function ApercuTab({ onTabChange }: { onTabChange: (t: Tab) => void }) {
+// ─── Apercu tab (modified to receive counts and chartData) ──────────────────
+function ApercuTab({ onTabChange, enCours, enRetard, chartData }: { onTabChange: (t: Tab) => void; enCours: number; enRetard: number; chartData: any[] }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4 max-w-xl">
         <button onClick={() => onTabChange('en-cours')}
           className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm text-left hover:shadow-md hover:border-blue-200 transition-all group">
           <p className="text-sm text-gray-500 group-hover:text-blue-600 transition-colors">Mes dossiers en cours d'évaluation</p>
-          <p className="text-4xl font-black mt-2" style={{ color: '#1C4532' }}>{EN_COURS.length}</p>
+          <p className="text-4xl font-black mt-2" style={{ color: '#1C4532' }}>{enCours}</p>
         </button>
         <button onClick={() => onTabChange('en-retard')}
           className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm text-left hover:shadow-md hover:border-red-200 transition-all group">
           <p className="text-sm text-gray-500 group-hover:text-red-600 transition-colors">Mes dossiers en retard</p>
-          <p className="text-4xl font-black mt-2 text-red-600">{EN_RETARD.length}</p>
+          <p className="text-4xl font-black mt-2 text-red-600">{enRetard}</p>
         </button>
       </div>
 
@@ -247,13 +216,13 @@ function ApercuTab({ onTabChange }: { onTabChange: (t: Tab) => void }) {
           <span className="text-xs text-gray-400">Nombre de dossiers en retard</span>
         </div>
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={CHART_DATA} barSize={28} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+          <BarChart data={chartData} barSize={28} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="#F3F4F6" />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} allowDecimals={false} />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-              {CHART_DATA.map((e, i) => <Cell key={i} fill={e.value === 0 ? '#E5E7EB' : e.fill} />)}
+              {chartData.map((e, i) => <Cell key={i} fill={e.value === 0 ? '#E5E7EB' : e.fill} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -266,7 +235,28 @@ function ApercuTab({ onTabChange }: { onTabChange: (t: Tab) => void }) {
 interface Props { onVoirDossier: (d: Dossier) => void; }
 
 export default function VuePersonnelleAdminView({ onVoirDossier }: Props) {
+  const { dossiers } = useSoumissions();
+  const EN_COURS  = dossiers.filter(d => d.status === 'En cours');
+  const EN_RETARD = dossiers.filter(d => d.status === 'En retard');
   const [activeTab, setActiveTab] = useState<Tab>('apercu');
+
+  // Compute CHART_DATA dynamically from EN_RETARD
+  const chartData = useMemo(() => {
+    let gt7 = 0, b3_7 = 0, lt3 = 0, today = 0;
+    EN_RETARD.forEach(d => {
+      const j = joursDeRetard(d);
+      if (j === 0)     today++;
+      else if (j < 3)  lt3++;
+      else if (j <= 7) b3_7++;
+      else             gt7++;
+    });
+    return [
+      { label: '> 7',        value: gt7,   fill: '#EF4444' },
+      { label: '3–7',        value: b3_7,  fill: '#F97316' },
+      { label: '< 3',        value: lt3,   fill: '#EAB308' },
+      { label: "Aujourd'hui", value: today, fill: '#3B82F6' },
+    ];
+  }, [EN_RETARD]);
 
   const TABS = [
     { id: 'apercu'    as Tab, label: 'Aperçu' },
@@ -297,9 +287,9 @@ export default function VuePersonnelleAdminView({ onVoirDossier }: Props) {
         ))}
       </div>
 
-      {activeTab === 'apercu'    && <ApercuTab onTabChange={setActiveTab} />}
-      {activeTab === 'en-cours'  && <EnCoursTable onVoir={onVoirDossier} />}
-      {activeTab === 'en-retard' && <EnRetardTable onVoir={onVoirDossier} />}
+      {activeTab === 'apercu'    && <ApercuTab onTabChange={setActiveTab} enCours={EN_COURS.length} enRetard={EN_RETARD.length} chartData={chartData} />}
+      {activeTab === 'en-cours'  && <EnCoursTable  onVoir={onVoirDossier} data={EN_COURS} />}
+      {activeTab === 'en-retard' && <EnRetardTable onVoir={onVoirDossier} data={EN_RETARD.map(d => ({ ...d, joursRetard: joursDeRetard(d) }))} />}
     </div>
   );
 }
