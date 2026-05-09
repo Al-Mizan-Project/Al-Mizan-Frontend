@@ -16,7 +16,6 @@ type PageProps = {
   params: Promise<{ lang: string }>;
 };
 
-// Mapping des rôles vers les URLs de redirection
 const ROLE_REDIRECTS: Record<string, string> = {
   admin: '/fr/system-admin',
   operateur_economique: '/fr/dashboard/operator',
@@ -25,45 +24,27 @@ const ROLE_REDIRECTS: Record<string, string> = {
   tutelle: '/fr/validation/dashboard/validator',
 };
 
-/**
- * Détermine l'URL de redirection selon le rôle extrait du token JWT.
- * Accepte aussi bien les noms bruts (ex: "Commission Externe") que
- * les formes normalisées (ex: "commission_externe").
- */
-/**
- * Détermine l'URL de redirection selon le rôle et la fonction du membre.
- */
 function getRedirectPath(roleName: string, idRole: number, fonction: string): string {
   const normalized = roleName.toLowerCase().trim().replace(/\s+/g, '_');
   const f = fonction.toLowerCase().trim();
 
-  // 1. Admin et Opérateur
   if (normalized.includes('admin')) return ROLE_REDIRECTS.admin;
   if (normalized.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
 
-  // 2. SERVICE Contractant
   if (normalized.includes('contractant')) {
-    // Si c'est un responsable (de commission interne ou de service)
     if (f.includes('responsable')) {
-      // Si c'est spécifiquement la commission interne
       if (f.includes('commission')) return '/fr/validation/dashboard/commission';
-      // Sinon (responsable_service), c'est le dashboard contractant classique
       return ROLE_REDIRECTS.service_contractant;
     }
-    // Si c'est un membre de commission
     if (f.includes('membre')) return '/fr/validation/dashboard/validator';
-
     return ROLE_REDIRECTS.service_contractant;
   }
 
-  // 3. Commission Externe / Tutelle (Logique commune simplifiée)
   if (normalized.includes('commission') || normalized.includes('tutelle')) {
     if (f.includes('responsable')) return '/fr/validation/dashboard/commission';
-    // Tout autre membre ou expert va au validator
     return '/fr/validation/dashboard/validator';
   }
 
-  // Fallback final
   return ROLE_REDIRECTS[normalized] || '/fr/dashboard/operator';
 }
 
@@ -101,7 +82,6 @@ export default function LoginPage({ params }: PageProps) {
     }
 
     try {
-      // 1. Appel à l'API de login
       const response = await fetch('/api/proxy/auth?path=auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -117,19 +97,22 @@ export default function LoginPage({ params }: PageProps) {
       const accessToken = data.access || data.access_token;
       const refreshToken = data.refresh || data.refresh_token;
 
-      // 1. Décodage du JWT
       const base64Url = accessToken.split('.')[1];
       const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
 
-      // On récupère l'ID du membre (Priorité à la réponse API 'user.id_membre')
+      // Save tokens to localStorage
+      localStorage.setItem('access_token', accessToken);
+      if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+      localStorage.setItem('user_id', String(decoded.user_id || ''));
+
+      // Get member ID
       const idMembre = data.user?.id_membre || decoded.id_membre || decoded.membre_id;
-      
-      // STOCKAGE PERSISTANT POUR LE DASHBOARD COMMISSION
       if (idMembre) {
-        localStorage.setItem('id_membre', idMembre);
+        localStorage.setItem('id_membre', String(idMembre));
+        localStorage.setItem('membre_id', String(idMembre));
       }
 
-      // 3. Mise à jour de la session globale
+      // Update global session
       setSession(accessToken, refreshToken, {
         id: decoded.user_id || 0,
         email: decoded.email || email,
@@ -138,7 +121,7 @@ export default function LoginPage({ params }: PageProps) {
         id_role: decoded.id_role
       });
 
-      // 4. Récupération de la fonction du membre
+      // Fetch member profile to determine fonction
       let fonction = '';
       if (idMembre) {
         try {
@@ -147,24 +130,16 @@ export default function LoginPage({ params }: PageProps) {
           });
           if (profileRes.ok) {
             const profileData = await profileRes.json();
-            // ALERTE CRUCIALE POUR VOIR LA STRUCTURE
-            // alert(`RÉPONSE PROFIL:\n${JSON.stringify(profileData)}`);
             fonction = profileData.fonction || (Array.isArray(profileData) ? profileData[0]?.fonction : '') || '';
-          } else {
-            //alert(`ERREUR API PROFIL: ${profileRes.status}`);
           }
         } catch (err: any) {
-          //alert(`EXCEPTION PROFIL: ${err.message}`);
+          console.error('Profile fetch error:', err.message);
         }
       }
 
-      const roleName = decoded.role || '';
+      const roleName = decoded.role || decoded.role_name || '';
       const idRole = decoded.id_role || 0;
       const redirectPath = getRedirectPath(roleName, idRole, fonction);
-
-      // ALERTE DE VÉRIFICATION FINALE
-      //alert(`VÉRIFICATION FINALE:\n- Rôle: "${roleName}"\n- Fonction: "${fonction}"\n- Redirection: "${redirectPath}"`);
-
       window.location.href = redirectPath;
 
     } catch (err: any) {
