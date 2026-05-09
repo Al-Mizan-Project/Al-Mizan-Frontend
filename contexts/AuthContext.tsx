@@ -17,6 +17,7 @@ type AuthContextType = {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
+  setSession: (token: string, refreshToken: string, user: User) => void;
   logout: () => void;
   isLoading: boolean;
 };
@@ -48,17 +49,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const data: LoginResponse = await authAPI.login(email, password);
-      setToken(data.access);
-      setUser(data.user);
-      localStorage.setItem('access_token', data.access);
-      localStorage.setItem('refresh_token', data.refresh);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setupAuthInterceptor(data.access);
-      router.push('/fr/dashboard/contractant');
+      setSession(data.access, data.refresh, data.user);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
     }
+  };
+
+  const setSession = (accessToken: string, refreshToken: string, userData: User) => {
+    setToken(accessToken);
+    setUser(userData);
+    localStorage.setItem('access_token', accessToken);
+    localStorage.setItem('refresh_token', refreshToken);
+    localStorage.setItem('user', JSON.stringify(userData));
+    setupAuthInterceptor(accessToken);
   };
 
   const logout = () => {
@@ -71,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ✅ CRITIQUE : Empêche les re-renders inutiles des enfants
   const contextValue = useMemo(() => ({
-    user, token, login, logout, isLoading
+    user, token, login, setSession, logout, isLoading
   }), [user, token, isLoading]);
 
   return (

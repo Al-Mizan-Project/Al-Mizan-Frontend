@@ -39,17 +39,12 @@ export default function DossierPage({ id, role }: DossierPageProps) {
           validationsApi.getSoumissionValidations(id)
         ]);
 
-        // 3. Detailed document metadata
-        const docs = await Promise.all(
-          (soum.document_ids || []).map(docId => documentsApi.getDocument(Number(docId)))
-        );
-
         setDossierData({
           soumission: soum,
           appelOffre: ao,
           evaluations: evals,
           validations: vals,
-          documents: docs
+          documents: [] // Suppression de la récupération des documents
         });
         setIsLoaded(true);
       } catch (err) {

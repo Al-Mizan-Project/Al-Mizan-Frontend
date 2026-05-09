@@ -3,12 +3,12 @@ import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useState, FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  faEnvelope, 
-  faLock, 
-  faEye, 
+import {
+  faEnvelope,
+  faLock,
+  faEye,
   faEyeSlash,
-  faBuildingColumns 
+  faBuildingColumns
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 
@@ -16,49 +16,36 @@ type PageProps = {
   params: Promise<{ lang: string }>;
 };
 
-// Mapping des rôles vers les URLs de redirection
 const ROLE_REDIRECTS: Record<string, string> = {
-  admin:                '/fr/system-admin',
+  admin: '/fr/system-admin',
   operateur_economique: '/fr/dashboard/operator',
-  service_contractant:  '/fr/dashboard/contractant',
-  commission_externe:   '/fr/validation/dashboard/validator',
-  tutelle:              '/fr/validation/dashboard/validator',
+  service_contractant: '/fr/dashboard/contractant',
+  commission_externe: '/fr/validation/dashboard/validator',
+  tutelle: '/fr/validation/dashboard/validator',
 };
 
-/**
- * Détermine l'URL de redirection selon le rôle extrait du token JWT.
- * Accepte aussi bien les noms bruts (ex: "Commission Externe") que
- * les formes normalisées (ex: "commission_externe").
- */
-function getRedirectPath(roleName: string, idRole: number): string {
-  // Normalisation : minuscules + espaces → underscore
-  const normalized = roleName
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '_');
+function getRedirectPath(roleName: string, idRole: number, fonction: string): string {
+  const normalized = roleName.toLowerCase().trim().replace(/\s+/g, '_');
+  const f = fonction.toLowerCase().trim();
 
-  // Correspondance exacte après normalisation
-  if (ROLE_REDIRECTS[normalized]) {
-    return ROLE_REDIRECTS[normalized];
+  if (normalized.includes('admin')) return ROLE_REDIRECTS.admin;
+  if (normalized.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
+
+  if (normalized.includes('contractant')) {
+    if (f.includes('responsable')) {
+      if (f.includes('commission')) return '/fr/validation/dashboard/commission';
+      return ROLE_REDIRECTS.service_contractant;
+    }
+    if (f.includes('membre')) return '/fr/validation/dashboard/validator';
+    return ROLE_REDIRECTS.service_contractant;
   }
 
-  // Correspondance partielle (fallback)
-  if (normalized.includes('admin'))                return ROLE_REDIRECTS.admin;
-  if (normalized.includes('operateur'))            return ROLE_REDIRECTS.operateur_economique;
-  if (normalized.includes('contractant'))          return ROLE_REDIRECTS.service_contractant;
-  if (normalized.includes('commission'))           return ROLE_REDIRECTS.commission_externe;
-  if (normalized.includes('tutelle'))              return ROLE_REDIRECTS.tutelle;
+  if (normalized.includes('commission') || normalized.includes('tutelle')) {
+    if (f.includes('responsable')) return '/fr/validation/dashboard/commission';
+    return '/fr/validation/dashboard/validator';
+  }
 
-  // Fallback par id_role si le nom ne correspond à rien
-  const idRoleMap: Record<number, string> = {
-    1: ROLE_REDIRECTS.admin,
-    2: ROLE_REDIRECTS.service_contractant,
-    3: ROLE_REDIRECTS.commission_externe,
-    4: ROLE_REDIRECTS.operateur_economique,
-    5: ROLE_REDIRECTS.tutelle,
-  };
-
-  return idRoleMap[idRole] ?? '/fr/dashboard/operator';
+  return ROLE_REDIRECTS[normalized] || '/fr/dashboard/operator';
 }
 
 export default function LoginPage({ params }: PageProps) {
@@ -69,7 +56,7 @@ export default function LoginPage({ params }: PageProps) {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { login: authLogin } = useAuth();
+  const { setSession } = useAuth();
 
   useEffect(() => {
     let isMounted = true;
@@ -83,7 +70,7 @@ export default function LoginPage({ params }: PageProps) {
 
   const isArabic = lang === 'ar';
 
- const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -94,14 +81,7 @@ export default function LoginPage({ params }: PageProps) {
       return;
     }
 
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setError(isArabic ? 'عنوان بريد إلكتروني غير صالح' : 'Adresse e-mail invalide');
-      setLoading(false);
-      return;
-    }
-
     try {
-      // 1. Appel à l'API de login
       const response = await fetch('/api/proxy/auth?path=auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,47 +90,64 @@ export default function LoginPage({ params }: PageProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.detail || errorData.error || 'Identifiants incorrects');
+        throw new Error(errorData.message || 'Identifiants incorrects');
       }
 
       const data = await response.json();
-      const accessToken  = data.access  || data.access_token;
+      const accessToken = data.access || data.access_token;
       const refreshToken = data.refresh || data.refresh_token;
 
-      if (!accessToken) {
-        throw new Error('Token non reçu dans la réponse du serveur');
+      const base64Url = accessToken.split('.')[1];
+      const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
+
+      // Save tokens to localStorage
+      localStorage.setItem('access_token', accessToken);
+      if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+      localStorage.setItem('user_id', String(decoded.user_id || ''));
+
+      // Get member ID
+      const idMembre = data.user?.id_membre || decoded.id_membre || decoded.membre_id;
+      if (idMembre) {
+        localStorage.setItem('id_membre', String(idMembre));
+        localStorage.setItem('membre_id', String(idMembre));
       }
 
-      // 1. Décodage du JWT
-   
+      // Update global session
+      setSession(accessToken, refreshToken, {
+        id: decoded.user_id || 0,
+        email: decoded.email || email,
+        id_membre: idMembre,
+        role: decoded.role,
+        id_role: decoded.id_role
+      });
 
-    
+      // Fetch member profile to determine fonction
+      let fonction = '';
+      if (idMembre) {
+        try {
+          const profileRes = await fetch(`/api/proxy/acteurs?path=membres/${idMembre}/`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+          if (profileRes.ok) {
+            const profileData = await profileRes.json();
+            fonction = profileData.fonction || (Array.isArray(profileData) ? profileData[0]?.fonction : '') || '';
+          }
+        } catch (err: any) {
+          console.error('Profile fetch error:', err.message);
+        }
+      }
 
-      const base64Url = accessToken.split('.')[1];
-const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
-
-// Save to localStorage
-localStorage.setItem('access_token', accessToken);
-if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
-localStorage.setItem('user_id', String(decoded.user_id || ''));
-if (decoded.id_membre) localStorage.setItem('membre_id', String(decoded.id_membre));
-
-// Redirect based on role
-const roleName = decoded.role || decoded.role_name || '';
-const idRole = decoded.id_role || 0;
-const redirectPath = getRedirectPath(roleName, idRole);
-window.location.href = redirectPath;
+      const roleName = decoded.role || decoded.role_name || '';
+      const idRole = decoded.id_role || 0;
+      const redirectPath = getRedirectPath(roleName, idRole, fonction);
+      window.location.href = redirectPath;
 
     } catch (err: any) {
-      if (err.response?.status === 401 || err.message?.includes('Identifiants')) {
-        setError(isArabic ? 'بيانات الدخول غير صحيحة' : 'Identifiants incorrects');
-      } else {
-        setError(err.message || (isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion'));
-      }
+      setError(err.message || 'Erreur de connexion');
     } finally {
       setLoading(false);
     }
-};
+  };
 
   return (
     <main className="min-h-screen flex flex-col lg:flex-row bg-[#FCFFFF]">
@@ -180,9 +177,9 @@ window.location.href = redirectPath;
 
           <div className="mt-12 flex flex-col gap-3 text-sm text-[#589C9F]">
             {[
-              { ar: 'متوافق مع القانون 23-12',          fr: 'Conforme Loi 23-12' },
+              { ar: 'متوافق مع القانون 23-12', fr: 'Conforme Loi 23-12' },
               { ar: 'حماية البيانات حسب القانون 18-07', fr: 'Protection des données Loi 18-07' },
-              { ar: 'استضافة سيادية جزائرية',           fr: 'Hébergement souverain algérien' },
+              { ar: 'استضافة سيادية جزائرية', fr: 'Hébergement souverain algérien' },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2 justify-center">
                 <span className="w-2 h-2 bg-[#9BCFCF] rounded-full"></span>
@@ -340,11 +337,10 @@ window.location.href = redirectPath;
                 <Link
                   key={l}
                   href={`/${l}/login`}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    lang === l
-                      ? 'bg-[#306B6F] text-white'
-                      : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
-                  }`}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${lang === l
+                    ? 'bg-[#306B6F] text-white'
+                    : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
+                    }`}
                 >
                   {l === 'fr' ? 'Français' : 'العربية'}
                 </Link>
