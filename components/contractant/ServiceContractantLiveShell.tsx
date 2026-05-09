@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import styles from './service-contractant.module.css';
 import {
   ServiceContractantProvider,
@@ -30,6 +31,7 @@ function ServiceContractantShellLayout({
   const params = useParams<{ lang: string }>();
   const pathname = usePathname();
   const lang = String(params.lang ?? 'fr');
+  const { logout } = useAuth();
   const { organisation, currentUser, member } = useServiceContractant();
 
   const currentPage = pathname.includes('/dashboard/contractant/marches')
@@ -122,6 +124,14 @@ function ServiceContractantShellLayout({
                   <small>{currentUser?.email || organisation?.email_contact || 'sc@almizan.dz'}</small>
                 </div>
               </div>
+
+              <button
+                type="button"
+                className={cn(styles.btn, styles.btnGhost)}
+                onClick={() => logout()}
+              >
+                {lang === 'ar' ? 'تسجيل الخروج' : 'Déconnexion'}
+              </button>
             </div>
           </header>
 

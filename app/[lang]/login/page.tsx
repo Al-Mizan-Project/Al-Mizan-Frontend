@@ -69,7 +69,7 @@ export default function LoginPage({ params }: PageProps) {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { login: authLogin } = useAuth();
+  const { setSession } = useAuth();
 
   useEffect(() => {
     let isMounted = true;
@@ -132,14 +132,16 @@ export default function LoginPage({ params }: PageProps) {
 
       // 2. On prépare l'objet utilisateur à partir des infos du token (ou de data.user si ton backend l'envoie)
       const userData = {
-        email: decoded.email || email,
+        id: decoded.user_id || data.user?.id || 0,
+        id_utilisateur: decoded.user_id || data.user?.id,
+        email: decoded.email || data.user?.email || email,
         id_membre: decoded.id_membre,
         role: decoded.role,
         id_role: decoded.id_role
       };
 
       // 3. 🚀 On met à jour l'état global React (PLUS D'ERREUR CORS !)
-      authLogin(accessToken, refreshToken, userData);
+      setSession(accessToken, refreshToken, userData);
 
       // 4. Redirection gérée par la page (plus dynamique que le context)
       const roleName = decoded.role || decoded.role_name || '';

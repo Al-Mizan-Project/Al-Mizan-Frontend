@@ -303,9 +303,18 @@ export function toBadgeFromStatus(value: string | null | undefined): BadgeData {
   return { label: value || '—', tone: 'gray' };
 }
 
+function normalizePermissionName(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_');
+}
+
 const permissionFallbackMap = new Map(
   permissionFallbacks.map((permission) => [
-    permission.name,
+    normalizePermissionName(permission.name),
     { pages: permission.pages, features: permission.features } satisfies PermissionMeta,
   ])
 );
@@ -337,10 +346,12 @@ export function getPermissionMeta(
   permission: AuthPermission,
   overrides: Record<string, PermissionMeta>
 ): PermissionMeta {
+  const normalizedPermissionName = normalizePermissionName(permission.nom_permission);
   return (
     overrides[String(permission.id_permission)] ||
     overrides[permission.nom_permission] ||
-    permissionFallbackMap.get(permission.nom_permission) || {
+    overrides[normalizedPermissionName] ||
+    permissionFallbackMap.get(normalizedPermissionName) || {
       pages: [],
       features: [],
     }
