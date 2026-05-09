@@ -122,31 +122,24 @@ export default function LoginPage({ params }: PageProps) {
       }
 
       // 1. Décodage du JWT
+   
+
+    
+
       const base64Url = accessToken.split('.')[1];
-      const decoded   = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
+const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
 
-      // On sauvegarde l'id_membre pour un accès rapide si besoin
-      if (decoded.id_membre) {
-        localStorage.setItem('membre_id', String(decoded.id_membre));
-      }
+// Save to localStorage
+localStorage.setItem('access_token', accessToken);
+if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+localStorage.setItem('user_id', String(decoded.user_id || ''));
+if (decoded.id_membre) localStorage.setItem('membre_id', String(decoded.id_membre));
 
-      // 2. On prépare l'objet utilisateur à partir des infos du token (ou de data.user si ton backend l'envoie)
-      const userData = {
-        email: decoded.email || email,
-        id_membre: decoded.id_membre,
-        role: decoded.role,
-        id_role: decoded.id_role
-      };
-
-      // 3. 🚀 On met à jour l'état global React (PLUS D'ERREUR CORS !)
-      authLogin(accessToken, refreshToken, userData);
-
-      // 4. Redirection gérée par la page (plus dynamique que le context)
-      const roleName = decoded.role || decoded.role_name || '';
-      const idRole   = decoded.id_role || 0;
-      const redirectPath = getRedirectPath(roleName, idRole);
-
-      window.location.href = redirectPath;
+// Redirect based on role
+const roleName = decoded.role || decoded.role_name || '';
+const idRole = decoded.id_role || 0;
+const redirectPath = getRedirectPath(roleName, idRole);
+window.location.href = redirectPath;
 
     } catch (err: any) {
       if (err.response?.status === 401 || err.message?.includes('Identifiants')) {
