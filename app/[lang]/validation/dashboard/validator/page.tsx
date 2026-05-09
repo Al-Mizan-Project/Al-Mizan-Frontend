@@ -41,17 +41,18 @@ export default function ValidatorPage(props: ValidatorPageProps) {
       if (!token || !user) return;
 
       try {
+        const CURRENT_VALIDATOR_ID = user.id_utilisateur;
+
         // On utilise les APIs officielles qui gèrent le bypass 401 via proxy
+        // OPTIMISATION : On ne récupère que les validations de cet expert
         const [soumissionsRaw, evaluationsRaw, validationsRaw] = await Promise.all([
           soumissionsApi.getSoumissions(),
           evaluationsApi.getEvaluations(),
-          validationsApi.getValidations(),
+          validationsApi.getValidations({ id_utilisateur: CURRENT_VALIDATOR_ID }),
         ]);
 
         const soumissions: any[] = Array.isArray(soumissionsRaw) ? soumissionsRaw : (soumissionsRaw as any).results ?? [];
         const validations: any[] = Array.isArray(validationsRaw) ? validationsRaw : (validationsRaw as any).results ?? [];
-
-        const CURRENT_VALIDATOR_ID = user.id_utilisateur;
         const validatorSubmissions: any[] = [];
 
         // On parcourt toutes les soumissions
@@ -88,7 +89,7 @@ export default function ValidatorPage(props: ValidatorPageProps) {
               },
               submissionDate: s.date_soumission ? new Date(s.date_soumission).toISOString().split('T')[0] : '—',
               assignmentDate: new Date(val.created_at).toISOString().split('T')[0],
-              validationDeadline: deadline.toISOString().split('T')[0],
+              validationDeadline: '7 Jours',
               status: subStatus,
               delayDays: delayDays > 0 ? delayDays : undefined,
               etape: 'Validation en cours',

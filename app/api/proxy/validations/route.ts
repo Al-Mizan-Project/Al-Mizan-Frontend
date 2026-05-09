@@ -5,7 +5,7 @@ const CONTRATS_BASE = process.env.NEXT_PUBLIC_CONTRATS_SERVICE_URL || 'http://lo
 
 const options = {
   baseUrl: CONTRATS_BASE,
-  defaultPath: 'validations',
+  defaultPath: 'validations/',
   errorLabel: 'ValidationsProxy',
 };
 

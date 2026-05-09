@@ -6,7 +6,7 @@ import StatCard from '../../components/dashboard/StatsCard';
 import DelayChart from '../../components/dashboard/DelayChart';
 import EmployeeChart from '../../components/dashboard/EmployeeChart';
 import FilesTable from '../../components/dashboard/FilesTable';
-import { useValidationAuth } from '../../context/ValidationAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Import des APIs officielles
 import { soumissionsApi } from '@/lib/api/soumissions';
@@ -29,7 +29,7 @@ export default function CommissionPage(props: CommissionPageProps) {
   const { lang } = use(params);
   const { status: statusParam } = use(searchParams);
   const router = useRouter();
-  const { token, isLoading: authLoading } = useValidationAuth();
+  const { token, user, isLoading: authLoading } = useAuth();
 
   const currentStatus: DashboardStatus = tabs.includes(statusParam as DashboardStatus)
     ? (statusParam as DashboardStatus)
@@ -37,112 +37,105 @@ export default function CommissionPage(props: CommissionPageProps) {
 
   const [allSubmissions, setAllSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [transmitting, setTransmitting] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const effectiveToken =
-          token ||
-          localStorage.getItem('access_token') ||
-          localStorage.getItem('authToken') ||
-          localStorage.getItem('token') ||
-          localStorage.getItem('validation_token');
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const effectiveToken =
+        token ||
+        localStorage.getItem('access_token') ||
+        localStorage.getItem('authToken') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('validation_token');
 
-        if (!effectiveToken && !authLoading) {
-          router.push(`/${lang}/validation/login`);
-          return;
-        }
+      if (!effectiveToken && !authLoading) {
+        router.push(`/${lang}/login`);
+        return;
+      }
 
-        // On n'envoie pas de Authorization header aux proxies car ils utilisent 
-        // le X-Internal-Service-Token qui suffit et évite les erreurs 401 si le JWT est expiré.
-        
-        // ── Étape 1 : identifier les services liés aux commissions ────────
-        const commissionsRaw = await fetch('/api/proxy/contractant?path=commissions-internes')
-          .then(r => r.ok ? r.json() : []);
+      const [soumissionsRaw, evaluationsRaw, validationsRaw] = await Promise.all([
+        soumissionsApi.getSoumissions(),
+        evaluationsApi.getEvaluations(),
+        validationsApi.getValidations(),
+      ]);
 
-        const commissions = Array.isArray(commissionsRaw) ? commissionsRaw : (commissionsRaw.results ?? []);
+      const soumissions = Array.isArray(soumissionsRaw) ? soumissionsRaw : (soumissionsRaw as any).results ?? [];
+      const evaluations = Array.isArray(evaluationsRaw) ? evaluationsRaw : (evaluationsRaw as any).results ?? [];
+      const validations = Array.isArray(validationsRaw) ? validationsRaw : (validationsRaw as any).results ?? [];
 
-        // Stratégie : On collecte tous les services liés aux commissions internes.
-        // En mode test, on affiche les soumissions de tous les services si on ne peut pas filtrer par utilisateur.
-        const allServiceIds = [...new Set(commissions.filter((c: any) => c.id_service).map((c: any) => Number(c.id_service)))];
+      const filteredSoums = soumissions;
 
-        // ── Étape 2 : Utilisation des APIs officielles ───────────────────
-        const [soumissionsRaw, evaluationsRaw, validationsRaw] = await Promise.all([
-          soumissionsApi.getSoumissions(),
-          evaluationsApi.getEvaluations(),
-          validationsApi.getValidations(),
-        ]);
+      const processed = filteredSoums
+        .filter((s: any) => {
+          const sEvals = evaluations.filter((e: any) => Number(e.id_soumission) === Number(s.id_soumission));
+          const types = sEvals.map((e: any) => (e.type ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
 
-        const soumissions = Array.isArray(soumissionsRaw) ? soumissionsRaw : (soumissionsRaw as any).results ?? [];
-        const evaluations = Array.isArray(evaluationsRaw) ? evaluationsRaw : (evaluationsRaw as any).results ?? [];
-        const validations = Array.isArray(validationsRaw) ? validationsRaw : (validationsRaw as any).results ?? [];
+          const hasAdm = types.includes('administrative');
+          const hasTec = types.includes('technique');
+          const hasFin = types.includes('financiere');
 
-        // ── Étape 3 : identifier les appels d'offres des services ─────────
-        let allowedAoIds = new Set<number>();
-        for (const svcId of allServiceIds) {
-          try {
-            const appelsRaw = await fetch(`/api/proxy/appels?path=services-contractants/${svcId}/appels-offres`)
-              .then(r => r.ok ? r.json() : []);
-            const appels = Array.isArray(appelsRaw) ? appelsRaw : (appelsRaw.results ?? []);
-            appels.forEach((a: any) => allowedAoIds.add(Number(a.id_appel_offres)));
-          } catch { /* silence */ }
-        }
+          return hasAdm && hasTec && hasFin;
+        })
+        .map((s: any) => {
+          const val = validations.find((v: any) => Number(v.id_soumission) === Number(s.id_soumission));
+          let subStatus: DashboardStatus = 'En Attente';
+          let delayDays = 0;
 
-        // ── Étape 4 : Filtrage et mapping ────────────────────────────────
-        const filteredSoums = soumissions.filter((s: any) => allowedAoIds.has(Number(s.id_appel_offre)));
-
-        const processed = filteredSoums
-          .filter((s: any) => {
-            const sEvals = evaluations.filter((e: any) => Number(e.id_soumission) === Number(s.id_soumission));
-            const types = sEvals.map((e: any) => (e.type ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-            const hasAdm = types.includes('administrative');
-            const hasTec = types.includes('technique');
-            // 'financiere' ou 'financière' normalisé
-            const hasFin = types.includes('financiere');
-            return hasAdm && hasTec && hasFin;
-          })
-          .map((s: any) => {
-            const val = validations.find((v: any) => Number(v.id_soumission) === Number(s.id_soumission));
-            let subStatus: DashboardStatus = 'En Attente';
-            let delayDays = 0;
-
-            if (val) {
-              if (val.is_validated) {
-                subStatus = 'Prêt';
+          if (val) {
+            if (val.is_validated) {
+              subStatus = 'Prêt';
+            } else {
+              const deadline = new Date(val.created_at || new Date());
+              deadline.setDate(deadline.getDate() + 7);
+              if (new Date() > deadline) {
+                subStatus = 'En Retard';
+                delayDays = Math.floor((Date.now() - deadline.getTime()) / (1000 * 3600 * 24));
               } else {
-                const deadline = new Date(val.created_at || new Date());
-                deadline.setDate(deadline.getDate() + 7);
-                if (new Date() > deadline) {
-                  subStatus = 'En Retard';
-                  delayDays = Math.floor((Date.now() - deadline.getTime()) / (1000 * 3600 * 24));
-                } else {
-                  subStatus = 'En Cours';
-                }
+                subStatus = 'En Cours';
               }
             }
+          }
 
-            return {
-              id: `ID-${String(s.id_soumission).padStart(3, '0')}`,
-              rawId: s.id_soumission,
-              reference: `Dossier ${s.id_soumission}`,
-              economicOperator: 'Opérateur',
-              submissionDate: s.date_soumission ? new Date(s.date_soumission).toISOString().split('T')[0] : '—',
-              status: subStatus,
-              delayDays: delayDays > 0 ? delayDays : undefined,
-              etape: 'Evaluation Administrative',
-            };
-          });
+          return {
+            id: `ID-${String(s.id_soumission).padStart(3, '0')}`,
+            rawId: s.id_soumission,
+            reference: `Dossier ${s.id_soumission}`,
+            economicOperator: 'Opérateur',
+            submissionDate: s.date_soumission ? new Date(s.date_soumission).toISOString().split('T')[0] : '—',
+            status: subStatus,
+            delayDays: delayDays > 0 ? delayDays : undefined,
+            validationDeadline: '7 Jours',
+            etape: 'Evaluation Administrative',
+          };
+        });
 
-        setAllSubmissions(processed);
-      } catch (err) {
-        console.error('Erreur dashboard commission:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+      setAllSubmissions(processed);
+    } catch (err) {
+      console.error('Erreur dashboard commission:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const handleTransmit = async (dossier: any) => {
+    if (!confirm('Voulez-vous vraiment transmettre ce dossier ?')) return;
+    try {
+      setTransmitting(true);
+      await validationsApi.transmitDossier(dossier.rawId);
+      await fetchData();
+      alert('Dossier transmis avec succès aux responsables compétents.');
+    } catch (err: any) {
+      console.error('Erreur transmission:', err);
+      alert(`Erreur: ${err.message}`);
+    } finally {
+      setTransmitting(false);
+    }
+  };
+
+  useEffect(() => {
     if (!authLoading) fetchData();
-  }, [token, authLoading, router, lang]);
+  }, [token, user, authLoading, router, lang]);
 
   const tableData = useMemo(() =>
     currentStatus === 'overview' ? allSubmissions : allSubmissions.filter(s => s.status === currentStatus),
@@ -234,7 +227,11 @@ export default function CommissionPage(props: CommissionPageProps) {
               status={currentStatus as Exclude<DashboardStatus, 'overview'>}
               lang={lang}
               onAffecter={(dossier: any) => {
-                router.push(`/${lang}/validation/affectation/${dossier.rawId || dossier.id.replace('ID-', '')}`);
+                if (dossier.status === 'Prêt') {
+                  handleTransmit(dossier);
+                } else {
+                  router.push(`/${lang}/validation/affectation/${dossier.rawId || dossier.id.replace('ID-', '')}`);
+                }
               }}
             />
           ))}

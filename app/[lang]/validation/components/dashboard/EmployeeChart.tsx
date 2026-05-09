@@ -71,7 +71,7 @@ export default function EmployeeChart({ data, title, legends ,lang}: EmployeeCha
       </div>
       
       <div className="h-[280px] w-full" style={{ overflow: 'visible' }}>
-        <ResponsiveContainer width="100%" height="100%" minHeight={280} minWidth={0}>
+        <ResponsiveContainer width="100%" height={280}>
           <BarChart 
             data={data} 
             margin={{ top: 10, right: 10, left: 0, bottom: 30 }}
@@ -111,13 +111,11 @@ export default function EmployeeChart({ data, title, legends ,lang}: EmployeeCha
             />
             <Tooltip 
               contentStyle={{ 
-                backgroundColor: 'var(--color-white)', 
-                border: '1px solid var(--color-gray-200)',
+                backgroundColor: '#ffffff', 
+                border: '1px solid #dde1e6',
                 borderRadius: '8px',
-                fontFamily: 'Inter, sans-serif',
                 fontSize: '12px'
               }}
-              cursor={{ fill: 'var(--color-gray-100)' }}
             />
             <Bar 
               dataKey="evaluation" 

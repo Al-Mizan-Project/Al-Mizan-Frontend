@@ -3,12 +3,12 @@ import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useState, FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  faEnvelope, 
-  faLock, 
-  faEye, 
+import {
+  faEnvelope,
+  faLock,
+  faEye,
   faEyeSlash,
-  faBuildingColumns 
+  faBuildingColumns
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 
@@ -18,11 +18,11 @@ type PageProps = {
 
 // Mapping des rôles vers les URLs de redirection
 const ROLE_REDIRECTS: Record<string, string> = {
-  admin:                '/fr/system-admin',
+  admin: '/fr/system-admin',
   operateur_economique: '/fr/dashboard/operator',
-  service_contractant:  '/fr/dashboard/contractant',
-  commission_externe:   '/fr/validation/dashboard/validator',
-  tutelle:              '/fr/validation/dashboard/validator',
+  service_contractant: '/fr/dashboard/contractant',
+  commission_externe: '/fr/validation/dashboard/validator',
+  tutelle: '/fr/validation/dashboard/validator',
 };
 
 /**
@@ -30,35 +30,41 @@ const ROLE_REDIRECTS: Record<string, string> = {
  * Accepte aussi bien les noms bruts (ex: "Commission Externe") que
  * les formes normalisées (ex: "commission_externe").
  */
-function getRedirectPath(roleName: string, idRole: number): string {
-  // Normalisation : minuscules + espaces → underscore
-  const normalized = roleName
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '_');
+/**
+ * Détermine l'URL de redirection selon le rôle et la fonction du membre.
+ */
+function getRedirectPath(roleName: string, idRole: number, fonction: string): string {
+  const normalized = roleName.toLowerCase().trim().replace(/\s+/g, '_');
+  const f = fonction.toLowerCase().trim();
 
-  // Correspondance exacte après normalisation
-  if (ROLE_REDIRECTS[normalized]) {
-    return ROLE_REDIRECTS[normalized];
+  // 1. Admin et Opérateur
+  if (normalized.includes('admin')) return ROLE_REDIRECTS.admin;
+  if (normalized.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
+
+  // 2. SERVICE Contractant
+  if (normalized.includes('contractant')) {
+    // Si c'est un responsable (de commission interne ou de service)
+    if (f.includes('responsable')) {
+      // Si c'est spécifiquement la commission interne
+      if (f.includes('commission')) return '/fr/validation/dashboard/commission';
+      // Sinon (responsable_service), c'est le dashboard contractant classique
+      return ROLE_REDIRECTS.service_contractant;
+    }
+    // Si c'est un membre de commission
+    if (f.includes('membre')) return '/fr/validation/dashboard/validator';
+
+    return ROLE_REDIRECTS.service_contractant;
   }
 
-  // Correspondance partielle (fallback)
-  if (normalized.includes('admin'))                return ROLE_REDIRECTS.admin;
-  if (normalized.includes('operateur'))            return ROLE_REDIRECTS.operateur_economique;
-  if (normalized.includes('contractant'))          return ROLE_REDIRECTS.service_contractant;
-  if (normalized.includes('commission'))           return ROLE_REDIRECTS.commission_externe;
-  if (normalized.includes('tutelle'))              return ROLE_REDIRECTS.tutelle;
+  // 3. Commission Externe / Tutelle (Logique commune simplifiée)
+  if (normalized.includes('commission') || normalized.includes('tutelle')) {
+    if (f.includes('responsable')) return '/fr/validation/dashboard/commission';
+    // Tout autre membre ou expert va au validator
+    return '/fr/validation/dashboard/validator';
+  }
 
-  // Fallback par id_role si le nom ne correspond à rien
-  const idRoleMap: Record<number, string> = {
-    1: ROLE_REDIRECTS.admin,
-    2: ROLE_REDIRECTS.service_contractant,
-    3: ROLE_REDIRECTS.commission_externe,
-    4: ROLE_REDIRECTS.operateur_economique,
-    5: ROLE_REDIRECTS.tutelle,
-  };
-
-  return idRoleMap[idRole] ?? '/fr/dashboard/operator';
+  // Fallback final
+  return ROLE_REDIRECTS[normalized] || '/fr/dashboard/operator';
 }
 
 export default function LoginPage({ params }: PageProps) {
@@ -69,7 +75,7 @@ export default function LoginPage({ params }: PageProps) {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { login: authLogin } = useAuth();
+  const { setSession } = useAuth();
 
   useEffect(() => {
     let isMounted = true;
@@ -83,19 +89,13 @@ export default function LoginPage({ params }: PageProps) {
 
   const isArabic = lang === 'ar';
 
- const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     if (!email || !password) {
       setError(isArabic ? 'هذا الحقل مطلوب' : 'Ce champ est obligatoire');
-      setLoading(false);
-      return;
-    }
-
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setError(isArabic ? 'عنوان بريد إلكتروني غير صالح' : 'Adresse e-mail invalide');
       setLoading(false);
       return;
     }
@@ -110,54 +110,69 @@ export default function LoginPage({ params }: PageProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.detail || errorData.error || 'Identifiants incorrects');
+        throw new Error(errorData.message || 'Identifiants incorrects');
       }
 
       const data = await response.json();
-      const accessToken  = data.access  || data.access_token;
+      const accessToken = data.access || data.access_token;
       const refreshToken = data.refresh || data.refresh_token;
-
-      if (!accessToken) {
-        throw new Error('Token non reçu dans la réponse du serveur');
-      }
 
       // 1. Décodage du JWT
       const base64Url = accessToken.split('.')[1];
-      const decoded   = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
+      const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
 
-      // On sauvegarde l'id_membre pour un accès rapide si besoin
-      if (decoded.id_membre) {
-        localStorage.setItem('membre_id', String(decoded.id_membre));
+      // On récupère l'ID du membre (Priorité à la réponse API 'user.id_membre')
+      const idMembre = data.user?.id_membre || decoded.id_membre || decoded.membre_id;
+      
+      // STOCKAGE PERSISTANT POUR LE DASHBOARD COMMISSION
+      if (idMembre) {
+        localStorage.setItem('id_membre', idMembre);
       }
 
-      // 2. On prépare l'objet utilisateur à partir des infos du token (ou de data.user si ton backend l'envoie)
-      const userData = {
+      // 3. Mise à jour de la session globale
+      setSession(accessToken, refreshToken, {
+        id: decoded.user_id || 0,
         email: decoded.email || email,
-        id_membre: decoded.id_membre,
+        id_membre: idMembre,
         role: decoded.role,
         id_role: decoded.id_role
-      };
+      });
 
-      // 3. 🚀 On met à jour l'état global React (PLUS D'ERREUR CORS !)
-      authLogin(accessToken, refreshToken, userData);
+      // 4. Récupération de la fonction du membre
+      let fonction = '';
+      if (idMembre) {
+        try {
+          const profileRes = await fetch(`/api/proxy/acteurs?path=membres/${idMembre}/`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+          if (profileRes.ok) {
+            const profileData = await profileRes.json();
+            // ALERTE CRUCIALE POUR VOIR LA STRUCTURE
+            // alert(`RÉPONSE PROFIL:\n${JSON.stringify(profileData)}`);
+            fonction = profileData.fonction || (Array.isArray(profileData) ? profileData[0]?.fonction : '') || '';
+          } else {
+            //alert(`ERREUR API PROFIL: ${profileRes.status}`);
+          }
+        } catch (err: any) {
+          //alert(`EXCEPTION PROFIL: ${err.message}`);
+        }
+      }
 
-      // 4. Redirection gérée par la page (plus dynamique que le context)
-      const roleName = decoded.role || decoded.role_name || '';
-      const idRole   = decoded.id_role || 0;
-      const redirectPath = getRedirectPath(roleName, idRole);
+      const roleName = decoded.role || '';
+      const idRole = decoded.id_role || 0;
+      const redirectPath = getRedirectPath(roleName, idRole, fonction);
+
+      // ALERTE DE VÉRIFICATION FINALE
+      //alert(`VÉRIFICATION FINALE:\n- Rôle: "${roleName}"\n- Fonction: "${fonction}"\n- Redirection: "${redirectPath}"`);
 
       window.location.href = redirectPath;
 
     } catch (err: any) {
-      if (err.response?.status === 401 || err.message?.includes('Identifiants')) {
-        setError(isArabic ? 'بيانات الدخول غير صحيحة' : 'Identifiants incorrects');
-      } else {
-        setError(err.message || (isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion'));
-      }
+      setError(err.message || 'Erreur de connexion');
     } finally {
       setLoading(false);
     }
-};
+  };
 
   return (
     <main className="min-h-screen flex flex-col lg:flex-row bg-[#FCFFFF]">
@@ -187,9 +202,9 @@ export default function LoginPage({ params }: PageProps) {
 
           <div className="mt-12 flex flex-col gap-3 text-sm text-[#589C9F]">
             {[
-              { ar: 'متوافق مع القانون 23-12',          fr: 'Conforme Loi 23-12' },
+              { ar: 'متوافق مع القانون 23-12', fr: 'Conforme Loi 23-12' },
               { ar: 'حماية البيانات حسب القانون 18-07', fr: 'Protection des données Loi 18-07' },
-              { ar: 'استضافة سيادية جزائرية',           fr: 'Hébergement souverain algérien' },
+              { ar: 'استضافة سيادية جزائرية', fr: 'Hébergement souverain algérien' },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2 justify-center">
                 <span className="w-2 h-2 bg-[#9BCFCF] rounded-full"></span>
@@ -347,11 +362,10 @@ export default function LoginPage({ params }: PageProps) {
                 <Link
                   key={l}
                   href={`/${l}/login`}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    lang === l
-                      ? 'bg-[#306B6F] text-white'
-                      : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
-                  }`}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${lang === l
+                    ? 'bg-[#306B6F] text-white'
+                    : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
+                    }`}
                 >
                   {l === 'fr' ? 'Français' : 'العربية'}
                 </Link>

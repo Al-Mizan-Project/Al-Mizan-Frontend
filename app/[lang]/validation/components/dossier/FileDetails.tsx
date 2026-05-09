@@ -390,13 +390,14 @@ export default function FileDetails({
                       'retenu_reserve': 'Dossier retenu sous réserve'
                     };
 
-                    const fullComment = `${decisionLabels[decision] || 'Décision prise'} : ${motivation || avisFinal || 'Aucun commentaire'}`;
+                    const motivationPart = motivation ? `Motivation: ${motivation}` : '';
+                    const avisPart = avisFinal ? `Avis final: ${avisFinal}` : '';
+                    const fullComment = `${decisionLabels[decision] || 'Décision prise'}. ${motivationPart}. ${avisPart}`.trim();
 
-                    if (decision === 'retenu') {
-                      await validationsApi.approveValidation(validationId, fullComment);
-                    } else {
-                      await validationsApi.rejectValidation(validationId, fullComment);
-                    }
+                    // Dans tous les cas (retenu ou rejeté), on marque l'affectation comme TERMINEE (is_validated = True)
+                    // La décision réelle est portée par le commentaire.
+                    await validationsApi.approveValidation(validationId, fullComment);
+                    
                     setShowModal(false);
                     router.push(`/${lang}/validation/dashboard/validator`);
                   } catch (err: any) {
