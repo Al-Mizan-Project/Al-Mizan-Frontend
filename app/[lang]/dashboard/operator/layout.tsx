@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { useState } from 'react';
+import { usePathname, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -22,31 +22,14 @@ import {
 
 export default function OperatorDashboardLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ lang: string }>;
 }) {
-  const [lang, setLang] = useState<string>('');
+  
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadLang = async () => {
-      const resolvedParams = await params;
-      if (isMounted) {
-        setLang(resolvedParams.lang);
-      }
-    };
-
-    loadLang();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [params]);
+const { lang } = useParams() as { lang: string };
 
   const isArabic = lang === 'ar';
 

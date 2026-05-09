@@ -45,10 +45,10 @@ export type SoumissionApi = {
   } | null;
 };
 
-const APPELS_BASE = process.env.NEXT_PUBLIC_APPELS_SERVICE_URL || 'http://localhost:18083';
-const DOCUMENTS_BASE = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8003';
-const SOUMISSIONS_BASE = process.env.NEXT_PUBLIC_SOUMISSIONS_SERVICE_URL || 'http://localhost:8004';
-const IA_BASE = process.env.NEXT_PUBLIC_IA_SERVICE_URL || 'http://localhost:18088';
+const APPELS_BASE = process.env.NEXT_PUBLIC_APPELS_SERVICE_URL || 'http://localhost:8081';
+const DOCUMENTS_BASE = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8081';
+const SOUMISSIONS_BASE = process.env.NEXT_PUBLIC_SOUMISSIONS_SERVICE_URL || 'http://localhost:8081';
+const IA_BASE = process.env.NEXT_PUBLIC_IA_SERVICE_URL || 'http://localhost:8081';
 
 function getAuthToken(): string {
   if (typeof window === 'undefined') {
@@ -120,7 +120,7 @@ export async function fetchDocumentsByIds(ids: number[]): Promise<DocumentApi[]>
 }
 
 export async function fetchOperatorDocuments(operatorId: number): Promise<DocumentApi[]> {
-  const query = new URLSearchParams({ related_type: `operator:${operatorId}` });
+  const query = new URLSearchParams({ id_operateur_economique: String(operatorId) });
   const payload = await fetchJson<unknown>(`${DOCUMENTS_BASE}/api/documents/search/?${query.toString()}`);
   return resolveListPayload<DocumentApi>(payload);
 }
@@ -135,15 +135,15 @@ export async function uploadDocument(args: {
   formData.append('related_type', args.relatedType);
   formData.append('is_encrypted', args.isEncrypted ? 'true' : 'false');
 
-  const payload = await fetchJson<DocumentApi | { documents: DocumentApi }>(`${DOCUMENTS_BASE}/api/documents/`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if ('id_document' in payload) {
-    return payload;
-  }
-
+  const payload = await fetchJson<DocumentApi | { documents: DocumentApi }>(
+    `${DOCUMENTS_BASE}/api/documents/`,
+    {
+      method: 'POST',
+      body: formData,
+      ...withAuthHeaders(), 
+    }
+  );
+  if ('id_document' in payload) return payload;
   return payload.documents;
 }
 
@@ -175,8 +175,7 @@ export async function createSoumission(payload: {
 }
 
 export async function fetchSoumissionsByOperator(operatorId: number): Promise<SoumissionApi[]> {
-  const query = new URLSearchParams({ id_soumissionnaire: String(operatorId) });
-  const payload = await fetchJson<unknown>(`${SOUMISSIONS_BASE}/api/soumissions/?${query.toString()}`);
+  const payload = await fetchJson<unknown>(`${SOUMISSIONS_BASE}/api/operateurs-economiques/${operatorId}/soumissions`, withAuthHeaders());
   return resolveListPayload<SoumissionApi>(payload);
 }
 
@@ -203,5 +202,75 @@ export async function runConformiteAuto(payload: {
       provided_document_ids: payload.providedDocumentIds,
       perform_ocr: payload.performOcr ?? true,
     }),
+  });
+}
+
+
+
+const AUTH_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+const ACTEURS_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+
+export type MembreProfileApi = {
+  id_membre: string;
+  nom: string;
+  prenom: string;
+  telephone: string;
+  fonction: string;
+  created_at: string;
+  updated_at: string;
+  organisation: {
+    id_organisation: string;
+    nom_officiel: string;
+    type_entite: string;
+    type_entite_display: string;
+    adresse_siege: string;
+    email_contact: string;
+  };
+};
+
+export type NotificationApi = {
+  id: number;
+  utilisateur_id: number;
+  type_notification: string;
+  titre: string;
+  message: string;
+  priorite: string;
+  categorie: string;
+  entite_liee_type: string;
+  entite_liee_id: number;
+  statut: string;
+  created_at: string;
+  sent_at: string;
+  read_at: string | null;
+};
+
+export async function fetchMembreProfile(membreId: string): Promise<MembreProfileApi> {
+  return fetchJson<MembreProfileApi>(
+    `${ACTEURS_BASE}/membres/${membreId}/`,
+    withAuthHeaders()
+  );
+}
+
+export async function fetchUserNotifications(userId: number): Promise<NotificationApi[]> {
+  const payload = await fetchJson<unknown>(
+    `${AUTH_BASE}/users/${userId}/notifications`,
+    withAuthHeaders()
+  );
+  return resolveListPayload<NotificationApi>(payload);
+}
+
+export async function markNotificationAsRead(notificationId: number): Promise<void> {
+  await fetchJson<unknown>(
+    `${AUTH_BASE}/notifications/${notificationId}/marquer-lu`,
+    { method: 'POST', ...withAuthHeaders() }
+  );
+}
+
+export async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
+  await fetchJson<unknown>(`${AUTH_BASE}/auth/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    ...withAuthHeaders(),
   });
 }
