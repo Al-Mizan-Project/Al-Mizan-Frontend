@@ -1,24 +1,23 @@
 'use client';
 
-import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useState, FormEvent } from 'react';
+import Link from 'next/link';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useAuth } from '@/lib/auth';  // ✅ new auth context
+import { useAuth } from '@/lib/auth'; // Assurez-vous d'importer depuis le bon chemin (lib ou contexts)
 import { 
   faEnvelope, 
   faLock, 
   faEye, 
   faEyeSlash,
-  faBuildingColumns
+  faBuildingColumns,
+  faArrowRight
 } from '@fortawesome/free-solid-svg-icons';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 type PageProps = {
   params: Promise<{ lang: string }>;
 };
 
-// Mapping des rôles vers les URLs de redirection (identique à l'original)
+// Mapping des rôles vers les URLs de redirection
 const ROLE_REDIRECTS: Record<string, string> = {
   admin:                    '/fr/system-admin',
   operateur_economique:     '/fr/dashboard/operator',
@@ -30,32 +29,51 @@ const ROLE_REDIRECTS: Record<string, string> = {
   evaluateur_administratif: '/fr/evaluateur-admin',
 };
 
-function getRedirectPath(roleName: string, idRole: number): string {
-  const normalized = roleName.toLowerCase().trim().replace(/\s+/g, '_');
-  if (ROLE_REDIRECTS[normalized]) return ROLE_REDIRECTS[normalized];
-  if (normalized.includes('admin'))   return ROLE_REDIRECTS.admin;
-  if (normalized.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
-  if (normalized.includes('contractant')) return ROLE_REDIRECTS.service_contractant;
-  if (normalized.includes('commission')) return ROLE_REDIRECTS.commission_externe;
-  if (normalized.includes('tutelle')) return ROLE_REDIRECTS.tutelle;
-  const idRoleMap: Record<number, string> = {
-    1: ROLE_REDIRECTS.admin,
-    2: ROLE_REDIRECTS.service_contractant,
+/**
+ * Logique de redirection finale (Combinaison Rôle + Fonction)
+ */
+function getRedirectPath(roleName: string, idRole: number, fonction: string = ''): string {
+  const role = roleName.toLowerCase().trim().replace(/\s+/g, '_');
+  const f = fonction.toLowerCase().trim();
+
+  // 1. Tests par nom de rôle (String)
+  if (role.includes('admin')) return ROLE_REDIRECTS.admin;
+  if (role.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
+  
+  // Logique spécifique pour les commissions et contractants
+  if (role.includes('contractant') || role.includes('commission') || role.includes('tutelle')) {
+    if (f.includes('responsable') && f.includes('commission')) return '/fr/validation/dashboard/commission';
+    if (f.includes('responsable')) {
+      return role.includes('contractant') ? ROLE_REDIRECTS.service_contractant : ROLE_REDIRECTS.commission_externe;
+    }
+    // Par défaut pour ces rôles
+    if (role.includes('contractant')) return ROLE_REDIRECTS.service_contractant;
+    if (role.includes('commission')) return ROLE_REDIRECTS.commission_externe;
+    if (role.includes('tutelle')) return ROLE_REDIRECTS.tutelle;
+  }
+
+  // 2. Correction du Fallback par ID (selon ta table)
+  const idMap: Record<number, string> = { 
+    1: ROLE_REDIRECTS.service_contractant, 
+    2: ROLE_REDIRECTS.operateur_economique,
     3: ROLE_REDIRECTS.commission_externe,
-    4: ROLE_REDIRECTS.operateur_economique,
-    5: ROLE_REDIRECTS.tutelle,
+    4: ROLE_REDIRECTS.tutelle,
+    5: ROLE_REDIRECTS.admin 
   };
-  return idRoleMap[idRole] ?? '/fr/dashboard/operator';
+
+  // On retourne la redirection par ID, sinon on renvoie vers l'opérateur en dernier recours
+  return idMap[idRole] || ROLE_REDIRECTS.operateur_economique;
 }
 
 export default function LoginPage({ params }: PageProps) {
-  const [lang, setLang] = useState<string>('');
+  const [lang, setLang] = useState<string>('fr');
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [remember, setRemember] = useState(false);
+  
   const { setSession } = useAuth();
 
   useEffect(() => {
@@ -75,62 +93,80 @@ export default function LoginPage({ params }: PageProps) {
     setError(null);
     setLoading(true);
 
-    if (!email || !password) {
-      setError(isArabic ? 'هذا الحقل مطلوب' : 'Ce champ est obligatoire');
-      setLoading(false);
-      return;
-    }
-
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setError(isArabic ? 'عنوان بريد إلكتروني غير صالح' : 'Adresse e-mail invalide');
-      setLoading(false);
-      return;
-    }
-
     try {
-      // ✅ Appel à la nouvelle fonction login (gère token, refresh, user)
-      await login(email, password);
+      // 1. Appel API Login
+      const res = await fetch('/api/proxy/auth?path=auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-      // Après le login, récupérer le token stocké pour décoder le rôle
-      const token = localStorage.getItem('access_token');
-      if (!token) throw new Error('Token non trouvé après connexion');
+      if (!res.ok) throw new Error('Identifiants incorrects');
+      const data = await res.json();
+      
+      const token = data.access;
+      const refreshToken = data.refresh;
 
-      // 1. Décodage du JWT
-      const base64Url = accessToken.split('.')[1];
-      const decoded   = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
+      // 2. Récupération DIRECTE depuis votre belle réponse de backend
+      const idMembre = data.user.id_membre; 
+      const finalRoleName = data.user.role || ''; // Ex: "service_contractant"
+      const userEmail = data.user.email;
 
-      // On sauvegarde l'id_membre pour un accès rapide si besoin
-      if (decoded.id_membre) {
-        localStorage.setItem('membre_id', String(decoded.id_membre));
+      // 3. Extraire le user_id du token JWT (le backend ne l'a pas mis dans "user", mais il est dans le token)
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      const userId = payload.user_id;
+
+      // 4. RECUPERER LA FONCTION DU MEMBRE (Uniquement si c'est un membre)
+      let fonction = '';
+      let memberInfo = null;
+      
+      if (idMembre) {
+        const profRes = await fetch(`/api/proxy/acteurs?path=membres/${idMembre}/`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (profRes.ok) {
+          const profData = await profRes.json();
+          memberInfo = Array.isArray(profData) ? profData[0] : profData;
+          fonction = memberInfo?.fonction || '';
+        }
       }
 
-      // 2. On prépare l'objet utilisateur à partir des infos du token (ou de data.user si ton backend l'envoie)
-      const userData = {
-        email: decoded.email || email,
-        id_membre: decoded.id_membre,
-        role: decoded.role,
-        id_role: decoded.id_role
-      };
+      // 5. Stockage Local
+      localStorage.setItem('access_token', token);
+      if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+      localStorage.setItem('user_id', userId);
+      
+      if (idMembre) {
+        localStorage.setItem('id_membre', idMembre);
+      }
+      if (memberInfo) {
+        localStorage.setItem('member_info', JSON.stringify(memberInfo));
+      }
 
-      // 3. 🚀 On met à jour l'état global React (PLUS D'ERREUR CORS !)
-      authLogin(accessToken, refreshToken, userData);
+      // 6. Context Session
+      if (setSession) {
+        setSession(token, refreshToken, { 
+          id: userId, 
+          email: userEmail, 
+          role: finalRoleName,
+          id_membre: idMembre
+        });
+      }
 
-      // 4. Redirection gérée par la page (plus dynamique que le context)
-      const roleName = decoded.role || decoded.role_name || '';
-      const idRole   = decoded.id_role || 0;
-      const redirectPath = getRedirectPath(roleName, idRole);
+      // 7. Redirection intelligente
+      // Note: On passe "0" pour l'ID car getRedirectPath sait se débrouiller avec le finalRoleName exact que votre backend envoie.
+      window.location.href = getRedirectPath(finalRoleName, 0, fonction);
 
-      // Redirection finale
-      window.location.href = redirectPath;
     } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || (isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion');
-      setError(message);
+      setError(isArabic ? 'خطأ في الدخول، يرجى التحقق من البيانات' : 'Erreur de connexion, veuillez vérifier vos identifiants');
     } finally {
       setLoading(false);
     }
   };
 
-  // Le reste du JSX est strictement identique à votre version originale
   return (
     <main className="min-h-screen flex flex-col lg:flex-row bg-[#FCFFFF]">
 

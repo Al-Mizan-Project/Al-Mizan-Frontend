@@ -134,7 +134,7 @@ export default function OperateurEconomiqueRegistration({ params }: PageProps) {
       if (formData.doc_non_faillite) payload.append('doc_non_faillite', formData.doc_non_faillite);
 
       // Do NOT set Content-Type manually — browser sets multipart/form-data + boundary automatically
-      const res = await fetch('http://localhost:8081/demandes/soumettre/', {
+      const res = await fetch('http://localhost:8080/demandes/soumettre/', {
         method: 'POST',
         body: payload,
       });

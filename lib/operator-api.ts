@@ -45,10 +45,10 @@ export type SoumissionApi = {
   } | null;
 };
 
-const APPELS_BASE = process.env.NEXT_PUBLIC_APPELS_SERVICE_URL || 'http://localhost:8081';
-const DOCUMENTS_BASE = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8081';
-const SOUMISSIONS_BASE = process.env.NEXT_PUBLIC_SOUMISSIONS_SERVICE_URL || 'http://localhost:8081';
-const IA_BASE = process.env.NEXT_PUBLIC_IA_SERVICE_URL || 'http://localhost:8081';
+const APPELS_BASE = process.env.NEXT_PUBLIC_APPELS_SERVICE_URL || 'http://localhost:8080';
+const DOCUMENTS_BASE = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8080';
+const SOUMISSIONS_BASE = process.env.NEXT_PUBLIC_SOUMISSIONS_SERVICE_URL || 'http://localhost:8080';
+const IA_BASE = process.env.NEXT_PUBLIC_IA_SERVICE_URL || 'http://localhost:8080';
 
 function getAuthToken(): string {
   if (typeof window === 'undefined') {
@@ -207,8 +207,8 @@ export async function runConformiteAuto(payload: {
 
 
 
-const AUTH_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
-const ACTEURS_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+const AUTH_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const ACTEURS_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export type MembreProfileApi = {
   id_membre: string;
