@@ -16,6 +16,24 @@ export type PermissionMeta = {
   features: string[];
 };
 
+export const CONTRACTANT_PERMISSIONS = {
+  responsable:    'responsable_service_contratant',
+  redacteur:      'rédacteur_cdc',
+  technique:      'évaluer_offre_technique',
+  financier:      'évaluer_offre_financiére',
+  administratif:  'évaluer_offre_administrative',
+  validateur:     'valider_offre_intern',
+} as const;
+
+export const CONTRACTANT_PERMISSION_OPTIONS = [
+  { value: CONTRACTANT_PERMISSIONS.responsable,   label: 'Responsable service contractant' },
+  { value: CONTRACTANT_PERMISSIONS.redacteur,      label: 'Rédacteur CDC' },
+  { value: CONTRACTANT_PERMISSIONS.technique,      label: 'Évaluation technique' },
+  { value: CONTRACTANT_PERMISSIONS.financier,      label: 'Évaluation financière' },
+  { value: CONTRACTANT_PERMISSIONS.administratif,  label: 'Évaluation administrative' },
+  { value: CONTRACTANT_PERMISSIONS.validateur,     label: 'Validation interne' },
+];
+
 export function cn(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ');
 }
@@ -121,8 +139,10 @@ export function SectionHeader({ title, description }: { title: string; descripti
 
 export function OrganisationTabs({
   active,
+  showMembers = true,
 }: {
-  active: 'info' | 'membres' | 'permissions';
+  active: 'info' | 'membres';
+  showMembers?: boolean;
 }) {
   const params = useParams<{ lang: string }>();
   const lang = String(params.lang ?? 'fr');
@@ -133,20 +153,16 @@ export function OrganisationTabs({
         href={`/${lang}/dashboard/contractant/organisation`}
         className={cn(styles.subtab, active === 'info' && styles.subtabActive)}
       >
-        Info
+        Informations
       </Link>
-      <Link
-        href={`/${lang}/dashboard/contractant/organisation/membres`}
-        className={cn(styles.subtab, active === 'membres' && styles.subtabActive)}
-      >
-        Gestion membres
-      </Link>
-      <Link
-        href={`/${lang}/dashboard/contractant/organisation/permissions`}
-        className={cn(styles.subtab, active === 'permissions' && styles.subtabActive)}
-      >
-        Permissions
-      </Link>
+      {showMembers && (
+        <Link
+          href={`/${lang}/dashboard/contractant/organisation/membres`}
+          className={cn(styles.subtab, active === 'membres' && styles.subtabActive)}
+        >
+          Gestion des membres
+        </Link>
+      )}
     </div>
   );
 }
@@ -303,7 +319,7 @@ export function toBadgeFromStatus(value: string | null | undefined): BadgeData {
   return { label: value || '—', tone: 'gray' };
 }
 
-function normalizePermissionName(value: string) {
+export function normalizePermissionName(value: string) {
   return value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -319,11 +335,32 @@ const permissionFallbackMap = new Map(
   ])
 );
 
-export function permissionStorageKey(organisationId: number | null) {
+export function hasContractantPermission(permissions: AuthPermission[], ...required: string[]) {
+  const owned = new Set(permissions.map((permission) => normalizePermissionName(permission.nom_permission)));
+  return required.some((permission) => owned.has(normalizePermissionName(permission)));
+}
+
+export function canManageMembers(permissions: AuthPermission[]) {
+  return hasContractantPermission(permissions, CONTRACTANT_PERMISSIONS.responsable);
+}
+
+export function canUseMarches(permissions: AuthPermission[]) {
+  return hasContractantPermission(
+    permissions,
+    CONTRACTANT_PERMISSIONS.responsable,
+    CONTRACTANT_PERMISSIONS.redacteur,
+    CONTRACTANT_PERMISSIONS.technique,
+    CONTRACTANT_PERMISSIONS.financier,
+    CONTRACTANT_PERMISSIONS.administratif,
+    CONTRACTANT_PERMISSIONS.validateur
+  );
+}
+
+export function permissionStorageKey(organisationId: string | null) {
   return `contractant.permission-meta.${organisationId || 'default'}`;
 }
 
-export function readPermissionMeta(organisationId: number | null) {
+export function readPermissionMeta(organisationId: string | null) {
   if (typeof window === 'undefined') {
     return {} as Record<string, PermissionMeta>;
   }
@@ -335,7 +372,7 @@ export function readPermissionMeta(organisationId: number | null) {
   }
 }
 
-export function writePermissionMeta(organisationId: number | null, value: Record<string, PermissionMeta>) {
+export function writePermissionMeta(organisationId: string | null, value: Record<string, PermissionMeta>) {
   if (typeof window === 'undefined') {
     return;
   }

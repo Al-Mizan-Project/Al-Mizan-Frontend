@@ -841,6 +841,99 @@
   margin-bottom: 12px;
 }
 
+/* Info display */
+.infoList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.infoRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.infoRow:last-child {
+  border-bottom: none;
+}
+
+.infoLabel {
+  flex: 0 0 160px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.infoValue {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* Sidebar profile footer */
+.sidebarFooter {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+.profileCompact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profileCompactInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.profileCompactInfo strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profileCompactInfo span,
+.profileCompactInfo small {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Brand subtitle (org name under logo) */
+.brandSub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+/* Utility */
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.required {
+  color: #d32f2f;
+  margin-left: 2px;
+}
+
 @media (max-width: 1180px) {
   .grid4,
   .grid3,
