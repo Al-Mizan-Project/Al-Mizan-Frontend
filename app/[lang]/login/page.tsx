@@ -56,9 +56,7 @@ export default function LoginPage({ params }: PageProps) {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const { login } = useAuth();      // ✅ new login function
-  const router = useRouter();
+  const { setSession } = useAuth();
 
   useEffect(() => {
     let isMounted = true;
@@ -97,9 +95,27 @@ export default function LoginPage({ params }: PageProps) {
       const token = localStorage.getItem('access_token');
       if (!token) throw new Error('Token non trouvé après connexion');
 
-      // Décoder le JWT pour obtenir le rôle
-      const base64Url = token.split('.')[1];
-      const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
+      // 1. Décodage du JWT
+      const base64Url = accessToken.split('.')[1];
+      const decoded   = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
+
+      // On sauvegarde l'id_membre pour un accès rapide si besoin
+      if (decoded.id_membre) {
+        localStorage.setItem('membre_id', String(decoded.id_membre));
+      }
+
+      // 2. On prépare l'objet utilisateur à partir des infos du token (ou de data.user si ton backend l'envoie)
+      const userData = {
+        email: decoded.email || email,
+        id_membre: decoded.id_membre,
+        role: decoded.role,
+        id_role: decoded.id_role
+      };
+
+      // 3. 🚀 On met à jour l'état global React (PLUS D'ERREUR CORS !)
+      authLogin(accessToken, refreshToken, userData);
+
+      // 4. Redirection gérée par la page (plus dynamique que le context)
       const roleName = decoded.role || decoded.role_name || '';
       const idRole   = decoded.id_role || 0;
       const redirectPath = getRedirectPath(roleName, idRole);

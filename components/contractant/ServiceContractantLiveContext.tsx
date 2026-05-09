@@ -13,6 +13,7 @@ import {
   type AuthPermission,
   type AuthRole,
   type AuthUser,
+  type EntityId,
   type Membre,
   type Organisation,
   type ServiceContractant,
@@ -40,81 +41,55 @@ interface ContractantContextValue {
   tutelle: Tutelle | null;
   member: Membre | null;
   members: ContractantMemberRecord[];
-  serviceResolutionWarning: string;
   refreshContext: () => Promise<void>;
   refreshMembers: () => Promise<void>;
 }
 
 const ContractantContext = createContext<ContractantContextValue | undefined>(undefined);
 
-function permissionFromClaims(claims: string[], catalog: AuthPermission[]) {
-  return claims.map((name, index) => {
-    const permission = catalog.find((item) => item.nom_permission === name);
-    return (
-      permission || {
-        id_permission: -(index + 1),
-        nom_permission: name,
-      }
-    );
-  });
+function permissionsFromNames(names: string[]) {
+  return names.map((name, index) => ({
+    id_permission: -(index + 1),
+    nom_permission: name,
+  }));
+}
+
+function roleFromName(roleName: string | null | undefined, idRole: number | null | undefined) {
+  if (!roleName && !idRole) {
+    return null;
+  }
+
+  return {
+    id_role: idRole || 0,
+    nom_role: roleName || 'Partie contractante',
+  };
+}
+
+function resolveOrganisation(member: Membre | null) {
+  return member?.organisation || null;
 }
 
 async function resolveService(
   services: ServiceContractant[],
-  organisation: Organisation | null,
-  member: Membre | null
+  organisation: Organisation | null
 ) {
   if (services.length === 0) {
-    return {
-      service: null as ServiceContractant | null,
-      warning: 'Aucun service contractant n\'est exposé par le backend.',
-    };
+    return null;
   }
 
-  if (organisation) {
-    const directMatch = services.find((item) => item.id_service === organisation.id_organisation);
-    if (directMatch) {
-      return { service: directMatch, warning: '' };
-    }
-  }
-
-  if (member) {
-    const membershipChecks = await Promise.allSettled(
-      services.map(async (service) => {
-        const linkedMembers = await serviceContractantApi.getServiceContractantMembers(service.id_service);
-        return {
-          service,
-          includesMember: linkedMembers.some((item) => item.id_membre === member.id_membre),
-        };
-      })
-    );
-
-    const membershipMatch = membershipChecks.find(
-      (result) => result.status === 'fulfilled' && result.value.includesMember
-    );
-
-    if (membershipMatch && membershipMatch.status === 'fulfilled') {
-      return {
-        service: membershipMatch.value.service,
-        warning:
-          'La liaison organisation-service a été déduite via les membres de commission, car le backend ne relie pas directement ces entités.',
-      };
+  const code = organisation?.code_service || null;
+  if (code) {
+    const byCode = services.find((item) => item.code_ordonnateur === code);
+    if (byCode) {
+      return byCode;
     }
   }
 
   if (services.length === 1) {
-    return {
-      service: services[0],
-      warning:
-        'Le seul service contractant disponible a été utilisé, car le backend ne relie pas directement l\'organisation au service.',
-    };
+    return services[0];
   }
 
-  return {
-    service: null as ServiceContractant | null,
-    warning:
-      'Impossible d\'identifier automatiquement le service contractant, car le backend ne relie pas directement l\'organisation au service.',
-  };
+  return services.find((item) => item.code_ordonnateur?.startsWith('SC-DEMO')) || services[0] || null;
 }
 
 export function ServiceContractantProvider({ children }: { children: React.ReactNode }) {
@@ -130,83 +105,50 @@ export function ServiceContractantProvider({ children }: { children: React.React
   const [tutelle, setTutelle] = useState<Tutelle | null>(null);
   const [member, setMember] = useState<Membre | null>(null);
   const [members, setMembers] = useState<ContractantMemberRecord[]>([]);
-  const [serviceResolutionWarning, setServiceResolutionWarning] = useState('');
 
-  // ✅ Refs pour casser la chaîne de dépendances circulaires
-  const rolesRef = useRef<AuthRole[]>([]);
   const currentUserRef = useRef<AuthUser | null>(null);
-  const currentPermissionsRef = useRef<AuthPermission[]>([]);
   const organisationRef = useRef<Organisation | null>(null);
 
-  // Synchroniser les refs avec le state
-  useEffect(() => { rolesRef.current = roles; }, [roles]);
-  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
-  useEffect(() => { currentPermissionsRef.current = currentPermissions; }, [currentPermissions]);
-  useEffect(() => { organisationRef.current = organisation; }, [organisation]);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
-  // ✅ loadMembers n'a plus aucune dépendance — utilise les refs
-  const loadMembers = useCallback(
-    async (
-      organisationId: number | null,
-      usersOverride?: AuthUser[],
-      rolesOverride?: AuthRole[],
-      currentUserOverride?: AuthUser | null,
-      currentPermissionsOverride?: AuthPermission[]
-    ) => {
-      if (!organisationId) {
-        setMembers([]);
-        return;
-      }
+  useEffect(() => {
+    organisationRef.current = organisation;
+  }, [organisation]);
 
-      const effectiveRoles = rolesOverride ?? rolesRef.current;
-      const effectiveUser = currentUserOverride ?? currentUserRef.current;
-      const effectivePermissions = currentPermissionsOverride ?? currentPermissionsRef.current;
+  const loadMembers = useCallback(async (organisationId: EntityId | null) => {
+    if (!organisationId) {
+      setMembers([]);
+      return;
+    }
 
-      const [organisationMembers, allUsers, rolePermissionsEntries] = await Promise.all([
-        serviceContractantApi.getOrganisationMembres(organisationId),
-        usersOverride ? Promise.resolve(usersOverride) : serviceContractantApi.getUsers(),
-        Promise.allSettled(
-          effectiveRoles.map(async (role) => ({
-            roleId: role.id_role,
-            permissions: await serviceContractantApi.getRolePermissions(role.id_role),
-          }))
-        ),
-      ]);
+    const organisationMembers = await serviceContractantApi.getOrganisationMembres(organisationId);
+    const records = organisationMembers.map((organisationMember) => {
+      const account = organisationMember.compte_auth || null;
+      const memberPermissions = permissionsFromNames(account?.permissions || []);
+      const role = roleFromName(account?.role, account?.id_role);
+      const user = account
+        ? {
+            id_utilisateur: account.id_utilisateur,
+            id_role: account.id_role,
+            id_membre: organisationMember.id_membre,
+            email: account.email,
+            is_active: account.is_active,
+          }
+        : null;
 
-      const usersByMemberId = new Map(allUsers.map((user) => [user.id_membre, user]));
-      const rolesById = new Map(effectiveRoles.map((role) => [role.id_role, role]));
-      const rolePermissions = new Map<number, AuthPermission[]>();
+      return {
+        member: organisationMember,
+        user,
+        role,
+        permissions: memberPermissions,
+      };
+    });
 
-      rolePermissionsEntries.forEach((entry) => {
-        if (entry.status === 'fulfilled') {
-          rolePermissions.set(entry.value.roleId, entry.value.permissions);
-        }
-      });
+    setMembers(records);
+  }, []);
 
-      const mergedMembers = organisationMembers.map((organisationMember) => {
-        const linkedUser = usersByMemberId.get(organisationMember.id_membre) || null;
-        const linkedRole = linkedUser ? rolesById.get(linkedUser.id_role) || null : null;
-        const linkedPermissions =
-          linkedUser && effectiveUser && linkedUser.id_utilisateur === effectiveUser.id_utilisateur
-            ? effectivePermissions
-            : linkedUser
-              ? rolePermissions.get(linkedUser.id_role) || []
-              : [];
-
-        return {
-          member: organisationMember,
-          user: linkedUser,
-          role: linkedRole,
-          permissions: linkedPermissions,
-        };
-      });
-
-      setMembers(mergedMembers);
-    },
-    [] // ✅ tableau vide — plus de dépendances qui changent
-  );
-
-  // ✅ refreshContext ne dépend plus que de loadMembers (qui est maintenant stable)
   const refreshContext = useCallback(async () => {
     setIsLoading(true);
     setError('');
@@ -216,75 +158,52 @@ export function ServiceContractantProvider({ children }: { children: React.React
       const userId = claims?.user_id || null;
 
       if (!userId) {
-        throw new Error('Utilisateur non authentifié.');
+        throw new Error('Utilisateur non authentifie.');
       }
 
-      const [loadedRoles, loadedPermissions, loadedUsers, loadedUser] = await Promise.all([
-        serviceContractantApi.getRoles().catch(() => []),
-        serviceContractantApi.getPermissions().catch(() => []),
-        serviceContractantApi.getUsers().catch(() => []),
-        serviceContractantApi.getUser(userId),
-      ]);
-
-      const role = loadedRoles.find((item) => item.id_role === loadedUser.id_role) || null;
+      const loadedUser = await serviceContractantApi.getUser(userId);
       const resolvedPermissions = await serviceContractantApi
         .getUserPermissions(userId)
-        .catch(() => permissionFromClaims(claims?.permissions || [], loadedPermissions));
+        .catch(() => permissionsFromNames(claims?.permissions || []));
 
       const linkedMember = loadedUser.id_membre
         ? await serviceContractantApi.getMembre(loadedUser.id_membre).catch(() => null)
         : null;
-      const linkedOrganisation =
-        linkedMember?.id_organisation != null
-          ? await serviceContractantApi.getOrganisation(linkedMember.id_organisation).catch(() => null)
-          : null;
-
+      const linkedOrganisation = resolveOrganisation(linkedMember);
       const services = await serviceContractantApi.getServicesContractants().catch(() => []);
-      const resolvedService = await resolveService(services, linkedOrganisation, linkedMember);
+      const resolvedService = await resolveService(services, linkedOrganisation);
       const linkedTutelle =
-        resolvedService.service?.id_tutelle != null
-          ? await serviceContractantApi.getTutelle(resolvedService.service.id_tutelle).catch(() => null)
+        resolvedService?.id_tutelle != null
+          ? await serviceContractantApi.getTutelle(resolvedService.id_tutelle).catch(() => null)
           : null;
+      const role = roleFromName(claims?.role || loadedUser.id_role?.toString(), loadedUser.id_role);
 
       setCurrentUser(loadedUser);
       setCurrentRole(role);
       setCurrentPermissions(resolvedPermissions);
-      setRoles(loadedRoles);
-      setPermissions(loadedPermissions);
+      setRoles(role ? [role] : []);
+      setPermissions(resolvedPermissions);
       setMember(linkedMember);
       setOrganisation(linkedOrganisation);
-      setService(resolvedService.service);
+      setService(resolvedService);
       setTutelle(linkedTutelle);
-      setServiceResolutionWarning(resolvedService.warning);
 
-      await loadMembers(
-        linkedOrganisation?.id_organisation || null,
-        loadedUsers,
-        loadedRoles,
-        loadedUser,
-        resolvedPermissions
-      );
+      await loadMembers(linkedOrganisation?.id_organisation || null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Impossible de charger le contexte contractant.');
+      setMembers([]);
     } finally {
       setIsLoading(false);
     }
-  }, [loadMembers]); // ✅ loadMembers est stable → refreshContext est stable → useEffect ne reboucle pas
+  }, [loadMembers]);
 
-  // ✅ refreshMembers utilise les refs, pas le state
   const refreshMembers = useCallback(async () => {
-    await loadMembers(
-      organisationRef.current?.id_organisation || null,
-      undefined,
-      rolesRef.current,
-      currentUserRef.current,
-      currentPermissionsRef.current
-    );
-  }, [loadMembers]); // ✅ stable
+    await loadMembers(organisationRef.current?.id_organisation || null);
+  }, [loadMembers]);
 
   useEffect(() => {
     void refreshContext();
-  }, [refreshContext]); // ✅ refreshContext est maintenant stable → s'exécute une seule fois
+  }, [refreshContext]);
 
   const value = useMemo<ContractantContextValue>(
     () => ({
@@ -300,7 +219,6 @@ export function ServiceContractantProvider({ children }: { children: React.React
       tutelle,
       member,
       members,
-      serviceResolutionWarning,
       refreshContext,
       refreshMembers,
     }),
@@ -318,7 +236,6 @@ export function ServiceContractantProvider({ children }: { children: React.React
       refreshMembers,
       roles,
       service,
-      serviceResolutionWarning,
       tutelle,
     ]
   );

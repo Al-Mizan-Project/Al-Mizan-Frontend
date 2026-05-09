@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AppelOffre, Recours, Soumission } from '@/lib/api/service-contractant';
 import { serviceContractantApi } from '@/lib/api/service-contractant';
 import styles from './service-contractant.module.css';
@@ -21,34 +21,28 @@ export default function DashboardLiveSection() {
   const [contractsCount, setContractsCount] = useState(0);
   const [recoursCount, setRecoursCount] = useState(0);
 
-  // Guard : on mémorise le dernier id chargé pour éviter les appels redondants
-  const lastFetchedId = useRef<string | number | null>(null);
+  const serviceId = service?.id_service ?? null;
 
   useEffect(() => {
-    const currentId = service?.id_service ?? null;
+    if (!serviceId) {
+      setAppels([]);
+      setSoumissionsCount(0);
+      setCommissionsCount(0);
+      setContractsCount(0);
+      setRecoursCount(0);
+      return;
+    }
 
-    // Si l'id n'a pas changé depuis le dernier fetch, on ne fait rien
-    if (currentId === lastFetchedId.current) return;
-
-    lastFetchedId.current = currentId;
     let isMounted = true;
 
     async function loadDashboard() {
-      if (!currentId) {
-        if (isMounted) {
-          setAppels([]);
-          setSoumissionsCount(0);
-          setCommissionsCount(0);
-          setContractsCount(0);
-          setRecoursCount(0);
-        }
-        return;
-      }
-
       try {
         const [loadedAppels, loadedCommissions, loadedContracts] = await Promise.all([
-          serviceContractantApi.listAppels({ service_id: currentId }),
-          serviceContractantApi.getServiceCommissions(currentId),
+          serviceContractantApi.listAppels({ service_id: serviceId }),
+          serviceContractantApi.getServiceCommissions(serviceId).catch(() => ({
+            commissions_evaluation: [],
+            commissions_internes: [],
+          })),
           serviceContractantApi.listContrats().catch(() => []),
         ]);
 
@@ -66,7 +60,7 @@ export default function DashboardLiveSection() {
           .catch(() => [] as Recours[]);
 
         const filteredContracts = loadedContracts.filter(
-          (contrat) => contrat.id_service_contractants === currentId
+          (contrat) => contrat.id_service_contractants === serviceId
         );
         const soumissionIds = new Set(
           flattenedSoumissions.map((s) => s.id_soumission)
@@ -100,7 +94,7 @@ export default function DashboardLiveSection() {
     return () => {
       isMounted = false;
     };
-  }); // Pas de tableau de dépendances — le guard useRef contrôle l'exécution
+  }, [serviceId]);
 
   const sortedAppels = useMemo(
     () =>

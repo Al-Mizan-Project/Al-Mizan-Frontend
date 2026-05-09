@@ -1,12 +1,15 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { useParams, usePathname } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import styles from './service-contractant.module.css';
 import {
   ServiceContractantProvider,
   useServiceContractant,
 } from './ServiceContractantLiveContext';
+import { CONTRACTANT_PERMISSION_OPTIONS, canManageMembers, canUseMarches, normalizePermissionName } from './ServiceContractantLiveShared';
 
 function cn(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ');
@@ -29,8 +32,32 @@ function ServiceContractantShellLayout({
 }) {
   const params = useParams<{ lang: string }>();
   const pathname = usePathname();
+  const router = useRouter();
   const lang = String(params.lang ?? 'fr');
-  const { organisation, currentUser, member } = useServiceContractant();
+  const { logout } = useAuth();
+  const { organisation, currentPermissions, member } = useServiceContractant();
+
+  const permLabel = CONTRACTANT_PERMISSION_OPTIONS.find(
+    (opt) => currentPermissions.some(
+      (p) => normalizePermissionName(p.nom_permission) === normalizePermissionName(opt.value)
+    )
+  )?.label || '';
+  const mayUseMarches = canUseMarches(currentPermissions);
+  const mayManageMembers = canManageMembers(currentPermissions);
+
+  useEffect(() => {
+    if (
+      pathname.includes('/dashboard/contractant/organisation/permissions') ||
+      (pathname.includes('/dashboard/contractant/organisation/membres') && !mayManageMembers)
+    ) {
+      router.replace(`/${lang}/dashboard/contractant/organisation`);
+      return;
+    }
+
+    if (pathname.includes('/dashboard/contractant/marches') && currentPermissions.length > 0 && !mayUseMarches) {
+      router.replace(`/${lang}/dashboard/contractant`);
+    }
+  }, [currentPermissions.length, lang, mayManageMembers, mayUseMarches, pathname, router]);
 
   const currentPage = pathname.includes('/dashboard/contractant/marches')
     ? 'marches'
@@ -40,7 +67,9 @@ function ServiceContractantShellLayout({
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', href: `/${lang}/dashboard/contractant` },
-    { id: 'marches', label: 'Marchés', href: `/${lang}/dashboard/contractant/marches` },
+    ...(mayUseMarches
+      ? [{ id: 'marches', label: 'Marchés', href: `/${lang}/dashboard/contractant/marches` }]
+      : []),
     { id: 'organisation', label: 'Organisation', href: `/${lang}/dashboard/contractant/organisation` },
   ];
 
@@ -54,6 +83,9 @@ function ServiceContractantShellLayout({
         <aside className={styles.sidebar}>
           <div className={styles.brand}>
             <h1 className={styles.brandTitle}>Al-Mizan</h1>
+            {organisation && (
+              <p className={styles.brandSub}>{organisation.nom_officiel}</p>
+            )}
           </div>
 
           <nav className={styles.sideNav} aria-label="Navigation principale">
@@ -70,31 +102,22 @@ function ServiceContractantShellLayout({
               </div>
             ))}
           </nav>
+
+          <div className={styles.sidebarFooter}>
+            <div className={styles.profileCompact}>
+              <div className={styles.avatar}>{initials(profileName)}</div>
+              <div className={styles.profileCompactInfo}>
+                <strong>{profileName}</strong>
+                {permLabel && <small>{permLabel}</small>}
+              </div>
+            </div>
+          </div>
         </aside>
 
         <div className={styles.main}>
           <header className={styles.topbar}>
             <div className={styles.topbarTitle}>
               <h2>{pageTitle}</h2>
-            </div>
-
-            <div className={styles.searchbar}>
-              <svg
-                className={styles.searchbarIcon}
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <input type="search" placeholder="Recherche" />
             </div>
 
             <div className={styles.topActions}>
@@ -104,24 +127,13 @@ function ServiceContractantShellLayout({
                 </div>
               </div>
 
-              <button type="button" className={styles.iconBtn} aria-label="Notifications">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M12 22a2.45 2.45 0 002.2-1.4h-4.4A2.45 2.45 0 0012 22zm6-5.2v-5a6 6 0 10-12 0v5L4 18.8v1.2h16v-1.2l-2-2z"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+              <button
+                type="button"
+                className={cn(styles.btn, styles.btnGhost)}
+                onClick={() => logout()}
+              >
+                {lang === 'ar' ? 'تسجيل الخروج' : 'Déconnexion'}
               </button>
-
-              <div className={styles.profile}>
-                <div className={styles.avatar}>{initials(profileName)}</div>
-                <div>
-                  <strong>{profileName}</strong>
-                  <small>{currentUser?.email || organisation?.email_contact || 'sc@almizan.dz'}</small>
-                </div>
-              </div>
             </div>
           </header>
 

@@ -27,10 +27,12 @@ type JwtClaims = {
   exp?: number;
 };
 
+export type EntityId = string;
+
 export interface AuthUser {
   id_utilisateur: number;
-  id_role: number;
-  id_membre: number;
+  id_role: number | null;
+  id_membre: EntityId | null;
   email: string;
   is_active: boolean;
   created_at?: string;
@@ -47,23 +49,37 @@ export interface AuthPermission {
   nom_permission: string;
 }
 
+export interface MembreAuthAccount {
+  id_utilisateur: number;
+  id_role: number | null;
+  email: string;
+  is_active: boolean;
+  role: string | null;
+  permissions: string[];
+}
+
+export interface Organisation {
+  id_organisation: EntityId;
+  nom_officiel: string;
+  adresse_siege: string;
+  email_contact: string;
+  type_entite: string;
+  type_entite_display?: string;
+  code_service?: string | null;
+  secteur_activite?: string | null;
+}
+
 export interface Membre {
-  id_membre: number;
-  id_organisation: number | null;
+  id_membre: EntityId;
+  id_organisation?: EntityId | null;
+  organisation?: Organisation | null;
+  compte_auth?: MembreAuthAccount | null;
   prenom: string;
   nom: string;
   telephone: string;
   fonction: string;
   created_at?: string;
   updated_at?: string;
-}
-
-export interface Organisation {
-  id_organisation: number;
-  nom_officiel: string;
-  adresse_siege: string;
-  email_contact: string;
-  type_entite: string;
 }
 
 export interface Tutelle {
@@ -357,7 +373,7 @@ export const serviceContractantApi = {
 
   createUser(payload: {
     id_role: number;
-    id_membre: number;
+    id_membre: EntityId;
     email: string;
     password: string;
   }) {
@@ -372,7 +388,7 @@ export const serviceContractantApi = {
     userId: number,
     payload: Partial<{
       id_role: number;
-      id_membre: number;
+      id_membre: EntityId | null;
       email: string;
       is_active: boolean;
     }>
@@ -401,6 +417,14 @@ export const serviceContractantApi = {
 
   getUserPermissions(userId: number) {
     return request<AuthPermission[]>('auth', { path: `users/${userId}/permissions` });
+  },
+
+  setUserPermissions(userId: number, permissionNames: string[]) {
+    return request<AuthPermission[]>('auth', {
+      path: `users/${userId}/permissions`,
+      method: 'PUT',
+      body: { permission_names: permissionNames },
+    });
   },
 
   getRoles() {
@@ -450,12 +474,12 @@ export const serviceContractantApi = {
     return request<Membre[]>('acteurs', { path: 'membres' });
   },
 
-  getMembre(membreId: number) {
-    return request<Membre>('acteurs', { path: `membres/${membreId}` });
+  getMembre(membreId: EntityId | number) {
+    return request<Membre>('acteurs', { path: `membres/${membreId}/` });
   },
 
   createMembre(payload: {
-    id_organisation: number;
+    id_organisation: EntityId;
     prenom: string;
     nom: string;
     telephone: string;
@@ -469,9 +493,9 @@ export const serviceContractantApi = {
   },
 
   updateMembre(
-    membreId: number,
+    membreId: EntityId | number,
     payload: Partial<{
-      id_organisation: number;
+      id_organisation: EntityId;
       prenom: string;
       nom: string;
       telephone: string;
@@ -479,25 +503,41 @@ export const serviceContractantApi = {
     }>
   ) {
     return request<Membre>('acteurs', {
-      path: `membres/${membreId}`,
+      path: `membres/${membreId}/gerer/`,
       method: 'PATCH',
       body: payload,
     });
   },
 
-  deleteMembre(membreId: number) {
+  deleteMembre(membreId: EntityId | number) {
     return request<null>('acteurs', {
-      path: `membres/${membreId}`,
+      path: `membres/${membreId}/gerer/`,
       method: 'DELETE',
     });
   },
 
-  getOrganisation(organisationId: number) {
+  getOrganisation(organisationId: EntityId) {
     return request<Organisation>('acteurs', { path: `organisations/${organisationId}` });
   },
 
-  getOrganisationMembres(organisationId: number) {
-    return request<Membre[]>('acteurs', { path: `organisations/${organisationId}/membres` });
+  getOrganisationMembres(organisationId: EntityId) {
+    return request<Membre[]>('acteurs', { path: `organisations/${organisationId}/membres/` });
+  },
+
+  createCollaborateur(payload: {
+    prenom: string;
+    nom: string;
+    telephone: string;
+    fonction: string;
+    email: string;
+    password: string;
+    permissions: string[];
+  }) {
+    return request<{ message: string; id_membre: EntityId }>('acteurs', {
+      path: 'membres/creer-collaborateur/',
+      method: 'POST',
+      body: payload,
+    });
   },
 
   getTutelle(tutelleId: number) {
