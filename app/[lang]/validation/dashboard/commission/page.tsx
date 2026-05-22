@@ -6,7 +6,7 @@ import StatCard from '../../components/dashboard/StatsCard';
 import DelayChart from '../../components/dashboard/DelayChart';
 import EmployeeChart from '../../components/dashboard/EmployeeChart';
 import FilesTable from '../../components/dashboard/FilesTable';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/lib/auth';
 
 // Import des APIs officielles
 import { soumissionsApi } from '@/lib/api/soumissions';
