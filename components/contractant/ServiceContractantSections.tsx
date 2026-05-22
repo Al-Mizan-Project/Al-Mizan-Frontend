@@ -33,6 +33,7 @@ import {
   type BadgeTone,
   type MarchesTab,
 } from './service-contractant-data';
+import { fetchSoumissionById, runConformiteAuto } from '@/lib/operator-api';
 
 function cn(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ');
@@ -286,6 +287,47 @@ export function DashboardSection() {
 export function MarchesSection() {
   const [activeTab, setActiveTab] = useState<MarchesTab>('marches-appels');
   const [showAiMock, setShowAiMock] = useState(false);
+  const [iaSoumissionId, setIaSoumissionId] = useState('');
+  const [iaLoading, setIaLoading] = useState(false);
+  const [iaError, setIaError] = useState('');
+  const [iaResult, setIaResult] = useState<{
+    conformite_statut: string;
+    conformite_rapport?: { missing_documents?: string[]; invalid_documents?: string[] };
+  } | null>(null);
+
+  const handleContractantConformiteCheck = async () => {
+    const soumissionId = Number(iaSoumissionId);
+    if (!Number.isFinite(soumissionId) || soumissionId <= 0) {
+      setIaError('Veuillez saisir un id_soumission valide.');
+      return;
+    }
+
+    setIaError('');
+    setIaResult(null);
+    setIaLoading(true);
+    try {
+      const soumission = await fetchSoumissionById(soumissionId);
+      if (!soumission.document_ids?.length) {
+        throw new Error('La soumission ne contient aucun document à analyser.');
+      }
+
+      const data = await runConformiteAuto({
+        soumissionId,
+        idAppelOffre: soumission.id_appel_offre,
+        providedDocumentIds: soumission.document_ids,
+        performOcr: true,
+      });
+
+      setIaResult({
+        conformite_statut: data?.conformite_statut || '',
+        conformite_rapport: data?.conformite_rapport || {},
+      });
+    } catch (error) {
+      setIaError(error instanceof Error ? error.message : 'Erreur lors de la vérification IA.');
+    } finally {
+      setIaLoading(false);
+    }
+  };
 
   return (
     <>
@@ -786,10 +828,39 @@ export function MarchesSection() {
                   <button type="button" className={cn(styles.btn, styles.btnGhost)}>
                     Détecter les anomalies
                   </button>
-                  <button type="button" className={cn(styles.btn, styles.btnGhost)}>
-                    Vérifier conformité IA
+                  <button
+                    type="button"
+                    className={cn(styles.btn, styles.btnGhost)}
+                    onClick={handleContractantConformiteCheck}
+                    disabled={iaLoading}
+                  >
+                    {iaLoading ? 'Vérification IA…' : 'Vérifier conformité IA'}
                   </button>
                 </div>
+                <div className={styles.formGrid} style={{ marginTop: 14 }}>
+                  <Field label="id_soumission (réel)">
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="Ex: 1"
+                      value={iaSoumissionId}
+                      onChange={(event) => setIaSoumissionId(event.target.value)}
+                    />
+                  </Field>
+                </div>
+                {iaError && (
+                  <div className={styles.footerNote} style={{ color: '#b91c1c' }}>
+                    {iaError}
+                  </div>
+                )}
+                {iaResult && (
+                  <div className={styles.footerNote} style={{ color: '#14532d' }}>
+                    Statut IA: {iaResult.conformite_statut}
+                    {iaResult.conformite_rapport?.missing_documents?.length
+                      ? ` | Pièces manquantes: ${iaResult.conformite_rapport.missing_documents.join(', ')}`
+                      : ''}
+                  </div>
+                )}
                 <div className={styles.footerNote}>
                   La saisie de dépôt d’offre n’apparaît plus ici, car elle concerne l’opérateur économique et non le
                   service contractant.

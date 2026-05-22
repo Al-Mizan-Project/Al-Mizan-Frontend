@@ -8,6 +8,25 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+/* ── Temporary stubs so AuthContext.tsx compiles (team will replace) ── */
+export type LoginResponse = { access: string; refresh: string; user: any };
+
+export function setupAuthInterceptor(token: string | null) {
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+  }
+}
+
+export const authAPI = {
+  async login(email: string, password: string): Promise<LoginResponse> {
+    const { data } = await api.post('/auth/login', { email, password });
+    return data;
+  },
+};
+/* ── End stubs ── */
+
 // Request interceptor – add token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
