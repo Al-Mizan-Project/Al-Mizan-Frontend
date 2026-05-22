@@ -96,10 +96,17 @@ export async function proxyRequest(req: NextRequest, method: string, options: Pr
       return NextResponse.json({ error: 'Path parameter is required' }, { status: 400 });
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180_000); // 3 min for OCR
+
     const upstream = await fetch(
       upstreamUrl,
-      await buildRequestInit(req, method, options.includeInternalToken !== false)
+      {
+        ...await buildRequestInit(req, method, options.includeInternalToken !== false),
+        signal: controller.signal,
+      }
     );
+    clearTimeout(timeout);
 
     if (upstream.status === 204) {
       return new NextResponse(null, { status: upstream.status });

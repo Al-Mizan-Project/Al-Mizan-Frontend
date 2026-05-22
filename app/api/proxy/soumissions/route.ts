@@ -3,6 +3,9 @@ import { proxyRequest } from '../_utils';
 
 const SOUMISSIONS_BASE = process.env.NEXT_PUBLIC_SOUMISSIONS_SERVICE_URL || 'http://localhost:8000';
 
+// Allow up to 3 minutes for OCR-heavy conformity analysis
+export const maxDuration = 180;
+
 const options = {
   baseUrl: SOUMISSIONS_BASE,
   defaultPath: 'soumissions',

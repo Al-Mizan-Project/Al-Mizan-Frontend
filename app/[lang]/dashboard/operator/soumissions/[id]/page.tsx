@@ -12,8 +12,7 @@ import {
   faTimesCircle,
   faExclamationTriangle,
   faChartLine,
-  faArrowLeft,
-  faSpinner
+  faArrowLeft
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -26,7 +25,6 @@ import {
   fetchAppelOffreById,
   fetchDocumentsByIds,
   fetchSoumissionById,
-  runConformiteAuto,
 } from '@/lib/operator-api';
 
 export default function SoumissionDetailPage({
@@ -38,17 +36,8 @@ export default function SoumissionDetailPage({
   const [lang, setLang] = useState<string>('');
   const [submissionId, setSubmissionId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'details' | 'statut'>('details');
-  const [isAnalysing, setIsAnalysing] = useState(false);
-  const [analyseError, setAnalyseError] = useState<string>('');
   const [loadError, setLoadError] = useState<string>('');
   const [soumission, setSoumission] = useState<StoredSubmission | null>(null);
-  const [analyseResult, setAnalyseResult] = useState<{
-    conformite_statut: string;
-    conformite_rapport?: {
-      missing_documents?: string[];
-      invalid_documents?: string[];
-    };
-  } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -156,46 +145,6 @@ export default function SoumissionDetailPage({
     return 'en_attente';
   };
 
-  const triggerConformiteAuto = async () => {
-    if (!submissionId) return;
-
-    setAnalyseError('');
-    setIsAnalysing(true);
-    try {
-      if (!soumission) {
-        throw new Error('Soumission introuvable dans l\'historique local.');
-      }
-      if (!soumission.documents.length) {
-        throw new Error('Aucun document associé à cette soumission pour lancer l\'analyse IA.');
-      }
-
-      const data = await runConformiteAuto({
-        soumissionId: Number(submissionId),
-        idAppelOffre: soumission.appelOffre.id,
-        providedDocumentIds: soumission.documents.map((doc) => doc.idDocument),
-        performOcr: true,
-      });
-
-      setAnalyseResult({
-        conformite_statut: data?.conformite_statut || '',
-        conformite_rapport: data?.conformite_rapport || {},
-      });
-
-      const mappedStatus = mapConformiteStatutToUi(data?.conformite_statut || '');
-      const updatedSoumission: StoredSubmission = {
-        ...soumission,
-        conformiteAdmin: mappedStatus,
-      };
-      setSoumission(updatedSoumission);
-      upsertStoredSubmission(updatedSoumission);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erreur inconnue';
-      setAnalyseError(message);
-    } finally {
-      setIsAnalysing(false);
-    }
-  };
-
   const getConformiteStatus = (status: string) => {
     if (status === 'conforme') return { 
       color: 'text-green-600', 
@@ -277,9 +226,7 @@ export default function SoumissionDetailPage({
 
   const t = translations[lang as 'fr' | 'ar'] || translations.fr;
 
-  const effectiveConformiteAdmin = analyseResult
-    ? mapConformiteStatutToUi(analyseResult.conformite_statut)
-    : (soumission?.conformiteAdmin || 'en_attente');
+  const effectiveConformiteAdmin = soumission?.conformiteAdmin || 'en_attente';
 
   const formatMontant = (montant: number) => {
     return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
@@ -435,30 +382,9 @@ export default function SoumissionDetailPage({
                 {/* Compliance Report */}
                 <div>
                   <h3 className="text-lg font-bold text-[#0D2527] mb-4">{t.rapportConformite}</h3>
-                  <div className="mb-4 flex items-center gap-3">
-                    <button
-                      onClick={triggerConformiteAuto}
-                      disabled={isAnalysing}
-                      className="px-4 py-2 rounded-lg bg-[#306B6F] hover:bg-[#173C3F] disabled:opacity-60 text-white text-sm font-semibold transition-colors"
-                    >
-                      {isAnalysing ? (
-                        <span className="inline-flex items-center gap-2">
-                          <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
-                          Analyse IA en cours...
-                        </span>
-                      ) : (
-                        'Lancer analyse de conformité (OCR/NLP)'
-                      )}
-                    </button>
-                    {analyseResult && (
-                      <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-md">
-                        Dernier statut IA: {analyseResult.conformite_statut}
-                      </span>
-                    )}
-                  </div>
-                  {analyseError && (
-                    <p className="mb-4 text-sm text-red-700 bg-red-100 rounded-lg px-3 py-2">{analyseError}</p>
-                  )}
+                  <p className="mb-4 text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                    Le contrôle IA est déclenché par le service contractant. Cette vue opérateur affiche le statut de conformité.
+                  </p>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                       <span className="font-medium text-gray-700">{t.conformiteAdmin}</span>
@@ -469,15 +395,6 @@ export default function SoumissionDetailPage({
                         {getConformiteStatus(effectiveConformiteAdmin).label}
                       </span>
                     </div>
-
-                    {analyseResult?.conformite_rapport?.missing_documents && analyseResult.conformite_rapport.missing_documents.length > 0 && (
-                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                        <p className="text-sm font-semibold text-amber-800 mb-2">Pièces manquantes détectées</p>
-                        <p className="text-sm text-amber-700">
-                          {analyseResult.conformite_rapport.missing_documents.join(', ')}
-                        </p>
-                      </div>
-                    )}
 
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                       <span className="font-medium text-gray-700">{t.conformiteTechnique}</span>

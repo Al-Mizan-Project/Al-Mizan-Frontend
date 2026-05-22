@@ -1,5 +1,5 @@
 Al-Mizan Frontend - FR Test URLs
-Date: 2026-03-19
+Date: 2026-04-26
 
 Core
 1. http://localhost:3000/
@@ -14,30 +14,34 @@ Core
 10. http://localhost:3000/fr/evaluateur
 11. http://localhost:3000/fr/evaluateur-admin
 12. http://localhost:3000/fr/system-admin
+13. http://localhost:3000/fr/validation/login
+14. http://localhost:3000/fr/validation/testenv
 
 Operator dashboard
-1. http://localhost:3000/fr/dashboard/operator/appels-offres
-2. http://localhost:3000/fr/dashboard/operator/appels-offres/1
-3. http://localhost:3000/fr/dashboard/operator/appels-offres/1/soumettre
-4. http://localhost:3000/fr/dashboard/operator/contrats
-5. http://localhost:3000/fr/dashboard/operator/documents
-6. http://localhost:3000/fr/dashboard/operator/profile
-7. http://localhost:3000/fr/dashboard/operator/recours
-8. http://localhost:3000/fr/dashboard/operator/recours/nouveau
-9. http://localhost:3000/fr/dashboard/operator/soumissions
-10. http://localhost:3000/fr/dashboard/operator/soumissions/1
+1. http://localhost:3000/fr/dashboard/operator
+2. http://localhost:3000/fr/dashboard/operator/appels-offres
+3. http://localhost:3000/fr/dashboard/operator/appels-offres/1
+4. http://localhost:3000/fr/dashboard/operator/appels-offres/1/soumettre
+5. http://localhost:3000/fr/dashboard/operator/contrats
+6. http://localhost:3000/fr/dashboard/operator/documents
+7. http://localhost:3000/fr/dashboard/operator/profile
+8. http://localhost:3000/fr/dashboard/operator/recours
+9. http://localhost:3000/fr/dashboard/operator/recours/nouveau
+10. http://localhost:3000/fr/dashboard/operator/soumissions
+11. http://localhost:3000/fr/dashboard/operator/soumissions/1
 
 Validation (commission)
 1. http://localhost:3000/fr/validation/dashboard/commission
 2. http://localhost:3000/fr/validation/affectation
-3. http://localhost:3000/fr/validation/AffectationDossiers
-4. http://localhost:3000/fr/validation/ToutLesDossiers/commission
-5. http://localhost:3000/fr/validation/dossier/1/commission
-6. http://localhost:3000/fr/validation/historique
-7. http://localhost:3000/fr/validation/references/commission
-8. http://localhost:3000/fr/validation/Profile/commission
-9. http://localhost:3000/fr/validation/Parametres/commission
-10. http://localhost:3000/fr/validation/Notifications/commission
+3. http://localhost:3000/fr/validation/affectation/1
+4. http://localhost:3000/fr/validation/AffectationDossiers
+5. http://localhost:3000/fr/validation/ToutLesDossiers/commission
+6. http://localhost:3000/fr/validation/dossier/1/commission
+7. http://localhost:3000/fr/validation/historique
+8. http://localhost:3000/fr/validation/references/commission
+9. http://localhost:3000/fr/validation/Profile/commission
+10. http://localhost:3000/fr/validation/Parametres/commission
+11. http://localhost:3000/fr/validation/Notifications/commission
 
 Validation (validator)
 1. http://localhost:3000/fr/validation/dashboard/validator
