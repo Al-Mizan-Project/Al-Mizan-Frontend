@@ -3,7 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useAuth } from '@/lib/auth'; // Assurez-vous d'importer depuis le bon chemin (lib ou contexts)
+import { useAuth } from '@/lib/auth';
 import { 
   faEnvelope, 
   faLock, 
@@ -17,52 +17,56 @@ type PageProps = {
   params: Promise<{ lang: string }>;
 };
 
-// Mapping des rôles vers les URLs de redirection
 const ROLE_REDIRECTS: Record<string, string> = {
-  admin:                    '/fr/system-admin',
-  operateur_economique:     '/fr/dashboard/operator',
-  service_contractant:      '/fr/dashboard/contractant',
-  commission_externe:       '/fr/validation/dashboard/validator',
-  tutelle:                  '/fr/validation/dashboard/validator',
-  chef_commission:          '/fr/chef_com',
-  evaluateur:               '/fr/evaluateur',
-  evaluateur_administratif: '/fr/evaluateur-admin',
+  // Admin
+  'ADMIN':                        '/fr/system-admin',
+  // Service Contractant
+  'RESP_SC':                      '/fr/dashboard/contractant',
+  'REDACTEUR_CDC':                '/fr/dashboard/contractant',
+  'VALIDATEUR_INTERNE_MARCHE':    '/fr/dashboard/contractant',
+  'VALIDATEUR_INTERNE_CDC':       '/fr/dashboard/contractant',
+  'RESP_VALID_INTERN':            '/fr/dashboard/contractant',
+  // Opérateur Économique
+  'RESP_OE':                      '/fr/dashboard/operator',
+  'PREPARATEUR_OE':               '/fr/dashboard/operator',
+  // COPEO — Évaluateur
+  'EVALUATEUR':                   '/fr/copeo',
+  // Comité Technique
+  'MEMBRE_COMITE_TECHNIQUE':      '/fr/comite-technique',
+  // Commission des Marchés (externe)
+  'RESP_CM':                      '/fr/validation/dashboard/validator',
+  'VALIDATEUR_EXTERNE_MARCHE':    '/fr/validation/dashboard/validator',
+  'VALIDATEUR_EXTERNE_CDC':       '/fr/validation/dashboard/validator',
+  // Legacy role names (kept for backward compat with old seed)
+  'admin':                        '/fr/system-admin',
+  'operateur_economique':         '/fr/dashboard/operator',
+  'service_contractant':          '/fr/dashboard/contractant',
+  'commission_externe':           '/fr/validation/dashboard/validator',
+  'tutelle':                      '/fr/validation/dashboard/validator',
+  'evaluateur':                   '/fr/copeo',
+  'evaluateur_administratif':     '/fr/copeo',
+  'chef_commission':              '/fr/copeo',
+  'membre_comite_technique':      '/fr/comite-technique',
 };
 
-/**
- * Logique de redirection finale (Combinaison Rôle + Fonction)
- */
-function getRedirectPath(roleName: string, idRole: number, fonction: string = ''): string {
-  const role = roleName.toLowerCase().trim().replace(/\s+/g, '_');
-  const f = fonction.toLowerCase().trim();
+function getRedirectPath(roleName: string): string {
+  // Exact match first (handles NOM_NOM format)
+  if (ROLE_REDIRECTS[roleName]) return ROLE_REDIRECTS[roleName];
 
-  // 1. Tests par nom de rôle (String)
-  if (role.includes('admin')) return ROLE_REDIRECTS.admin;
-  if (role.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
-  
-  // Logique spécifique pour les commissions et contractants
-  if (role.includes('contractant') || role.includes('commission') || role.includes('tutelle')) {
-    if (f.includes('responsable') && f.includes('commission')) return '/fr/validation/dashboard/commission';
-    if (f.includes('responsable')) {
-      return role.includes('contractant') ? ROLE_REDIRECTS.service_contractant : ROLE_REDIRECTS.commission_externe;
-    }
-    // Par défaut pour ces rôles
-    if (role.includes('contractant')) return ROLE_REDIRECTS.service_contractant;
-    if (role.includes('commission')) return ROLE_REDIRECTS.commission_externe;
-    if (role.includes('tutelle')) return ROLE_REDIRECTS.tutelle;
-  }
+  // Normalized lowercase fallback
+  const normalized = roleName.toLowerCase().trim().replace(/\s+/g, '_');
+  if (ROLE_REDIRECTS[normalized]) return ROLE_REDIRECTS[normalized];
 
-  // 2. Correction du Fallback par ID (selon ta table)
-  const idMap: Record<number, string> = { 
-    1: ROLE_REDIRECTS.service_contractant, 
-    2: ROLE_REDIRECTS.operateur_economique,
-    3: ROLE_REDIRECTS.commission_externe,
-    4: ROLE_REDIRECTS.tutelle,
-    5: ROLE_REDIRECTS.admin 
-  };
+  // Substring fallback
+  if (normalized.includes('admin'))              return '/fr/system-admin';
+  if (normalized.includes('evaluateur') || normalized.includes('copeo')) return '/fr/copeo';
+  if (normalized.includes('comite_technique') || normalized.includes('comité_technique')) return '/fr/comite-technique';
+  if (normalized.includes('operateur'))          return '/fr/dashboard/operator';
+  if (normalized.includes('contractant'))        return '/fr/dashboard/contractant';
+  if (normalized.includes('commission') || normalized.includes('tutelle')) return '/fr/validation/dashboard/validator';
 
-  // On retourne la redirection par ID, sinon on renvoie vers l'opérateur en dernier recours
-  return idMap[idRole] || ROLE_REDIRECTS.operateur_economique;
+  // Final fallback
+  return '/fr/dashboard/operator';
 }
 
 export default function LoginPage({ params }: PageProps) {
@@ -94,7 +98,6 @@ export default function LoginPage({ params }: PageProps) {
     setLoading(true);
 
     try {
-      // 1. Appel API Login
       const res = await fetch('/api/proxy/auth?path=auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,19 +110,14 @@ export default function LoginPage({ params }: PageProps) {
       const token = data.access;
       const refreshToken = data.refresh;
 
-      // 2. Récupération DIRECTE depuis votre belle réponse de backend
-      const idMembre = data.user.id_membre; 
-      const finalRoleName = data.user.role || ''; // Ex: "service_contractant"
-      const userEmail = data.user.email;
+      const idMembre = data.user?.id_membre;
+      const finalRoleName = data.user?.role || '';
+      const userEmail = data.user?.email;
 
-      // 3. Extraire le user_id du token JWT (le backend ne l'a pas mis dans "user", mais il est dans le token)
       const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
       const userId = payload.user_id;
 
-      // 4. RECUPERER LA FONCTION DU MEMBRE (Uniquement si c'est un membre)
-      let fonction = '';
       let memberInfo = null;
-      
       if (idMembre) {
         const profRes = await fetch(`/api/proxy/acteurs?path=membres/${idMembre}/`, {
           headers: { 
@@ -130,23 +128,15 @@ export default function LoginPage({ params }: PageProps) {
         if (profRes.ok) {
           const profData = await profRes.json();
           memberInfo = Array.isArray(profData) ? profData[0] : profData;
-          fonction = memberInfo?.fonction || '';
         }
       }
 
-      // 5. Stockage Local
       localStorage.setItem('access_token', token);
       if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
       localStorage.setItem('user_id', userId);
-      
-      if (idMembre) {
-        localStorage.setItem('id_membre', idMembre);
-      }
-      if (memberInfo) {
-        localStorage.setItem('member_info', JSON.stringify(memberInfo));
-      }
+      if (idMembre) localStorage.setItem('id_membre', idMembre);
+      if (memberInfo) localStorage.setItem('member_info', JSON.stringify(memberInfo));
 
-      // 6. Context Session
       if (setSession) {
         setSession(token, refreshToken, { 
           id: userId, 
@@ -156,9 +146,7 @@ export default function LoginPage({ params }: PageProps) {
         });
       }
 
-      // 7. Redirection intelligente
-      // Note: On passe "0" pour l'ID car getRedirectPath sait se débrouiller avec le finalRoleName exact que votre backend envoie.
-      window.location.href = getRedirectPath(finalRoleName, 0, fonction);
+      window.location.href = getRedirectPath(finalRoleName);
 
     } catch (err: any) {
       setError(isArabic ? 'خطأ في الدخول، يرجى التحقق من البيانات' : 'Erreur de connexion, veuillez vérifier vos identifiants');
