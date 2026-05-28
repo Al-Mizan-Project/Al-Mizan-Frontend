@@ -19,9 +19,8 @@ interface Ctx {
   soumettre: (soumissionId: string, note: number, commentaire: string, type: 'technique' | 'financiere' | 'administrative') => Promise<void>;
 }
 
-const SoumissionsContext = createContext<Ctx | null>(null);
+export const SoumissionsContext = createContext<Ctx | null>(null);
 
-// Map soumission status to DossierStatus
 function mapSoumissionStatus(statut: string): DossierStatus {
   switch (statut) {
     case 'SOUMIS': return 'En attente';
@@ -39,55 +38,39 @@ function mapSoumissionEtape(statut: string): Dossier['etape'] {
   }
 }
 
-export function SoumissionsProvider({ children }: { children: ReactNode }) {
+interface SoumissionsProviderProps {
+  commissionId: number;
+  children: ReactNode;
+}
+
+export function SoumissionsProvider({ commissionId, children }: SoumissionsProviderProps) {
   const [dossiers, setDossiers] = useState<Dossier[]>([]);
-  const [evaluateurs, setEvaluateurs] = useState<Evaluateur[]>([]);
+  const [evaluateurs] = useState<Evaluateur[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
+    if (!commissionId) return;
     setLoading(true);
     setError(null);
     try {
-      // 1. Load soumissions – note the trailing slash
-      const [soumissionsRes, usersRes, rolesRes] = await Promise.all([
-        api.get('/api/soumissions/'),
-        api.get('/users'),
-        api.get('/roles').catch(() => ({ data: [] })),
-      ]);
+const res = await api.get(`/api/soumissions/by-commission/${commissionId}/`);
+      const soumissions: any[] = Array.isArray(res.data)
+        ? res.data
+        : res.data.results ?? [];
 
-      const soumissions = Array.isArray(soumissionsRes.data) ? soumissionsRes.data : soumissionsRes.data.results ?? [];
       setDossiers(soumissions.map((s: any) => ({
-        id: String(s.id_soumission),
-        reference: s.reference || `SOUM-${s.id_soumission}`,
-        operateur: s.operateur_nom || 'Opérateur',
-        dateSoumission: s.date_soumission?.slice(0, 10) ?? '',
-        delaiEvaluation: s.delai_evaluation?.slice(0, 10) ?? '',
-        etape: mapSoumissionEtape(s.statut),
-        status: mapSoumissionStatus(s.statut),
-      })));
-
-      const users = Array.isArray(usersRes.data) ? usersRes.data : usersRes.data.results ?? [];
-      let evaluatorRoleIds: number[] = [];
-
-      if (rolesRes.data && Array.isArray(rolesRes.data)) {
-        const roles = rolesRes.data;
-        const roleNameToId: Record<string, number> = {};
-        for (const r of roles) {
-          roleNameToId[r.nom_role] = r.id_role;
-        }
-        const evaluatorRoleNames = ['evaluateur', 'evaluateur_administratif', 'chef_commission'];
-        evaluatorRoleIds = evaluatorRoleNames
-          .map(name => roleNameToId[name])
-          .filter(id => id !== undefined);
-      } else {
-        evaluatorRoleIds = [7, 8, 6];
-      }
-
-      setEvaluateurs(users.filter((u: any) => evaluatorRoleIds.includes(u.id_role)));
-    } catch (err) {
-      console.error('Load error', err);
-      setError('Erreur de chargement');
+  id: String(s.id_soumission),
+  reference: s.reference || `SOUM-${s.id_soumission}`,
+  operateur: s.operateur_nom || 'Opérateur',
+  dateSoumission: s.date_soumission?.slice(0, 10) ?? '',
+  delaiEvaluation: s.delai_evaluation?.slice(0, 10) ?? '',
+  etape: mapSoumissionEtape(s.statut),
+  status: mapSoumissionStatus(s.statut),
+  commissionId,   // ADD THIS
+})));
+    } catch {
+      setError('Erreur de chargement des soumissions');
     } finally {
       setLoading(false);
     }
@@ -95,10 +78,10 @@ export function SoumissionsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [commissionId]);
 
   const affecter = async (soumissionId: string, evaluateurIds: number[], type: 'technique' | 'administrative') => {
-    await api.post(`/api/soumissions/${soumissionId}/affecter/`, {
+    await api.post(`/soumissions/${soumissionId}/affecter/`, {
       evaluateur_ids: evaluateurIds,
       type_evaluation: type,
     });
@@ -106,7 +89,7 @@ export function SoumissionsProvider({ children }: { children: ReactNode }) {
   };
 
   const soumettre = async (soumissionId: string, note: number, commentaire: string, type: 'technique' | 'financiere' | 'administrative') => {
-    await api.post(`/api/soumissions/${soumissionId}/evaluate/`, {
+    await api.post(`/soumissions/${soumissionId}/evaluate/`, {
       note,
       commentaire,
       type_evaluation: type,

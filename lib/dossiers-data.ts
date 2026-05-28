@@ -14,6 +14,7 @@ export interface Dossier {
   delaiEvaluation: string;
   etape: DossierEtape;
   status: DossierStatus;
+    commissionId?: number; 
 }
 
 export const DOSSIERS: Dossier[] = [
