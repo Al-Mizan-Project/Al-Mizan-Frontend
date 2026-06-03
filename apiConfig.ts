@@ -52,10 +52,10 @@ const services: Record<ServiceName, ServiceConfig> = {
  * 
  * @example
  * getApiUrl('contrats', 'contrats') 
- * // → 'http://localhost:18085/contrats'
+ * // → 'http://localhost:8080/contrats'
  * 
  * getApiUrl('contrats', 'contrats/123/signer')
- * // → 'http://localhost:18085/contrats/123/signer'
+ * // → 'http://localhost:8080/contrats/123/signer'
  */
 export const getApiUrl = (service: ServiceName, endpoint: string): string => {
   const config = services[service];
@@ -65,8 +65,8 @@ export const getApiUrl = (service: ServiceName, endpoint: string): string => {
   }
   
   // Nettoie les URLs pour éviter les doubles slashes :
-  // baseUrl: "http://localhost:18085/" + endpoint: "/contrats" 
-  // → "http://localhost:18085/contrats" (et non "http://localhost:18085//contrats")
+  // baseUrl: "http://localhost:8080/" + endpoint: "/contrats" 
+  // → "http://localhost:8080/contrats" (et non "http://localhost:8080//contrats")
   const cleanBaseUrl = config.baseUrl.replace(/\/$/, ''); // retire le slash final
   const cleanEndpoint = endpoint.replace(/^\//, '');       // retire le slash initial
   

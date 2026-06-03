@@ -174,7 +174,7 @@ export default function SoumettreOffrePage({
         }),
       ]);
 
-      const documentsBase = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8003';
+      const documentsBase = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8080';
       const financialUrl = `${documentsBase}/api/documents/${finDoc.id_document}/`;
 
       const created = await createSoumission({

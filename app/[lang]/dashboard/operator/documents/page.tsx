@@ -69,7 +69,7 @@ export default function DocumentsPage({
 
   const isArabic = lang === 'ar';
 
-  const documentsBase = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8003';
+  const documentsBase = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8080';
 
   const toLocalDocument = (doc: {
     id_document: number;

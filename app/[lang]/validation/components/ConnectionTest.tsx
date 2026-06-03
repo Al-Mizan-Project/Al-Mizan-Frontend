@@ -2,7 +2,7 @@
 'use client';
 import { useState } from 'react';
 
-const API_URL = process.env.NEXT_PUBLIC_CONTRATS_SERVICE_URL || 'http://localhost:18085';
+const API_URL = process.env.NEXT_PUBLIC_CONTRATS_SERVICE_URL || 'http://localhost:8080';
 
 export default function ConnectionTest() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
