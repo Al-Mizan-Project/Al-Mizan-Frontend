@@ -26,13 +26,7 @@ export default function TabPanel({ data, actionConfig, emptyLabel }: TabPanelPro
         currentPage={currentPage}
         rowsPerPage={ROWS_PER_PAGE}
       />
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={(p) => setCurrentPage(p)}
-        totalItems={data.length}
-        rowsPerPage={ROWS_PER_PAGE}
-      />
+      
     </div>
   );
 }

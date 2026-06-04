@@ -109,6 +109,7 @@ export default function FileDetails({
   const isValidator = role === 'validator';
   const isDecisionTab = activeTab === 'decision';
   const isReportsTab = activeTab === 'reports';
+  const missingDocumentText = 'Document non disponible';
 
   const shouldShowDocumentViewer = activeTab !== 'decision' || (activeTab === 'decision' && activeDecisionSubTab === 'general');
   const validatorNoButtons = isValidator && activeTab === 'call';
@@ -118,16 +119,19 @@ export default function FileDetails({
 
   const getData = () => {
     if (!data) return { fields: [] };
-    const { soumission, appelOffre, evaluations, validations, documents } = data;
+    const { soumission, appelOffre, evaluations, validations, documents, documentsByType } = data;
 
-    // Helper to find a document by name or type
+    const allDocuments = documents || [];
+
     const findDoc = (type: string) => {
-      return documents?.find((d: any) => d.type_document?.toLowerCase().includes(type.toLowerCase()) || d.nom?.toLowerCase().includes(type.toLowerCase()));
+      return allDocuments.find((d: any) =>
+        `${d.type_document ?? ''} ${d.nom ?? ''}`.toLowerCase().includes(type.toLowerCase())
+      );
     };
 
-    const financialDoc = findDoc('financiere');
-    const technicalDoc = findDoc('technique');
-    const aoDoc = findDoc('cahier');
+    const financialDoc = documentsByType?.financiere || findDoc('financiere') || findDoc('financier') || findDoc('offre financ');
+    const technicalDoc = documentsByType?.technique || findDoc('technique') || findDoc('technical') || findDoc('offre technique');
+    const aoDoc = documentsByType?.cdc || findDoc('cahier') || findDoc('cdc') || findDoc('cahier des charges');
 
     const commonFields = [
       { label: 'Dossier', value: `AO-${appelOffre?.id_appel_offres}-${soumission?.id_soumission}` },
@@ -140,8 +144,8 @@ export default function FileDetails({
       return {
         fields: [
           ...commonFields,
-          { label: 'Document', value: 'Offre financière' },
-          { label: 'URL', value: soumission?.offre_financiere_chiffree_url || 'Non disponible' },
+          { label: 'Document', value: financialDoc?.nom ?? missingDocumentText },
+          { label: 'URL', value: financialDoc?.download_url ?? financialDoc?.storage_url ?? soumission?.offre_financiere_chiffree_url ?? missingDocumentText },
           { label: 'Status', value: soumission?.statut }
         ]
       };
@@ -151,8 +155,8 @@ export default function FileDetails({
       return {
         fields: [
           ...commonFields,
-          { label: 'Document', value: technicalDoc?.nom || 'Offre technique' },
-          { label: 'URL', value: technicalDoc?.storage_url || 'Non disponible' },
+          { label: 'Document', value: technicalDoc?.nom ?? missingDocumentText },
+          { label: 'URL', value: technicalDoc?.download_url ?? technicalDoc?.storage_url ?? missingDocumentText },
           { label: 'Status', value: soumission?.statut }
         ]
       };
@@ -163,8 +167,8 @@ export default function FileDetails({
         fields: [
           { label: 'Dossier', value: appelOffre?.reference },
           { label: 'Titre', value: appelOffre?.titre },
-          { label: 'Document', value: 'Cahier des charges' },
-          { label: 'URL', value: aoDoc?.storage_url || 'Non disponible' }
+          { label: 'Document', value: aoDoc?.nom ?? missingDocumentText },
+          { label: 'URL', value: aoDoc?.download_url ?? aoDoc?.storage_url ?? missingDocumentText }
         ]
       };
     }
@@ -197,10 +201,12 @@ export default function FileDetails({
   };
 
   const currentData = getData();
+  const currentUrlValue = currentData.fields.find(f => f.label === 'URL')?.value;
+  const shouldShowMissingDocumentMessage = ['financial', 'technical', 'call'].includes(activeTab) && currentUrlValue === missingDocumentText;
 
   const handleDownload = () => {
     const urlField = currentData.fields.find(f => f.label === 'URL');
-    if (urlField && urlField.value !== 'Non disponible') {
+    if (urlField && urlField.value !== missingDocumentText) {
       onDownload?.(urlField.value);
     } else {
       alert('Document non disponible pour le téléchargement');
@@ -211,34 +217,91 @@ export default function FileDetails({
   // ============================================
   // COMPOSANT: Contenu "Conclusion et Décision"
   // ============================================
-  const renderConclusionContent = () => (
+  const renderConclusionContent = () => {
+    const reference = data?.appelOffre?.reference || 'N/A';
+    const operateur = data?.operateurNom || (data?.soumission?.id_soumissionnaire ? `Opérateur #${data.soumission.id_soumissionnaire}` : 'N/A');
+    const scoreFinancier = data?.evaluations?.find((e: any) => e.type === 'financiere')?.note ?? 0;
+    const scoreTechnique = data?.evaluations?.find((e: any) => e.type === 'technique')?.note ?? 0;
+    const serviceContractant = data?.serviceNom || data?.appelOffre?.id_service_contractant || 'N/A';
+    const domaine = data?.appelOffre?.secteur || data?.appelOffre?.type_prestation || 'N/A';
+    const decisionFinale = data?.attribution?.statut || 'En attente';
+    const attributionId = data?.attribution?.id;
+
+    const handleDownloadPdf = () => {
+      window.print();
+    };
+
+    const handleTransmit = async () => {
+      try {
+        const decisionLabels: Record<string, string> = {
+          'retenu': 'Dossier retenu',
+          'rejete': 'Dossier rejeté',
+          'retenu_reserve': 'Dossier retenu sous réserve'
+        };
+        const fullComment = `${decisionLabels[decisionFinale] || 'Décision prise'} : ${motivation || avisFinal || 'Aucun commentaire'}`;
+
+        const notifPayload = {
+          utilisateur_id: 1, // Simulate sending to admin/president
+          type_notification: 'transmission_dossier',
+          titre: `Transmission du dossier ${reference}`,
+          message: `Le validateur a transmis le dossier. Décision: ${fullComment}`,
+          priorite: 'haute',
+          categorie: 'validation',
+          entite_liee_type: 'attribution',
+          entite_liee_id: attributionId,
+          statut: 'non_lu'
+        };
+
+        const response = await fetch('/api/proxy/notifications?path=notifications/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(notifPayload)
+        });
+
+        if (!response.ok) {
+           console.warn('Notification non envoyée', await response.text());
+        }
+        
+        alert(`Notification transmise au responsable (Rôle: ${role}).`);
+        onTransmit?.();
+      } catch (e) {
+        console.error('Erreur transmission', e);
+        alert('Erreur lors de la transmission');
+      }
+    };
+
+    return (
     <div className="space-y-6">
       {/* Informations générales */}
       <div className="val-conclusion-summary">
         <div className="val-summary-grid">
           <div className="val-summary-item">
-            <span className="val-summary-label">Dossier</span>
-            <span className="val-summary-value">Référence dossier ID</span>
+            <span className="val-summary-label">Référence dossier ID</span>
+            <span className="val-summary-value">{reference}</span>
           </div>
           <div className="val-summary-item">
             <span className="val-summary-label">Opérateur économique</span>
-            <span className="val-summary-value">Opérateur</span>
+            <span className="val-summary-value">{operateur}</span>
           </div>
           <div className="val-summary-item">
             <span className="val-summary-label">Score financière</span>
-            <span className="val-summary-value">0/100</span>
+            <span className="val-summary-value">{scoreFinancier}/100</span>
           </div>
           <div className="val-summary-item">
             <span className="val-summary-label">Score technique</span>
-            <span className="val-summary-value">0/100</span>
+            <span className="val-summary-value">{scoreTechnique}/100</span>
           </div>
           <div className="val-summary-item">
             <span className="val-summary-label">Service Contractant</span>
-            <span className="val-summary-value">Service Contractant</span>
+            <span className="val-summary-value">Service #{serviceContractant}</span>
           </div>
           <div className="val-summary-item">
             <span className="val-summary-label">Domaine</span>
-            <span className="val-summary-value">Domaine</span>
+            <span className="val-summary-value">{domaine}</span>
+          </div>
+          <div className="val-summary-item">
+            <span className="val-summary-label">Décision finale</span>
+            <span className="val-summary-value">{decisionFinale}</span>
           </div>
         </div>
       </div>
@@ -318,14 +381,27 @@ export default function FileDetails({
         </label>
       </div>
 
-      {/* Bouton Marquer comme prêt */}
-      <div className="val-action-buttons">
+      {/* Bouton Marquer comme prêt, Télécharger, Transmettre */}
+      <div className="val-action-buttons flex gap-4">
         <button
           onClick={() => setShowModal(true)}
-          disabled={!isCertified}
-          className={`val-btn-primary ${!isCertified ? 'val-btn-disabled' : ''}`}
+          disabled={!isCertified || decisionFinale === 'definitive'}
+          className={`val-btn-primary ${(!isCertified || decisionFinale === 'definitive') ? 'val-btn-disabled' : ''}`}
         >
           Marquer comme prêt
+        </button>
+        <button
+          onClick={handleDownloadPdf}
+          className="val-btn-secondary"
+        >
+          Télécharger
+        </button>
+        <button
+          onClick={handleTransmit}
+          disabled={decisionFinale !== 'definitive'}
+          className={`val-btn-secondary ${decisionFinale !== 'definitive' ? 'val-btn-disabled' : ''}`}
+        >
+          Transmettre
         </button>
       </div>
 
@@ -372,12 +448,8 @@ export default function FileDetails({
                     console.error("Erreur décodage token:", e);
                   }
 
-                  const validationId = data?.validations?.find((v: any) =>
-                    Number(v.id_utilisateur) === Number(currentUserId)
-                  )?.id_validation;
-
-                  if (!validationId) {
-                    alert("Aucune affectation trouvée pour votre compte sur ce dossier.");
+                  if (!attributionId) {
+                    alert("Aucune attribution trouvée pour valider.");
                     return;
                   }
 
@@ -392,13 +464,21 @@ export default function FileDetails({
 
                     const fullComment = `${decisionLabels[decision] || 'Décision prise'} : ${motivation || avisFinal || 'Aucun commentaire'}`;
 
-                    if (decision === 'retenu') {
-                      await validationsApi.approveValidation(validationId, fullComment);
-                    } else {
-                      await validationsApi.rejectValidation(validationId, fullComment);
+                    // Validation de l'attribution via le endpoint des contrats
+                    const response = await fetch(`/api/proxy/contrats?path=attributions-provisoires/${attributionId}/valider/`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ commentaire: fullComment })
+                    });
+
+                    if (!response.ok) {
+                       const errBody = await response.json().catch(() => ({}));
+                       throw new Error(errBody.error || "Failed to validate attribution");
                     }
+
                     setShowModal(false);
-                    router.push(`/${lang}/validation/dashboard/validator`);
+                    // Force refresh to update data
+                    window.location.reload();
                   } catch (err: any) {
                     console.error("Erreur validation détaillée:", err);
                     alert(`Erreur: ${err.message || "Une erreur est survenue"}`);
@@ -416,9 +496,15 @@ export default function FileDetails({
         </div>
       )}
     </div>
-  );
+    );
+  };
 
-  const renderCommissionContent = () => (
+  const renderCommissionContent = () => {
+    const montantTotal = data?.soumission?.montant_soumission ?? 'N/A';
+    const devise = data?.soumission?.devise ?? 'DZD';
+    const domaine = data?.appelOffre?.secteur ?? data?.appelOffre?.type_prestation ?? 'N/A';
+
+    return (
     <div className="space-y-6">
       <div className="val-decision-section">
         <h3 className="val-section-title">Contexte Financier</h3>
@@ -426,15 +512,15 @@ export default function FileDetails({
           <div>
             <div className="val-field-row">
               <span className="val-field-label">Montant total</span>
-              <span className="val-field-value">12 500 000.00</span>
+              <span className="val-field-value">{montantTotal}</span>
             </div>
             <div className="val-field-row">
               <span className="val-field-label">Devise</span>
-              <span className="val-field-value">DZD</span>
+              <span className="val-field-value">{devise}</span>
             </div>
             <div className="val-field-row">
               <span className="val-field-label">Domaine</span>
-              <span className="val-field-value">Domaine</span>
+              <span className="val-field-value">{domaine}</span>
             </div>
           </div>
           <div>
@@ -507,7 +593,7 @@ export default function FileDetails({
         <div className="val-conformity-details">
           <div className="val-field-row">
             <span className="val-field-label">Montant global proposé</span>
-            <span className="val-field-value">12 500 000.00 DZD</span>
+            <span className="val-field-value">{montantTotal} {devise}</span>
           </div>
 
           <div className="mt-4">
@@ -717,10 +803,15 @@ export default function FileDetails({
             </div>
           </div>
         )}
-      </div>
     </div>
-  );
-  const renderTechnicalEvaluationContent = () => (
+  </div>
+    );
+  };
+  const renderTechnicalEvaluationContent = () => {
+    const objetDuMarche = data?.appelOffre?.titre ?? data?.appelOffre?.reference ?? 'N/A';
+    const domaine = data?.appelOffre?.secteur ?? data?.appelOffre?.type_prestation ?? 'N/A';
+
+    return (
     <div className="space-y-6">
       <div className="val-decision-section">
         <h3 className="val-section-title">Contexte Technique</h3>
@@ -728,11 +819,11 @@ export default function FileDetails({
           <div>
             <div className="val-field-row">
               <span className="val-field-label">Objet du marché</span>
-              <span className="val-field-value">Fourniture</span>
+              <span className="val-field-value">{objetDuMarche}</span>
             </div>
             <div className="val-field-row">
               <span className="val-field-label">Domaine</span>
-              <span className="val-field-value">Domaine</span>
+              <span className="val-field-value">{domaine}</span>
             </div>
           </div>
           <div>
@@ -1100,7 +1191,8 @@ export default function FileDetails({
       )}
     </div>
   </div>
-);
+    );
+  };
 
       return (
       <>
@@ -1172,16 +1264,23 @@ export default function FileDetails({
             renderConclusionContent()
           ) : (
             <div className="val-file-details-content">
-              {(currentData?.fields || []).map((field: any, index: number) => (
-                <div key={index} className="val-file-details-row">
-                  <span className="val-file-details-label val-body-medium" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
-                    {field.label}
-                  </span>
-                  <span className="val-file-details-value val-body" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
-                    {field.value}
-                  </span>
+              {shouldShowMissingDocumentMessage && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 mb-4 text-orange-900">
+                  <strong>Document non disponible.</strong> Aucune pièce valide n'a été trouvée pour cet onglet.
                 </div>
-              ))}
+              )}
+              {((currentData?.fields || [])
+                .filter((field: any) => !['Document', 'URL', 'Status'].includes(field.label))
+                .map((field: any, index: number) => (
+                  <div key={index} className="val-file-details-row">
+                    <span className="val-file-details-label val-body-medium" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
+                      {field.label}
+                    </span>
+                    <span className="val-file-details-value val-body" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
+                      {field.value}
+                    </span>
+                  </div>
+                )))}
             </div>
           )}
 
@@ -1229,7 +1328,7 @@ export default function FileDetails({
                 </button>
               )}
 
-              {validatorFullButtons && (
+              {validatorFullButtons && activeDecisionSubTab !== 'conclusion' && (
                 <>
                   <button onClick={handleDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
                     <FontAwesomeIcon icon={faFileDownload} className="val-icon-16" />

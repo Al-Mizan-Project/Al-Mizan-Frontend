@@ -148,7 +148,7 @@ function EnCoursTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
           </tbody>
         </table>
       </div>
-      {total > 1 && <Pagination currentPage={page} totalPages={total} onPageChange={setPage} totalItems={EN_COURS.length} rowsPerPage={ROWS_PER_PAGE} />}
+      {total > 1 && }
     </div>
   );
 }
@@ -218,7 +218,7 @@ function EnRetardTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
           </tbody>
         </table>
       </div>
-      {total > 1 && <Pagination currentPage={page} totalPages={total} onPageChange={setPage} totalItems={EN_RETARD.length} rowsPerPage={ROWS_PER_PAGE} />}
+      {total > 1 && }
     </div>
   );
 }

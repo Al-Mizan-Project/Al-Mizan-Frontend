@@ -432,13 +432,7 @@ export default function UtilisateursView() {
           </div>
 
           {totalPages > 1 && (
-            <Pagination
-              currentPage={page}
-              totalPages={totalPages}
-              onPageChange={setPage}
-              totalItems={sorted.length}
-              rowsPerPage={ROWS_PER_PAGE}
-            />
+            
           )}
         </>
       )}

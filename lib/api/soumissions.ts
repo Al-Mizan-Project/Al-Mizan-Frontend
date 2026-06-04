@@ -10,6 +10,8 @@ export interface SoumissionResponse {
   conformite_statut: string;
   created_at: string;
   updated_at: string;
+  reference_ao?: string;
+  titre_ao?: string;
 }
 
 export const soumissionsApi = {
@@ -25,13 +27,13 @@ export const soumissionsApi = {
   },
 
   async getSoumission(id: number): Promise<SoumissionResponse & { document_ids: number[], offre_financiere_chiffree_url: string }> {
-    const response = await fetch(`/api/proxy/soumissions?path=soumissions/${id}`);
+    const response = await fetch(`/api/proxy/soumissions?path=api/soumissions/${id}/`);
     if (!response.ok) throw new Error(`Failed to fetch soumission ${id}`);
     return response.json();
   },
 
   async getSoumissionDocuments(id: number): Promise<any[]> {
-    const response = await fetch(`/api/proxy/soumissions?path=soumissions/${id}/documents`);
+    const response = await fetch(`/api/proxy/soumissions?path=api/soumissions/${id}/documents/`);
     if (!response.ok) throw new Error(`Failed to fetch documents for soumission ${id}`);
     return response.json();
   },

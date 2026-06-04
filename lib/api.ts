@@ -33,8 +33,21 @@ export const setupAuthInterceptor = (token: string | null) => {
 
 export const authAPI = {
   login: async (email: string, password: string) => {
-    const response = await authApi.post('/auth/login', { email, password });
-    return response.data;
+    // Use the Next.js proxy to reach the auth service (avoids CORS and env mismatches)
+    const res = await fetch('/api/proxy/auth?path=auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const message = err.message || err.detail || JSON.stringify(err) || `HTTP ${res.status}`;
+      const error = new Error(message);
+      // attach response-like structure to mimic axios error shape used elsewhere
+      (error as any).response = { status: res.status, data: err };
+      throw error;
+    }
+    return await res.json();
   },
   
   getCurrentUser: async () => {
@@ -79,8 +92,9 @@ export type LoginResponse = {
   access: string;
   refresh: string;
   user: {
-    id: number;
+    id?: number;
     email: string;
-    
+    id_membre?: string;
+    role?: string;
   };
 };

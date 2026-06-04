@@ -179,13 +179,7 @@ function TableContent({
             currentPage={currentPage}
             rowsPerPage={ROWS_PER_PAGE}
           />
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            totalItems={data.length}
-            rowsPerPage={ROWS_PER_PAGE}
-          />
+          
         </>
       )}
     </div>

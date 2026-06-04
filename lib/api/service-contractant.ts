@@ -469,7 +469,7 @@ export const serviceContractantApi = {
   },
 
   updateMembre(
-    membreId: number,
+    membreId: number | string,
     payload: Partial<{
       id_organisation: number;
       prenom: string;
@@ -485,7 +485,7 @@ export const serviceContractantApi = {
     });
   },
 
-  deleteMembre(membreId: number) {
+  deleteMembre(membreId: number | string) {
     return request<null>('acteurs', {
       path: `membres/${membreId}`,
       method: 'DELETE',

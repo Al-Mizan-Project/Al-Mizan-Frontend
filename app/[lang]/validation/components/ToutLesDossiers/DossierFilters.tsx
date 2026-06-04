@@ -26,6 +26,7 @@ interface DossiersFiltersProps {
   onExport?: () => void;
   showValidatorFilter?: boolean;
   showExportButton?: boolean;
+  showStatusFilter?: boolean;
   viewType?: 'dossiers' | 'validateurs'; // nouvelle prop
 }
 
@@ -35,6 +36,7 @@ export default function DossiersFilters({
   onExport,
   showValidatorFilter = true,
   showExportButton = true,
+  showStatusFilter = true,
   viewType = 'dossiers'
 }: DossiersFiltersProps) {
 
@@ -50,13 +52,15 @@ export default function DossiersFilters({
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newSearch = e.target.value;
-    setFilters((prev) => ({ ...prev, search: newSearch }));
-    onFiltersChange({ ...filters, search: newSearch });
+    const newFilters = { ...filters, search: newSearch };
+    setFilters(newFilters);
+    onFiltersChange(newFilters);
   };
 
   const handleFilterChange = (key: keyof FilterState, value: string) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
-    onFiltersChange({ ...filters, [key]: value });
+    const newFilters = { ...filters, [key]: value };
+    setFilters(newFilters);
+    onFiltersChange(newFilters);
 
     if (key === 'domaine' && value) {
       setActiveFilters((prev) => ({ ...prev, construction: true }));
@@ -140,30 +144,32 @@ export default function DossiersFilters({
           )}
 
           {/* Status / Disponibilité */}
-          {viewType === 'validateurs' ? (
-            <select
-              value={filters.status}
-              onChange={(e) => handleFilterChange('status', e.target.value)}
-              className="val-filter-select"
-            >
-              <option value="">Disponibilité</option>
-              <option value="disponible">Disponible</option>
-              <option value="recommande">Recommandé</option>
-              <option value="conflit">Conflit</option>
-              <option value="indisponible">Indisponible</option>
-            </select>
-          ) : (
-            <select
-              value={filters.status}
-              onChange={(e) => handleFilterChange('status', e.target.value)}
-              className="val-filter-select"
-            >
-              <option value="">Status</option>
-              <option value="en-cours">En Cours</option>
-              <option value="en-retard">En Retard</option>
-              <option value="en-attente">En Attente</option>
-              <option value="pret">Prêt</option>
-            </select>
+          {showStatusFilter && (
+            viewType === 'validateurs' ? (
+              <select
+                value={filters.status}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+                className="val-filter-select"
+              >
+                <option value="">Disponibilité</option>
+                <option value="disponible">Disponible</option>
+                <option value="recommande">Recommandé</option>
+                <option value="conflit">Conflit</option>
+                <option value="indisponible">Indisponible</option>
+              </select>
+            ) : (
+              <select
+                value={filters.status}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+                className="val-filter-select"
+              >
+                <option value="">Status</option>
+                <option value="en-cours">En Cours</option>
+                <option value="en-retard">En Retard</option>
+                <option value="en-attente">En Attente</option>
+                <option value="pret">Prêt</option>
+              </select>
+            )
           )}
 
           {/* Période */}

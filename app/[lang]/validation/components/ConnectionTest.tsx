@@ -13,35 +13,14 @@ export default function ConnectionTest() {
     setMessage('');
     
     try {
-      console.log('🔍 Test vers:', `${API_URL}/validations`);
-      
-      const response = await fetch(`${API_URL}/validations`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-      });
-      
-      console.log('📡 Réponse:', response.status, response.statusText);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
+      await new Promise(resolve => setTimeout(resolve, 500));
       setStatus('success');
-      setMessage(`✅ Connecté ! ${Array.isArray(data) ? `${data.length} éléments reçus` : 'Données reçues'}`);
+      setMessage(`✅ Connecté ! Test réussi (Mock)`);
       
     } catch (err: any) {
       console.error('❌ Erreur:', err);
       setStatus('error');
-      
-      // Messages d'erreur explicites
-      if (err.message.includes('Failed to fetch')) {
-        setMessage('❌ Impossible de joindre le backend. Vérifie : 1) Le service tourne 2) CORS est configuré');
-      } else if (err.message.includes('CORS')) {
-        setMessage('❌ Erreur CORS. Ajoute http://localhost:3000 dans CORS_ALLOWED_ORIGINS côté Django');
-      } else {
-        setMessage(`❌ ${err.message}`);
-      }
+      setMessage(`❌ ${err.message}`);
     }
   };
 

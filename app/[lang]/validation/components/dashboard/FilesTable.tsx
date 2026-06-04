@@ -8,7 +8,10 @@ interface FilesTableProps {
   status: 'En Attente' | 'En Cours' | 'En Retard' | 'Prêt';
   lang: string;
   dict?: any;
+  onAction?: (dossier: fileRecord) => void;
   onAffecter?: (dossier: fileRecord) => void;
+  onView?: (dossier: fileRecord) => void;
+  onRowClick?: (dossier: fileRecord) => void;
   viewMode?: 'standard' | 'validateur';
 }
 
@@ -17,7 +20,10 @@ export default function FilesTable({
   status, 
   lang, 
   dict, 
+  onAction,
   onAffecter,
+  onView,
+  onRowClick,
   viewMode = 'standard'
 }: FilesTableProps) {
   const router = useRouter();
@@ -39,27 +45,29 @@ export default function FilesTable({
     return t(`files.table.status.${fileStatus}`, fileStatus);
   };
 
+  const actionHandler = onAction || onAffecter;
+
 const getActionButton = (fileStatus: string) => {
   const actionMap: Record<string, string> = {
     'En Attente': 'Affecter',
     'En Cours': 'Réaffecter',
     'En Retard': 'Réaffecter',
     'Prêt': 'Transmettre',
-    'Soumis': 'Voir' // ← AJOUTER CECI
   };
-  const actionKey = actionMap[fileStatus] || 'view';
+  const actionKey = actionMap[fileStatus] || 'Voir';
   return t(`files.table.actions.${actionKey}`, actionKey);
 };
 
   const isAr = lang === 'ar';
 
-  // Calcul du nombre de colonnes pour le colspan de l'état vide
   const getColumnCount = () => {
-    if (viewMode === 'validateur') {
-      if (status === 'En Cours') return 5; // Dossier, Opérateur, Date d'affectation, Délai d'évaluation, Status
-      if (status === 'En Retard') return 4; // Dossier, Opérateur, Jours de retard, Status
+    switch (status) {
+      case 'En Attente': return 6;
+      case 'En Cours': return 7;
+      case 'En Retard': return 6;
+      case 'Prêt': return 5;
+      default: return 6;
     }
-    return 10; // Mode standard
   };
 
   return (
@@ -77,6 +85,10 @@ const getActionButton = (fileStatus: string) => {
               {t('files.table.headers.economicOperator', 'Opérateur Économique')}
             </th>
 
+              {/* COLONNE 3: Étape (toujours affichée) */}
+              <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
+                {t('files.table.headers.etape', 'Étape')}
+              </th>
             {/* MODE VALIDATEUR - DOSSIERS EN COURS */}
             {viewMode === 'validateur' && status === 'En Cours' && (
               <>
@@ -96,7 +108,6 @@ const getActionButton = (fileStatus: string) => {
               </th>
             )}
 
-            {/* MODE STANDARD - Colonnes supplémentaires */}
             {viewMode === 'standard' && (
               <>
                 {status !== 'En Attente' && (
@@ -119,12 +130,11 @@ const getActionButton = (fileStatus: string) => {
                     {t('files.table.headers.delayDays', 'Jours de retard')}
                   </th>
                 )}
-                <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                  {t('files.table.headers.validationDeadline', 'Délai de validation')}
-                </th>
-                <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                  {t('files.table.headers.stage', 'Etape')}
-                </th>
+                {(status === 'En Attente' || status === 'En Cours') && (
+                  <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
+                    {t('files.table.headers.validationDeadline', 'Délai de validation')}
+                  </th>
+                )}
                 <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
                   {t('files.table.headers.actions', 'Action')}
                 </th>
@@ -150,9 +160,15 @@ const getActionButton = (fileStatus: string) => {
               <tr 
                 key={file.id} 
                 className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
-                onClick={() => router.push(`/${lang}/validation/dossier/${file.rawId || file.id.replace('ID-', '')}/${viewMode === 'validateur' ? 'validator' : 'commission'}`)}
+                onClick={() => {
+                  if (onRowClick) {
+                    onRowClick(file);
+                  } else {
+                    router.push(`/${lang}/validation/dossier/${file.rawId || file.id.replace('ID-', '')}/${viewMode === 'validateur' ? 'validator' : 'commission'}`);
+                  }
+                }}
               >
-                {/* COLONNE 1: Dossier */}
+                {/* COLONNE 1: Dossier (Soumission) */}
                 <td className="py-3 px-4">
                   <div className="flex items-center gap-2">
                     <div>
@@ -164,8 +180,10 @@ const getActionButton = (fileStatus: string) => {
                   </div>
                 </td>
 
-                {/* COLONNE 2: Opérateur Économique */}
+                {/* COLONNE 2: Soumissionaire */}
                 <td className="py-3 px-4 text-sm">{file.economicOperator}</td>
+                  {/* COLONNE 3: Étape (toujours Validation) */}
+                  <td className="py-3 px-4 text-sm">Validation</td>
 
                 {/* MODE VALIDATEUR - DOSSIERS EN COURS */}
                 {viewMode === 'validateur' && status === 'En Cours' && (
@@ -198,23 +216,24 @@ const getActionButton = (fileStatus: string) => {
                     {status === 'En Retard' && (
                       <td className="py-3 px-4 text-sm">{file.delayDays}j</td>
                     )}
-                    <td className="py-3 px-4 text-sm">{file.validationDeadline}</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700">
-                        {file.etape}
-                      </span>
-                    </td>
+                    {(status === 'En Attente' || status === 'En Cours') && (
+                      <td className="py-3 px-4 text-sm">{file.validationDeadline}</td>
+                    )}
                     <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => onAffecter?.(file)}
-                          className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
-                        >
-                          {getActionButton(status)}
-                        </button>
-                        {status === 'Prêt' && (
-                          <button 
-                            onClick={() => router.push(`/${lang}/validation/dossier/${file.rawId || file.id.replace('ID-', '')}/commission`)}
+                      <div className="flex gap-2 flex-wrap">
+                        {actionHandler && (
+                          <>
+                            <button
+                              onClick={() => actionHandler(file)}
+                              className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                            >
+                              {getActionButton(file.status)}
+                            </button>
+                          </>
+                        )}
+                        {file.status === 'Prêt' && onView && (
+                          <button
+                            onClick={() => onView(file)}
                             className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
                           >
                             {t('files.table.actions.view', 'Voir')}

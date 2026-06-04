@@ -3,12 +3,12 @@ import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useState, FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  faEnvelope, 
-  faLock, 
-  faEye, 
+import {
+  faEnvelope,
+  faLock,
+  faEye,
   faEyeSlash,
-  faBuildingColumns 
+  faBuildingColumns
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 
@@ -18,11 +18,17 @@ type PageProps = {
 
 // Mapping des rôles vers les URLs de redirection
 const ROLE_REDIRECTS: Record<string, string> = {
-  admin:                '/fr/system-admin',
+  admin: '/fr/system-admin',
   operateur_economique: '/fr/dashboard/operator',
-  service_contractant:  '/fr/dashboard/contractant',
-  commission_externe:   '/fr/validation/dashboard/validator',
-  tutelle:              '/fr/validation/dashboard/validator',
+  service_contractant: '/fr/dashboard/contractant',
+
+  // Nouveaux rôles
+  resp_valid_intern: '/fr/validation/dashboard/commission',
+  resp_cm: '/fr/validation/dashboard/commission',
+  validateur_interne_cdc: '/fr/validation/dashboard/validatorCDC',
+  validateur_interne_marche: '/fr/validation/dashboard/validatorMarche',
+  validateur_externe_cdc: '/fr/validation/dashboard/validatorCDC',
+  validateur_externe_marche: '/fr/validation/dashboard/validatorMarche',
 };
 
 /**
@@ -43,11 +49,17 @@ function getRedirectPath(roleName: string, idRole: number): string {
   }
 
   // Correspondance partielle (fallback)
-  if (normalized.includes('admin'))                return ROLE_REDIRECTS.admin;
-  if (normalized.includes('operateur'))            return ROLE_REDIRECTS.operateur_economique;
-  if (normalized.includes('contractant'))          return ROLE_REDIRECTS.service_contractant;
-  if (normalized.includes('commission'))           return ROLE_REDIRECTS.commission_externe;
-  if (normalized.includes('tutelle'))              return ROLE_REDIRECTS.tutelle;
+  if (normalized.includes('admin')) return ROLE_REDIRECTS.admin;
+  if (normalized.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
+  if (normalized.includes('contractant')) return ROLE_REDIRECTS.service_contractant;
+  if (normalized.includes('resp_valid_intern') || normalized.includes('resp_cm')) return ROLE_REDIRECTS.resp_valid_intern;
+  if (normalized.includes('validateur')) {
+    if (normalized.includes('cdc')) return ROLE_REDIRECTS.validateur_interne_cdc;
+    if (normalized.includes('marche')) return ROLE_REDIRECTS.validateur_interne_marche;
+    return ROLE_REDIRECTS.validateur_interne_cdc;
+  }
+  if (normalized.includes('commission')) return ROLE_REDIRECTS.commission_externe;
+  if (normalized.includes('tutelle')) return ROLE_REDIRECTS.tutelle;
 
   // Fallback par id_role si le nom ne correspond à rien
   const idRoleMap: Record<number, string> = {
@@ -83,7 +95,7 @@ export default function LoginPage({ params }: PageProps) {
 
   const isArabic = lang === 'ar';
 
- const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -101,55 +113,12 @@ export default function LoginPage({ params }: PageProps) {
     }
 
     try {
-      // 1. Appel à l'API de login
-      const response = await fetch('/api/proxy/auth?path=auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.detail || errorData.error || 'Identifiants incorrects');
-      }
-
-      const data = await response.json();
-      const accessToken  = data.access  || data.access_token;
-      const refreshToken = data.refresh || data.refresh_token;
-
-      if (!accessToken) {
-        throw new Error('Token non reçu dans la réponse du serveur');
-      }
-
-      // 1. Décodage du JWT
-      const base64Url = accessToken.split('.')[1];
-      const decoded   = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
-
-      // On sauvegarde l'id_membre pour un accès rapide si besoin
-      if (decoded.id_membre) {
-        localStorage.setItem('membre_id', String(decoded.id_membre));
-      }
-
-      // 2. On prépare l'objet utilisateur à partir des infos du token (ou de data.user si ton backend l'envoie)
-      const userData = {
-        email: decoded.email || email,
-        id_membre: decoded.id_membre,
-        role: decoded.role,
-        id_role: decoded.id_role
-      };
-
-      // 3. 🚀 On met à jour l'état global React (PLUS D'ERREUR CORS !)
-      authLogin(accessToken, refreshToken, userData);
-
-      // 4. Redirection gérée par la page (plus dynamique que le context)
-      const roleName = decoded.role || decoded.role_name || '';
-      const idRole   = decoded.id_role || 0;
-      const redirectPath = getRedirectPath(roleName, idRole);
-
-      window.location.href = redirectPath;
-
+      // Utiliser la méthode centralisée d'authentification du contexte
+      await authLogin(email, password);
+      // AuthContext gère le stockage du token et la redirection par défaut
+      return;
     } catch (err: any) {
-      if (err.response?.status === 401 || err.message?.includes('Identifiants')) {
+      if (err.response?.status === 401 || err.message?.includes('Invalid') || err.message?.includes('Identifiants')) {
         setError(isArabic ? 'بيانات الدخول غير صحيحة' : 'Identifiants incorrects');
       } else {
         setError(err.message || (isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion'));
@@ -157,7 +126,7 @@ export default function LoginPage({ params }: PageProps) {
     } finally {
       setLoading(false);
     }
-};
+  };
 
   return (
     <main className="min-h-screen flex flex-col lg:flex-row bg-[#FCFFFF]">
@@ -187,9 +156,9 @@ export default function LoginPage({ params }: PageProps) {
 
           <div className="mt-12 flex flex-col gap-3 text-sm text-[#589C9F]">
             {[
-              { ar: 'متوافق مع القانون 23-12',          fr: 'Conforme Loi 23-12' },
+              { ar: 'متوافق مع القانون 23-12', fr: 'Conforme Loi 23-12' },
               { ar: 'حماية البيانات حسب القانون 18-07', fr: 'Protection des données Loi 18-07' },
-              { ar: 'استضافة سيادية جزائرية',           fr: 'Hébergement souverain algérien' },
+              { ar: 'استضافة سيادية جزائرية', fr: 'Hébergement souverain algérien' },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2 justify-center">
                 <span className="w-2 h-2 bg-[#9BCFCF] rounded-full"></span>
@@ -347,11 +316,10 @@ export default function LoginPage({ params }: PageProps) {
                 <Link
                   key={l}
                   href={`/${l}/login`}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    lang === l
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${lang === l
                       ? 'bg-[#306B6F] text-white'
                       : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
-                  }`}
+                    }`}
                 >
                   {l === 'fr' ? 'Français' : 'العربية'}
                 </Link>

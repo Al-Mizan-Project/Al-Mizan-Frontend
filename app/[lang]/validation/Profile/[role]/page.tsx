@@ -1,42 +1,50 @@
 'use client';
 
-import { useState } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUser, faCamera } from '@fortawesome/free-solid-svg-icons';
+import { useState, useEffect } from 'react';
+import { useProfile } from '../useProfile';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function ProfilePage() {
+  const { profile: serverProfile, isLoading, isSaving, error, success, updateProfile } = useProfile();
+  const { logout } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState({
-    nom: 'Nom',
-    prenom: 'Prénom',
-    role: 'Chef évaluateur',
-    email: 'mail@mail.com',
-    photo: null as string | null,
+    nom: '',
+    prenom: '',
+    role: '',
+    email: '',
   });
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfile((prev) => ({ ...prev, photo: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+  useEffect(() => {
+    if (serverProfile && !isEditing) {
+      setProfile({
+        nom: serverProfile.nom,
+        prenom: serverProfile.prenom,
+        role: serverProfile.role,
+        email: serverProfile.email,
+      });
     }
-  };
+  }, [serverProfile, isEditing]);
 
-  const handleRemovePhoto = () => {
-    setProfile((prev) => ({ ...prev, photo: null }));
-  };
-
-  const handleModifier = () => {
+  const handleModifier = async () => {
     if (isEditing) {
-       
-      console.log('Profil mis à jour:', profile);
-      setIsEditing(false);
+      const ok = await updateProfile(profile);
+      if (ok) {
+        setIsEditing(false);
+      }
     } else {
       setIsEditing(true);
     }
+  };
+
+  const handleCancel = () => {
+    setProfile({
+      nom: serverProfile.nom,
+      prenom: serverProfile.prenom,
+      role: serverProfile.role,
+      email: serverProfile.email,
+    });
+    setIsEditing(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,48 +52,15 @@ export default function ProfilePage() {
     setProfile((prev) => ({ ...prev, [name]: value }));
   };
 
+  if (isLoading) {
+    return <div className="p-8 text-center text-gray-500">Chargement du profil...</div>;
+  }
+
   return (
     <div className="space-y-6">
-     
+      {error && <div className="p-4 bg-red-100 text-red-700 rounded-md">{error}</div>}
+      {success && <div className="p-4 bg-green-100 text-green-700 rounded-md">Profil mis à jour avec succès!</div>}
 
-      { }
-      <div className="val-profile-section">
-        <h2 className="val-profile-section-title">Photo de profil</h2>
-        
-        <div className="val-profile-photo-container">
-          <div className="val-profile-avatar">
-            {profile.photo ? (
-              <img src={profile.photo} alt="Profile" className="val-profile-avatar-image" />
-            ) : (
-              <FontAwesomeIcon icon={faUser} className="val-profile-avatar-icon" />
-            )}
-          </div>
-
-          <div className="val-profile-photo-actions">
-            <label className="val-profile-upload-button">
-              <FontAwesomeIcon icon={faCamera} className="val-profile-upload-icon" />
-              Upload Photo
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoUpload}
-                className="val-profile-upload-input"
-              />
-            </label>
-            
-            {profile.photo && (
-              <button
-                onClick={handleRemovePhoto}
-                className="val-profile-remove-button"
-              >
-                remove
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      { }
       <div className="val-profile-section">
         <h2 className="val-profile-section-title">Informations sur le profil</h2>
         
@@ -117,14 +92,13 @@ export default function ProfilePage() {
           </div>
 
           <div className="val-profile-form-group">
-            <label className="val-profile-label">Role</label>
+            <label className="val-profile-label">Rôle</label>
             <input
               type="text"
               name="role"
               value={profile.role}
-              onChange={handleInputChange}
-              disabled={!isEditing}
-              className="val-profile-input"
+              disabled={true}
+              className="val-profile-input opacity-70 bg-gray-50"
             />
           </div>
 
@@ -140,13 +114,32 @@ export default function ProfilePage() {
             />
           </div>
 
-          <div className="val-profile-form-actions">
+          <div className="val-profile-form-actions flex gap-4 mt-8 pt-6 border-t border-gray-200">
+            {isEditing && (
+              <button
+                onClick={handleCancel}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                disabled={isSaving}
+              >
+                Annuler
+              </button>
+            )}
             <button
               onClick={handleModifier}
               className="val-profile-modify-button"
+              disabled={isSaving}
             >
-              {isEditing ? 'Enregistrer' : 'Modifier'}
+              {isSaving ? 'Enregistrement...' : isEditing ? 'Enregistrer' : 'Modifier'}
             </button>
+            
+            {!isEditing && (
+              <button
+                onClick={logout}
+                className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-md hover:bg-red-100 transition-colors ml-auto"
+              >
+                Se déconnecter
+              </button>
+            )}
           </div>
         </div>
       </div>

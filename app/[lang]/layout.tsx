@@ -2,6 +2,7 @@ import '@/lib/fontawesome';
 import './globals.css'; 
 import { Inter, Cairo } from 'next/font/google';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { AppelsProvider } from '@/contexts/AppelsContext';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const cairo = Cairo({ subsets: ['arabic'], variable: '--font-cairo' });
 
@@ -19,9 +20,11 @@ export default async function RootLayout({
         
     <html lang={lang} dir={isAr ? 'rtl' : 'ltr'}>
       <AuthProvider>
-      <body className={`${isAr ? cairo.className : inter.className} antialiased bg-gray-50`}>
-        {children}
-      </body>
+        <AppelsProvider>
+          <body className={`${isAr ? cairo.className : inter.className} antialiased bg-gray-50`}>
+            {children}
+          </body>
+        </AppelsProvider>
       </AuthProvider>
     </html>
   );

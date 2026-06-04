@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import { setupAuthInterceptor, authAPI, LoginResponse } from '@/lib/api';
 
 export type User = {
-  id: number;
+  id?: number;
   email: string;
   nom?: string;
   prenom?: string;
-  id_membre?: string | number; // Supporte UUID et ID classique
+  id_membre?: string | number;
   id_role?: number;
+  role?: string;
 };
 
 type AuthContextType = {
@@ -54,7 +55,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('refresh_token', data.refresh);
       localStorage.setItem('user', JSON.stringify(data.user));
       setupAuthInterceptor(data.access);
-      router.push('/fr/dashboard/contractant');
+      // Redirection en fonction du rôle renvoyé par le service d'auth
+      const roleName = (data.user && (data.user.role as string)) || '';
+      const idRole = (data.user && (data.user.id as number)) || 0;
+
+      const normalized = roleName.toLowerCase().trim().replace(/\s+/g, '_');
+      const ROLE_REDIRECTS: Record<string, string> = {
+        admin: '/fr/system-admin',
+        operateur_economique: '/fr/dashboard/operator',
+        service_contractant: '/fr/dashboard/contractant',
+        resp_valid_intern: '/fr/validation/dashboard/commission',
+        resp_cm: '/fr/validation/dashboard/commission',
+        validateur_interne_cdc: '/fr/validation/dashboard/validatorCDC',
+        validateur_interne_marche: '/fr/validation/dashboard/validatorMarche',
+        validateur_externe_cdc: '/fr/validation/dashboard/validatorCDC',
+        validateur_externe_marche: '/fr/validation/dashboard/validatorMarche',
+      };
+
+      if (ROLE_REDIRECTS[normalized]) {
+        router.push(ROLE_REDIRECTS[normalized]);
+        return;
+      }
+
+      if (normalized.includes('admin')) return router.push('/fr/system-admin');
+      if (normalized.includes('operateur')) return router.push('/fr/dashboard/operator');
+      if (normalized.includes('contractant')) return router.push('/fr/dashboard/contractant');
+      if (normalized.includes('resp_valid_intern') || normalized.includes('resp_cm')) return router.push('/fr/validation/dashboard/commission');
+      if (normalized.includes('validateur')) {
+        if (normalized.includes('cdc')) return router.push('/fr/validation/dashboard/validatorCDC');
+        if (normalized.includes('marche')) return router.push('/fr/validation/dashboard/validatorMarche');
+        return router.push('/fr/validation/dashboard/validatorCDC');
+      }
+
+      // fallback by idRole
+      const idRoleMap: Record<number, string> = {
+        1: '/fr/system-admin',
+        2: '/fr/dashboard/contractant',
+        3: '/fr/validation/dashboard/commission',
+        4: '/fr/dashboard/operator',
+        5: '/fr/dashboard/operator',
+      };
+      router.push(idRoleMap[idRole] ?? '/fr/dashboard/operator');
     } catch (error) {
       console.error('Login error:', error);
       throw error;
