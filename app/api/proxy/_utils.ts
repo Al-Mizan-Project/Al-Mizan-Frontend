@@ -42,7 +42,7 @@ async function buildRequestInit(req: NextRequest, method: string, includeInterna
   const authHeader = req.headers.get('authorization');
   const contentType = req.headers.get('content-type');
   const headers: Record<string, string> = {
-    Accept: 'application/json',
+    Accept: req.headers.get('accept') || 'application/json',
     // propagate origin if provided by the browser (avoid hardcoded host)
     ...(req.headers.get('origin') ? { Origin: req.headers.get('origin')! } : {}),
     ...(req.headers.get('referer') ? { Referer: req.headers.get('referer')! } : {}),
@@ -127,6 +127,34 @@ function buildProxyResponse(upstream: Response, payload: string) {
   });
 }
 
+function buildBinaryProxyResponse(upstream: Response, body: ArrayBuffer) {
+  const headers = new Headers();
+  const contentType = upstream.headers.get('content-type');
+  const contentDisposition = upstream.headers.get('content-disposition');
+  const contentLength = upstream.headers.get('content-length');
+  const setCookie = upstream.headers.get('set-cookie');
+
+  if (contentType) headers.set('Content-Type', contentType);
+  if (contentDisposition) headers.set('Content-Disposition', contentDisposition);
+  if (contentLength) headers.set('Content-Length', contentLength);
+  if (setCookie) headers.set('Set-Cookie', setCookie);
+
+  return new NextResponse(body, {
+    status: upstream.status,
+    headers,
+  });
+}
+
+function isBinaryResponse(upstream: Response): boolean {
+  const contentType = upstream.headers.get('content-type') || '';
+  const contentDisposition = upstream.headers.get('content-disposition') || '';
+  // If there's an attachment disposition or a non-text/json content type, treat as binary
+  if (contentDisposition.includes('attachment')) return true;
+  if (contentType.includes('application/json') || contentType.includes('text/')) return false;
+  if (contentType.includes('application/octet-stream') || contentType.includes('application/pdf') || contentType.includes('application/zip')) return true;
+  return false;
+}
+
 async function _tryReadDebugResponseFile(debugPath: string | null): Promise<string | null> {
   if (!debugPath) {
     return null;
@@ -208,6 +236,13 @@ export async function proxyRequest(req: NextRequest, method: string, options: Pr
 
     if (upstream.status === 204) {
       return new NextResponse(null, { status: upstream.status });
+    }
+
+    // Handle binary file downloads (StreamingHttpResponse from Django)
+    if (isBinaryResponse(upstream)) {
+      console.log(`[PROXY] Binary response detected, streaming as binary`);
+      const body = await upstream.arrayBuffer();
+      return buildBinaryProxyResponse(upstream, body);
     }
 
     const payload = await upstream.text();

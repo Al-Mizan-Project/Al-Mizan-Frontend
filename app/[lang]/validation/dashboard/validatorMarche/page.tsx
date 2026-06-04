@@ -58,9 +58,10 @@ export default function ValidatorPage(props: ValidatorPageProps) {
         const attributionsRaw = data.attributions || [];
 
         const validatorSubmissions: any[] = attributionsRaw.map((attr: any) => {
-          const soumission = attr.soumission;
-          const soumissionaireLabel = soumission && typeof soumission === 'object'
-            ? (`Soumissionaire #${soumission.id_soumissionnaire ?? attr.soumission_id}`)
+          const soumission = attr.soumission_details || attr.soumission;
+          const soumissionaireId = attr.id_soumissionnaire ?? (soumission && typeof soumission === 'object' ? soumission.id_soumissionnaire : null);
+          const soumissionaireLabel = soumissionaireId
+            ? `Soumissionaire #${soumissionaireId}`
             : (attr.soumission_id ? `Soumission #${attr.soumission_id}` : 'Soumissionnaire inconnu');
 
           return {

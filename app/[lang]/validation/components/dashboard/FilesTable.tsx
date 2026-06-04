@@ -13,6 +13,8 @@ interface FilesTableProps {
   onView?: (dossier: fileRecord) => void;
   onRowClick?: (dossier: fileRecord) => void;
   viewMode?: 'standard' | 'validateur';
+  hideEconomicOperator?: boolean;
+  disableRowClick?: boolean;
 }
 
 export default function FilesTable({ 
@@ -24,7 +26,9 @@ export default function FilesTable({
   onAffecter,
   onView,
   onRowClick,
-  viewMode = 'standard'
+  viewMode = 'standard',
+  hideEconomicOperator = false,
+  disableRowClick = false
 }: FilesTableProps) {
   const router = useRouter();
 
@@ -52,7 +56,7 @@ const getActionButton = (fileStatus: string) => {
     'En Attente': 'Affecter',
     'En Cours': 'Réaffecter',
     'En Retard': 'Réaffecter',
-    'Prêt': 'Transmettre',
+    'Prêt': 'Voir',
   };
   const actionKey = actionMap[fileStatus] || 'Voir';
   return t(`files.table.actions.${actionKey}`, actionKey);
@@ -80,10 +84,12 @@ const getActionButton = (fileStatus: string) => {
               {t('files.table.headers.file', 'Dossier')}
             </th>
 
-            {/* COLONNE 2: Opérateur Économique (toujours affichée) */}
-            <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-              {t('files.table.headers.economicOperator', 'Opérateur Économique')}
-            </th>
+            {/* COLONNE 2: Opérateur Économique (conditionally displayed) */}
+            {!hideEconomicOperator && (
+              <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
+                {t('files.table.headers.economicOperator', 'Opérateur Économique')}
+              </th>
+            )}
 
               {/* COLONNE 3: Étape (toujours affichée) */}
               <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
@@ -159,8 +165,9 @@ const getActionButton = (fileStatus: string) => {
             data.map((file) => (
               <tr 
                 key={file.id} 
-                className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                className={`border-b border-gray-100 ${disableRowClick ? '' : 'hover:bg-gray-50 cursor-pointer'}`}
                 onClick={() => {
+                  if (disableRowClick) return;
                   if (onRowClick) {
                     onRowClick(file);
                   } else {
@@ -181,7 +188,9 @@ const getActionButton = (fileStatus: string) => {
                 </td>
 
                 {/* COLONNE 2: Soumissionaire */}
-                <td className="py-3 px-4 text-sm">{file.economicOperator}</td>
+                {!hideEconomicOperator && (
+                  <td className="py-3 px-4 text-sm">{file.economicOperator}</td>
+                )}
                   {/* COLONNE 3: Étape (toujours Validation) */}
                   <td className="py-3 px-4 text-sm">Validation</td>
 
@@ -221,7 +230,7 @@ const getActionButton = (fileStatus: string) => {
                     )}
                     <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-2 flex-wrap">
-                        {actionHandler && (
+                        {actionHandler && !(file.status === 'Prêt' && onView) && (
                           <>
                             <button
                               onClick={() => actionHandler(file)}

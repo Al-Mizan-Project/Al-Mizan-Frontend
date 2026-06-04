@@ -112,9 +112,11 @@ function mapToFileRecord(attribution: AttributionBackendItem): fileRecord {
       : Math.max(0, ageDays - 7)
     : 0;
 
-  const soumissionaireLabel = attribution.soumission && (typeof attribution.soumission === 'object')
-    ? (`Soumissionaire #${(attribution.soumission as any).id_soumissionnaire ?? attribution.soumission_id}`)
-    : (attribution.soumission_id ? `Soumission #${attribution.soumission_id}` : 'Soumissionnaire inconnu');
+  const soumissionaireLabel = attribution.soumission && typeof attribution.soumission === 'object' && attribution.soumission.nom_operateur
+    ? attribution.soumission.nom_operateur
+    : (attribution.soumission && typeof attribution.soumission === 'object'
+        ? (`Soumissionaire #${(attribution.soumission as any).id_soumissionnaire ?? attribution.soumission_id}`)
+        : (attribution.soumission_id ? `Soumission #${attribution.soumission_id}` : 'Soumissionnaire inconnu'));
 
   return {
     id: `ID-${attribution.soumission_id ?? 'unknown'}`,

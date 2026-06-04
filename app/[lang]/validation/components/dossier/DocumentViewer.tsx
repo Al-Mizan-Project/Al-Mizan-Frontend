@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getAuthToken } from '@/lib/api/client';
 
 interface DocumentViewerProps {
   dict?: any;
@@ -10,7 +11,65 @@ interface DocumentViewerProps {
 
 export default function DocumentViewer({ dict, lang, url }: DocumentViewerProps) {
   const [zoom, setZoom] = useState(100);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const isAr = lang === 'ar';
+
+  useEffect(() => {
+    if (!url || url === 'Non disponible' || url === 'Document non disponible') {
+      setBlobUrl(null);
+      return;
+    }
+
+    const docIdMatch = url.match(/documents\/(\d+)/);
+    if (!docIdMatch) {
+      setBlobUrl(url);
+      return;
+    }
+
+    const docId = docIdMatch[1];
+    const token = getAuthToken();
+    const headers: Record<string, string> = { Accept: '*/*' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let isMounted = true;
+    let objectUrl = '';
+
+    setLoading(true);
+    setError(null);
+
+    fetch(`/api/proxy/documents?path=api/documents/${docId}/`, { headers })
+      .then(res => {
+        if (!res.ok) throw new Error(`Preview failed: ${res.status}`);
+        return res.blob();
+      })
+      .then(blob => {
+        if (isMounted) {
+          objectUrl = URL.createObjectURL(blob);
+          setBlobUrl(objectUrl);
+          setLoading(false);
+        }
+      })
+      .catch(err => {
+        if (err.message?.includes('404')) {
+          console.warn('Document non trouvé (404) : le fichier physique n\'existe probablement pas dans le stockage (données de test).');
+        } else {
+          console.error('Preview error:', err);
+        }
+        if (isMounted) {
+          setError('Impossible de charger l\'aperçu du document (fichier introuvable)');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [url]);
 
   return (
     <div className="val-document-viewer" dir={isAr ? 'rtl' : 'ltr'}>
@@ -52,9 +111,17 @@ export default function DocumentViewer({ dict, lang, url }: DocumentViewerProps)
           className="val-document-viewer-content"
           style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center' }}
         >
-          {url && url !== 'Non disponible' && url !== 'Document non disponible' ? (
+          {loading ? (
+            <div className="flex items-center justify-center h-[800px] bg-gray-50">
+              <span className="text-gray-500">Chargement de l'aperçu...</span>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center h-[800px] bg-red-50">
+              <span className="text-red-500">{error}</span>
+            </div>
+          ) : blobUrl ? (
             <iframe 
-              src={url} 
+              src={blobUrl} 
               className="w-full border-0" 
               style={{ height: '800px', backgroundColor: '#f3f4f6' }}
               title="Document PDF"

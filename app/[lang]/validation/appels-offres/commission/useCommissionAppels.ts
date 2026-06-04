@@ -72,6 +72,16 @@ function computeStats(files: fileRecord[]): CommissionDashboardStats {
 }
 
 function mapToFileRecord(appel: CommissionAppelBackendItem): fileRecord {
+  // Build validator info: handle both object and string/number formats
+  let validatorInfo: { name: string; id: string } | undefined;
+  if (appel.validator && typeof appel.validator === 'object') {
+    validatorInfo = { name: appel.validator.name, id: String(appel.validator.id) };
+  } else if (appel.validator && (typeof appel.validator === 'string' || typeof appel.validator === 'number')) {
+    validatorInfo = { name: `Validateur #${appel.validator}`, id: String(appel.validator) };
+  } else if (appel.validated_by) {
+    validatorInfo = { name: `Validateur #${appel.validated_by}`, id: String(appel.validated_by) };
+  }
+
   return {
     id: `ID-${appel.id}`,
     rawId: appel.id,
@@ -83,9 +93,7 @@ function mapToFileRecord(appel: CommissionAppelBackendItem): fileRecord {
     status: appel.status ? appel.status : computeStatus(appel),
     etape: appel.etape || 'Évaluation Administrative',
     delayDays: appel.delayDays || 0,
-    validator: appel.validator
-      ? { name: appel.validator.name, id: String(appel.validator.id) }
-      : (appel.validated_by ? { name: `Validateur ${appel.validated_by}`, id: String(appel.validated_by) } : undefined),
+    validator: validatorInfo,
   };
 }
 

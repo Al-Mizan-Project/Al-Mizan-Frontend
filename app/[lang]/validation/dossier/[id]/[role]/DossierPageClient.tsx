@@ -7,6 +7,7 @@ import DocumentViewer from '../../../components/dossier/DocumentViewer';
 import { soumissionsApi } from '@/lib/api/soumissions';
 import { appelsApi } from '@/lib/api/appels';
 import { documentsApi } from '@/lib/api/documents';
+import { getAuthToken } from '@/lib/api/client';
 
 type TabType = 'financial' | 'technical' | 'call' | 'reports' | 'decision';
 type UserRole = 'commission' | 'validator';
@@ -213,7 +214,41 @@ export default function DossierPage({ id, role }: DossierPageProps) {
         activeTab={activeTab}
         role={role}
         data={dossierData}
-        onDownload={(url) => window.open(url, '_blank')}
+        onDownload={(url) => {
+          // Extract document ID from URL (e.g. http://localhost:8000/api/documents/1035/ -> 1035)
+          const docIdMatch = url.match(/documents\/(\d+)/);
+          if (!docIdMatch) {
+            window.open(url, '_blank');
+            return;
+          }
+          const docId = docIdMatch[1];
+          const token = getAuthToken();
+          const headers: Record<string, string> = { Accept: '*/*' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          fetch(`/api/proxy/documents?path=api/documents/${docId}/`, { headers })
+            .then(res => {
+              if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+              const contentDisposition = res.headers.get('content-disposition');
+              const filenameMatch = contentDisposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+              const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, '') : `document_${docId}.pdf`;
+              return res.blob().then(blob => ({ blob, filename }));
+            })
+            .then(({ blob, filename }) => {
+              const blobUrl = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(blobUrl);
+            })
+            .catch(err => {
+              console.error('Download error:', err);
+              alert('Erreur lors du téléchargement du document');
+            });
+        }}
         onTransmit={() => console.log('Transmettre')}
         renderDocumentViewer={(url?: string) => (
           <DocumentViewer url={url} />

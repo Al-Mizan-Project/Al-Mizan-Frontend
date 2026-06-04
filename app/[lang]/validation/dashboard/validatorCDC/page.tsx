@@ -181,6 +181,7 @@ export default function ValidatorPage(props: ValidatorPageProps) {
               status={currentStatus as Exclude<DashboardStatus, 'overview'>}
               lang={lang}
               viewMode="validateur"
+              hideEconomicOperator={true}
               onRowClick={handleRowClick}
             />
           )}

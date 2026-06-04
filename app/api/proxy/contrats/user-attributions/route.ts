@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
   const soumissionMap: Record<number, unknown> = {};
   await Promise.all(
     soumissionIds.map(async (soumissionId) => {
-      const soumissionUrl = `${SOUMISSIONS_BASE}/api/soumissions/${soumissionId}`;
+      const soumissionUrl = `${SOUMISSIONS_BASE}/api/soumissions/${soumissionId}/`;
       try {
         const soumissionResponse = await fetchJson(soumissionUrl, {
           method: 'GET',

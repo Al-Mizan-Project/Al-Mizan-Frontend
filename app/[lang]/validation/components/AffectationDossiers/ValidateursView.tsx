@@ -79,8 +79,8 @@ export default function ValidateursView({ lang, dict }: ValidateursViewProps) {
         // Map experts to Validator format
         const mapped: Validator[] = (experts || []).map(m => ({
           id: String(m.id_utilisateur || m.id_membre || m.id || m.user_id),
-          nom: m.nom || m.lastName || 'Inconnu',
-          prenom: m.prenom || m.firstName || '',
+          nom: m.nom || m.lastName || m.last_name || 'Inconnu',
+          prenom: m.prenom || m.firstName || m.first_name || '',
           matricule: m.matricule || `EXP-${m.id || m.id_membre || ''}`,
           chargeActuelle: m.charge_actuelle || 0,
           disponibilite: (m.charge_actuelle || 0) > 3 ? 'Surchargé' : 'Disponible',
@@ -636,9 +636,7 @@ export default function ValidateursView({ lang, dict }: ValidateursViewProps) {
               {filteredValidators.map((validator) => (
                 <tr 
                   key={validator.id} 
-                  className="val-validator-row"
-                  onClick={() => handleValidatorClick(validator)}
-                  style={{ cursor: 'pointer' }}
+                  className="val-validator-row cursor-default"
                 >
                 <td className="val-table-cell-left">
                   <div className="flex items-center gap-2">

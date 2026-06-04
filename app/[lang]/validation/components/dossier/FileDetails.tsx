@@ -88,7 +88,7 @@ export default function FileDetails({
   data
 }: FileDetailsProps) {
   const [activeReportSubTab, setActiveReportSubTab] = useState<ReportSubTab>('administrative');
-  const [activeDecisionSubTab, setActiveDecisionSubTab] = useState<DecisionSubTab>('general');
+  const [activeDecisionSubTab, setActiveDecisionSubTab] = useState<DecisionSubTab>('conclusion');
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -117,6 +117,26 @@ export default function FileDetails({
   const validatorReportsDownloadOnly = isValidator && activeTab === 'reports';
   const validatorFullButtons = isValidator && activeTab === 'decision';
 
+  const formatFileSize = (bytes: number | undefined) => {
+    if (!bytes) return 'N/A';
+    if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(2)} Mo`;
+    if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} Ko`;
+    return `${bytes} octets`;
+  };
+
+  const formatDate = (dateStr: string | undefined) => {
+    if (!dateStr) return 'N/A';
+    try {
+      return new Date(dateStr).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch { return dateStr; }
+  };
+
+  const formatIaStatus = (statut: string | undefined) => {
+    if (!statut) return 'N/A';
+    const map: Record<string, string> = { 'VERIFIE': '✅ Vérifié', 'EN_ATTENTE': '⏳ En attente', 'ECHEC': '❌ Échec' };
+    return map[statut] || statut;
+  };
+
   const getData = () => {
     if (!data) return { fields: [] };
     const { soumission, appelOffre, evaluations, validations, documents, documentsByType } = data;
@@ -132,11 +152,14 @@ export default function FileDetails({
     const financialDoc = documentsByType?.financiere || findDoc('financiere') || findDoc('financier') || findDoc('offre financ');
     const technicalDoc = documentsByType?.technique || findDoc('technique') || findDoc('technical') || findDoc('offre technique');
     const aoDoc = documentsByType?.cdc || findDoc('cahier') || findDoc('cdc') || findDoc('cahier des charges');
+    const evalAdminDoc = documentsByType?.evaluation_administrative || findDoc('evaluation_administrative') || findDoc('eval_admin');
+    const evalOffreDoc = documentsByType?.evaluation_offre || findDoc('evaluation_offre') || findDoc('eval_offre');
+    const decisionDoc = documentsByType?.decision_validation || findDoc('decision_validation') || findDoc('decision');
 
     const commonFields = [
       { label: 'Dossier', value: `AO-${appelOffre?.id_appel_offres}-${soumission?.id_soumission}` },
-      { label: 'Opérateur économique', value: `Opérateur #${soumission?.id_soumissionnaire}` },
-      { label: 'Service Contractant', value: `Service #${appelOffre?.id_service_contractant}` },
+      { label: 'Opérateur économique', value: data?.operateurNom || `Opérateur #${soumission?.id_soumissionnaire}` },
+      { label: 'Service Contractant', value: data?.serviceNom || `Service #${appelOffre?.id_service_contractant}` },
       { label: 'Domaine', value: appelOffre?.titre || 'Non spécifié' },
     ];
 
@@ -145,6 +168,13 @@ export default function FileDetails({
         fields: [
           ...commonFields,
           { label: 'Document', value: financialDoc?.nom ?? missingDocumentText },
+          { label: 'Type document', value: financialDoc?.type_document ?? 'N/A' },
+          { label: 'Taille', value: formatFileSize(financialDoc?.taille_fichier) },
+          { label: 'Hash SHA-256', value: financialDoc?.hash_sha256 ?? 'N/A' },
+          { label: 'Vérification IA', value: formatIaStatus(financialDoc?.ia_verif_statut) },
+          { label: 'Détails IA', value: financialDoc?.ia_verif_details ?? 'N/A' },
+          { label: 'Date d\'upload', value: formatDate(financialDoc?.uploaded_at) },
+          { label: 'Chiffré', value: financialDoc?.is_encrypted ? 'Oui 🔒' : 'Non' },
           { label: 'URL', value: financialDoc?.download_url ?? financialDoc?.storage_url ?? soumission?.offre_financiere_chiffree_url ?? missingDocumentText },
           { label: 'Status', value: soumission?.statut }
         ]
@@ -156,6 +186,13 @@ export default function FileDetails({
         fields: [
           ...commonFields,
           { label: 'Document', value: technicalDoc?.nom ?? missingDocumentText },
+          { label: 'Type document', value: technicalDoc?.type_document ?? 'N/A' },
+          { label: 'Taille', value: formatFileSize(technicalDoc?.taille_fichier) },
+          { label: 'Hash SHA-256', value: technicalDoc?.hash_sha256 ?? 'N/A' },
+          { label: 'Vérification IA', value: formatIaStatus(technicalDoc?.ia_verif_statut) },
+          { label: 'Détails IA', value: technicalDoc?.ia_verif_details ?? 'N/A' },
+          { label: 'Date d\'upload', value: formatDate(technicalDoc?.uploaded_at) },
+          { label: 'Chiffré', value: technicalDoc?.is_encrypted ? 'Oui 🔒' : 'Non' },
           { label: 'URL', value: technicalDoc?.download_url ?? technicalDoc?.storage_url ?? missingDocumentText },
           { label: 'Status', value: soumission?.statut }
         ]
@@ -168,20 +205,37 @@ export default function FileDetails({
           { label: 'Dossier', value: appelOffre?.reference },
           { label: 'Titre', value: appelOffre?.titre },
           { label: 'Document', value: aoDoc?.nom ?? missingDocumentText },
+          { label: 'Type document', value: aoDoc?.type_document ?? 'N/A' },
+          { label: 'Taille', value: formatFileSize(aoDoc?.taille_fichier) },
+          { label: 'Hash SHA-256', value: aoDoc?.hash_sha256 ?? 'N/A' },
+          { label: 'Vérification IA', value: formatIaStatus(aoDoc?.ia_verif_statut) },
+          { label: 'Détails IA', value: aoDoc?.ia_verif_details ?? 'N/A' },
+          { label: 'Date d\'upload', value: formatDate(aoDoc?.uploaded_at) },
+          { label: 'Chiffré', value: aoDoc?.is_encrypted ? 'Oui 🔒' : 'Non' },
           { label: 'URL', value: aoDoc?.download_url ?? aoDoc?.storage_url ?? missingDocumentText }
         ]
       };
     }
 
     if (isReportsTab) {
-      const type = activeReportSubTab === 'administrative' ? 'administrative' : 'technique';
+      const isAdmin = activeReportSubTab === 'administrative';
+      const reportDoc = isAdmin ? evalAdminDoc : evalOffreDoc;
+      const type = isAdmin ? 'administrative' : 'technique';
       const evalItem = evaluations?.find((e: any) => e.type === type);
       return {
         fields: [
           ...commonFields,
-          { label: 'Type Rapport', value: activeReportSubTab === 'administrative' ? 'Administratif' : 'Technique' },
+          { label: 'Type Rapport', value: isAdmin ? 'Évaluation Administrative' : 'Évaluation des Offres' },
+          { label: 'Document', value: reportDoc?.nom ?? missingDocumentText },
+          { label: 'Type document', value: reportDoc?.type_document ?? 'N/A' },
+          { label: 'Taille', value: formatFileSize(reportDoc?.taille_fichier) },
+          { label: 'Hash SHA-256', value: reportDoc?.hash_sha256 ?? 'N/A' },
+          { label: 'Vérification IA', value: formatIaStatus(reportDoc?.ia_verif_statut) },
+          { label: 'Détails IA', value: reportDoc?.ia_verif_details ?? 'N/A' },
+          { label: 'Date d\'upload', value: formatDate(reportDoc?.uploaded_at) },
           { label: 'Note', value: evalItem ? `${evalItem.note}/100` : 'Non évalué' },
-          { label: 'Commentaire', value: evalItem?.commentaire || 'Aucun' }
+          { label: 'Commentaire', value: evalItem?.commentaire || 'Aucun' },
+          { label: 'URL', value: reportDoc?.download_url ?? reportDoc?.storage_url ?? missingDocumentText }
         ]
       };
     }
@@ -191,8 +245,16 @@ export default function FileDetails({
       return {
         fields: [
           ...commonFields,
+          { label: 'Document', value: decisionDoc?.nom ?? missingDocumentText },
+          { label: 'Type document', value: decisionDoc?.type_document ?? 'N/A' },
+          { label: 'Taille', value: formatFileSize(decisionDoc?.taille_fichier) },
+          { label: 'Hash SHA-256', value: decisionDoc?.hash_sha256 ?? 'N/A' },
+          { label: 'Vérification IA', value: formatIaStatus(decisionDoc?.ia_verif_statut) },
+          { label: 'Détails IA', value: decisionDoc?.ia_verif_details ?? 'N/A' },
+          { label: 'Date d\'upload', value: formatDate(decisionDoc?.uploaded_at) },
           { label: 'Statut Validation', value: validation?.is_validated ? 'Validé' : 'En attente/Rejeté' },
-          { label: 'Commentaire', value: validation?.commentaire || 'Aucun' }
+          { label: 'Commentaire', value: validation?.commentaire || 'Aucun' },
+          { label: 'URL', value: decisionDoc?.download_url ?? decisionDoc?.storage_url ?? missingDocumentText }
         ]
       };
     }
@@ -219,10 +281,10 @@ export default function FileDetails({
   // ============================================
   const renderConclusionContent = () => {
     const reference = data?.appelOffre?.reference || 'N/A';
-    const operateur = data?.operateurNom || (data?.soumission?.id_soumissionnaire ? `Opérateur #${data.soumission.id_soumissionnaire}` : 'N/A');
+    const operateur = data?.soumission?.nom_operateur || data?.operateurNom || (data?.soumission?.id_soumissionnaire ? `Opérateur #${data.soumission.id_soumissionnaire}` : 'N/A');
     const scoreFinancier = data?.evaluations?.find((e: any) => e.type === 'financiere')?.note ?? 0;
     const scoreTechnique = data?.evaluations?.find((e: any) => e.type === 'technique')?.note ?? 0;
-    const serviceContractant = data?.serviceNom || data?.appelOffre?.id_service_contractant || 'N/A';
+    const serviceContractant = data?.serviceNom || (data?.appelOffre?.id_service_contractant ? `Service #${data.appelOffre.id_service_contractant}` : 'N/A');
     const domaine = data?.appelOffre?.secteur || data?.appelOffre?.type_prestation || 'N/A';
     const decisionFinale = data?.attribution?.statut || 'En attente';
     const attributionId = data?.attribution?.id;
@@ -381,7 +443,7 @@ export default function FileDetails({
         </label>
       </div>
 
-      {/* Bouton Marquer comme prêt, Télécharger, Transmettre */}
+      {/* Bouton Marquer comme prêt, Télécharger */}
       <div className="val-action-buttons flex gap-4">
         <button
           onClick={() => setShowModal(true)}
@@ -395,13 +457,6 @@ export default function FileDetails({
           className="val-btn-secondary"
         >
           Télécharger
-        </button>
-        <button
-          onClick={handleTransmit}
-          disabled={decisionFinale !== 'definitive'}
-          className={`val-btn-secondary ${decisionFinale !== 'definitive' ? 'val-btn-disabled' : ''}`}
-        >
-          Transmettre
         </button>
       </div>
 
@@ -463,11 +518,76 @@ export default function FileDetails({
                     };
 
                     const fullComment = `${decisionLabels[decision] || 'Décision prise'} : ${motivation || avisFinal || 'Aucun commentaire'}`;
+                    
+                    const token = localStorage.getItem('access_token') || localStorage.getItem('authToken');
+                    const jsonHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+                    if (token) jsonHeaders['Authorization'] = `Bearer ${token}`;
 
-                    // Validation de l'attribution via le endpoint des contrats
+                    // 1. Générer et uploader le document (format TXT)
+                    const decisionContent = `DÉCISION DE VALIDATION
+=============================
+Référence dossier ID : ${reference || 'N/A'}
+Opérateur économique : ${operateur || 'N/A'}
+Service Contractant  : Service #${serviceContractant || 'N/A'}
+Domaine              : ${domaine || 'N/A'}
+Score financier      : ${scoreFinancier || 0}/100
+Score technique      : ${scoreTechnique || 0}/100
+
+DÉCISION FINALE
+=============================
+Décision           : ${decisionLabels[decision] || 'N/A'}
+Motivation         : ${motivation || 'Aucune'}
+Avis final         : ${avisFinal || 'Aucun'}
+Certifié conforme  : Oui
+Date de validation : ${new Date().toLocaleDateString('fr-FR')}
+`;
+                    const fileBlob = new Blob([decisionContent], { type: 'text/plain' });
+                    const file = new File([fileBlob], `decision_validation_soumission_${data?.soumission?.id_soumission || attributionId}.txt`, { type: 'text/plain' });
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('related_type', 'attribution');
+                    formData.append('type_document', 'decision');
+                    if (data?.soumission?.id_soumissionnaire) {
+                      formData.append('id_operateur_economique', data.soumission.id_soumissionnaire.toString());
+                    }
+
+                    const docHeaders: Record<string, string> = {};
+                    if (token) docHeaders['Authorization'] = `Bearer ${token}`;
+
+                    const uploadRes = await fetch('/api/proxy/documents?path=api/documents/', {
+                      method: 'POST',
+                      headers: docHeaders,
+                      body: formData
+                    });
+
+                    if (!uploadRes.ok) {
+                      throw new Error("Erreur lors de la génération et l'upload du document de décision");
+                    }
+                    const uploadedDocData = await uploadRes.json();
+                    
+                    // The backend either returns a list of docs or a single doc depending on the response wrapper.
+                    const uploadedDoc = Array.isArray(uploadedDocData) ? uploadedDocData[0] : (uploadedDocData.documents ? uploadedDocData.documents[0] : uploadedDocData);
+                    
+                    if (uploadedDoc && uploadedDoc.id_document && data?.soumission?.id_soumission) {
+                      // 2. Lier le document à la soumission
+                      const existingDocIds = data.soumission.document_ids || [];
+                      const updatedDocIds = [...existingDocIds, uploadedDoc.id_document];
+
+                      const patchSoumissionRes = await fetch(`/api/proxy/soumissions?path=api/soumissions/${data.soumission.id_soumission}/`, {
+                        method: 'PATCH',
+                        headers: jsonHeaders,
+                        body: JSON.stringify({ document_ids: updatedDocIds })
+                      });
+                      if (!patchSoumissionRes.ok) {
+                         console.warn("Échec de la liaison du document à la soumission, mais le document a été créé.");
+                      }
+                    }
+
+                    // 3. Validation de l'attribution via le endpoint des contrats
                     const response = await fetch(`/api/proxy/contrats?path=attributions-provisoires/${attributionId}/valider/`, {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: jsonHeaders,
                       body: JSON.stringify({ commentaire: fullComment })
                     });
 
@@ -1221,40 +1341,7 @@ export default function FileDetails({
             </div>
           )}
 
-          {isDecisionTab && isValidator && (
-            <div className="val-reports-navigation">
-              <div className="val-reports-nav-buttons">
-                <button
-                  onClick={() => setActiveDecisionSubTab('general')}
-                  className={`val-reports-nav-button ${activeDecisionSubTab === 'general' ? 'val-reports-nav-button-active' : ''}`}
-                  style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}
-                >
-                  Informations Générales
-                </button>
-                <button
-                  onClick={() => setActiveDecisionSubTab('commission')}
-                  className={`val-reports-nav-button ${activeDecisionSubTab === 'commission' ? 'val-reports-nav-button-active' : ''}`}
-                  style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}
-                >
-                  Décision de la commission
-                </button>
-                <button
-                  onClick={() => setActiveDecisionSubTab('technical')}
-                  className={`val-reports-nav-button ${activeDecisionSubTab === 'technical' ? 'val-reports-nav-button-active' : ''}`}
-                  style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}
-                >
-                  Évaluation Technique
-                </button>
-                <button
-                  onClick={() => setActiveDecisionSubTab('conclusion')}
-                  className={`val-reports-nav-button ${activeDecisionSubTab === 'conclusion' ? 'val-reports-nav-button-active' : ''}`}
-                  style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}
-                >
-                  Conclusion et Décision
-                </button>
-              </div>
-            </div>
-          )}
+
 
           {isDecisionTab && isValidator && activeDecisionSubTab === 'commission' ? (
             renderCommissionContent()
@@ -1291,10 +1378,6 @@ export default function FileDetails({
                   <button onClick={handleDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
                     <FontAwesomeIcon icon={faFileDownload} className="val-icon-16" />
                     {dict?.common?.actions?.download || 'Télécharger'}
-                  </button>
-                  <button onClick={onTransmit} className="val-file-details-button val-bg-success" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
-                    <FontAwesomeIcon icon={faPaperPlane} className="val-icon-16" />
-                    {dict?.common?.actions?.transmit || 'Transmettre'}
                   </button>
                 </>
               ) : (
@@ -1333,10 +1416,6 @@ export default function FileDetails({
                   <button onClick={handleDownload} className="val-file-details-button val-bg-primary" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
                     <FontAwesomeIcon icon={faFileDownload} className="val-icon-16" />
                     {dict?.common?.actions?.download || 'Télécharger'}
-                  </button>
-                  <button onClick={onTransmit} className="val-file-details-button val-bg-success" style={{ fontFamily: isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif' }}>
-                    <FontAwesomeIcon icon={faPaperPlane} className="val-icon-16" />
-                    {dict?.common?.actions?.transmit || 'Transmettre'}
                   </button>
                 </>
               )}

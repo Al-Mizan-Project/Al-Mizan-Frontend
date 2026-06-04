@@ -11,6 +11,7 @@ import StatCard from '../../components/dashboard/StatsCard';
 import DelayChart from '../../components/dashboard/DelayChart';
 import EmployeeChart from '../../components/dashboard/EmployeeChart';
 import FilesTable from '../../components/dashboard/FilesTable';
+import DocumentViewer from '../../components/dossier/DocumentViewer';
 
 import '../../validation.css';
 
@@ -132,19 +133,26 @@ export default function CommissionAppelsOffresPage(props: PageProps) {
     setViewerUrl(null);
     setViewerTitle(file.reference || file.id);
 
-    const appelId = Number(file.rawId ?? String(file.id).replace(/[^0-9]/g, ''));
+    const appelId = extractNumericId(file);
+    if (!appelId) {
+      setViewerError(isAr ? 'ID غير صالح' : 'ID d\'appel invalide');
+      setViewerLoading(false);
+      return;
+    }
+
     try {
-      const documents = await appelsApi.getAppelOffreDocuments(appelId);
-      if (!documents || documents.length === 0) {
-        throw new Error(isAr ? 'Aucun document trouvé pour cet appel d’offres.' : 'No document found for this appel d’offres.');
+      const appelDetails = await appelsApi.getAppelOffre(appelId);
+      
+      if (!appelDetails.id_doc_cdc) {
+        throw new Error(isAr ? 'لم يتم العثور على دفتر الشروط.' : 'Aucun CDC (Cahier des charges) trouvé pour cet appel d\'offres.');
       }
 
-      const documentId = documents[0].id_document;
-      const response = await documentsApi.getDownloadUrl(documentId);
+      const response = await documentsApi.getDownloadUrl(Number(appelDetails.id_doc_cdc));
       if (!response?.download_url) {
-        throw new Error(isAr ? 'Impossible de récupérer l’URL du document.' : 'Unable to obtain document URL.');
+        throw new Error(isAr ? 'مستحيل الحصول على رابط المستند.' : 'Impossible de récupérer l\'URL du document.');
       }
       setViewerUrl(response.download_url);
+      setViewerTitle(`${file.reference || file.id} - Statut de validation: ${appelDetails.statut || 'Inconnu'}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       setViewerError(message);
@@ -314,6 +322,8 @@ export default function CommissionAppelsOffresPage(props: PageProps) {
                 status={currentStatus as Exclude<DashboardStatus, 'overview'>}
                 lang={lang}
                 dict={customDict}
+                hideEconomicOperator={true}
+                disableRowClick={true}
                 onAffecter={(appel: any) => {
                   // Extract numeric ID robustly from string or number
                   const effectiveId = extractNumericId(appel);
@@ -357,14 +367,8 @@ export default function CommissionAppelsOffresPage(props: PageProps) {
                   ) : viewerError ? (
                     <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">{viewerError}</div>
                   ) : (
-                    <div className="h-[75vh] min-h-100 overflow-hidden rounded border border-gray-200">
-                      <iframe
-                        src={viewerUrl ?? undefined}
-                        title={viewerTitle || 'Document viewer'}
-                        className="w-full h-full"
-                        frameBorder="0"
-                        allowFullScreen
-                      />
+                    <div className="overflow-hidden rounded border border-gray-200">
+                      <DocumentViewer url={viewerUrl ?? undefined} lang={lang} dict={customDict} />
                     </div>
                   )}
                 </div>
