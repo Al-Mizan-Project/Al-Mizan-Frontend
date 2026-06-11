@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { scApi, type CommissionEvaluation, type OperateurRegistre } from '@/lib/sc/api';
 import { useSCSession } from '@/lib/sc/session';
-import { AO_TYPE_META, TYPES_SANS_PLANNING, TYPES_SANS_VALIDATION, type AOType } from '@/lib/sc/ao-states';
+import { AO_TYPE_META, aoTypeLabel, TYPES_SANS_PLANNING, TYPES_SANS_VALIDATION, type AOType } from '@/lib/sc/ao-states';
 import { Card, PageHeader, Spinner, EmptyState, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
 
 interface DocItem { id_document?: number; nom: string; kind: 'cdc' | 'justification' | 'besoin' | 'annexe'; uploading?: boolean }
@@ -484,7 +484,7 @@ function ReviewStep({ isArabic, details, docs, selectedOEs, commissions, selecte
   const row = (k: string, v: string) => (
     <div className="flex justify-between py-2 border-b border-gray-50"><span className="text-xs text-gray-400">{k}</span><span className="text-sm font-medium" style={{ color: '#1C4532' }}>{v || '—'}</span></div>
   );
-  const t = details.type_procedure ? (isArabic ? AO_TYPE_META[details.type_procedure as AOType].ar : AO_TYPE_META[details.type_procedure as AOType].fr) : '—';
+  const t = aoTypeLabel(details.type_procedure, isArabic ? 'ar' : 'fr');
   const commission = commissions.find((c: CommissionEvaluation) => String(c.id_comission) === String(selectedCommissionId));
   return (
     <div>

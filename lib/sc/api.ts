@@ -4,21 +4,13 @@
 // single-item helpers return null, so the UI renders clean empty states instead of errors.
 // Swapping to a real endpoint = editing one helper here.
 
+import { authedFetch } from './auth-tokens';
+
 export type ProxyService =
   | 'auth' | 'acteurs' | 'contractant' | 'appels'
   | 'documents' | 'soumissions' | 'evaluations' | 'contrats' | 'recours';
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-
-function authToken(): string {
-  if (typeof window === 'undefined') return '';
-  return (
-    window.localStorage.getItem('access_token') ||
-    window.localStorage.getItem('authToken') ||
-    window.localStorage.getItem('token') ||
-    ''
-  );
-}
 
 interface ReqOptions {
   method?: Method;
@@ -27,7 +19,7 @@ interface ReqOptions {
   form?: FormData;
 }
 
-/** Low-level proxied request. Throws on non-2xx. */
+/** Low-level proxied request. Attaches auth, auto-refreshes on 401, throws on non-2xx. */
 export async function proxy<T>(service: ProxyService, path: string, opts: ReqOptions = {}): Promise<T> {
   const params = new URLSearchParams({ path });
   if (opts.query) {
@@ -36,8 +28,6 @@ export async function proxy<T>(service: ProxyService, path: string, opts: ReqOpt
     }
   }
   const headers: Record<string, string> = { Accept: 'application/json' };
-  const token = authToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   let body: BodyInit | undefined;
   if (opts.form) {
@@ -47,7 +37,7 @@ export async function proxy<T>(service: ProxyService, path: string, opts: ReqOpt
     body = JSON.stringify(opts.body);
   }
 
-  const res = await fetch(`/api/proxy/${service}?${params.toString()}`, {
+  const res = await authedFetch(`/api/proxy/${service}?${params.toString()}`, {
     method: opts.method || 'GET',
     headers,
     body,

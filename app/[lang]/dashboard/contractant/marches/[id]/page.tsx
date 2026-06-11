@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Guard from '@/components/contractant/Guard';
 import { useSCSession } from '@/lib/sc/session';
 import { scApi, type AppelOffre, type Attribution, type Clarification, type RegistreEntry, type SoumissionLite } from '@/lib/sc/api';
-import { deriveState, actionsForState, STATE_META, AO_TYPE_META, type AOAction, type AOType } from '@/lib/sc/ao-states';
+import { deriveState, actionsForState, STATE_META, aoTypeLabel, type AOAction } from '@/lib/sc/ao-states';
 import { Card, PageHeader, Spinner, Badge, EmptyState, Modal, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
 
 type Tab = 'infos' | 'documents' | 'soumissions' | 'attribution' | 'clarifications' | 'recours';
@@ -59,7 +59,6 @@ function DetailInner() {
 
   const state = deriveState(ao);
   const actions = actionsForState(state, can);
-  const type = (ao.type_procedure as AOType) || undefined;
 
   async function run(a: AOAction) {
     if (a.id === 'continuer' || a.id === 'modifier') { router.push(`${base}/marches/${id}/modifier`); return; }
@@ -174,7 +173,7 @@ function DetailInner() {
         {tab === 'infos' && (
           <div>
             {infoRow(isArabic ? 'المرجع' : 'Référence', ao.reference)}
-            {infoRow(isArabic ? 'النوع' : 'Type', type ? (isArabic ? AO_TYPE_META[type].ar : AO_TYPE_META[type].fr) : '—')}
+            {infoRow(isArabic ? 'النوع' : 'Type', aoTypeLabel(ao.type_procedure, lang))}
             {infoRow(isArabic ? 'المبلغ التقديري' : 'Montant estimé', ao.montant_estime ? `${Number(ao.montant_estime).toLocaleString('fr-DZ')} DA` : '—')}
             {infoRow(isArabic ? 'تاريخ النشر' : 'Publication', ao.date_publication)}
             {infoRow(isArabic ? 'آخر أجل للإيداع' : 'Limite de dépôt', ao.date_limite_soumission)}

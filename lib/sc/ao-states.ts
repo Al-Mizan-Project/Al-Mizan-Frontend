@@ -51,6 +51,13 @@ export const AO_TYPE_META: Record<AOType, { fr: string; ar: string }> = {
   consultation: { fr: 'Consultation',                ar: 'استشارة' },
 };
 
+/** Safe label for any (possibly null/unknown) type_procedure value — never throws. */
+export function aoTypeLabel(type: string | null | undefined, lang: string, fallback = '—'): string {
+  const meta = type ? AO_TYPE_META[type as AOType] : undefined;
+  if (!meta) return fallback;
+  return lang === 'ar' ? meta.ar : meta.fr;
+}
+
 /** Types whose schedule (dates) and weights are not applicable. */
 export const TYPES_SANS_PLANNING: AOType[] = ['gre_a_gre', 'consultation'];
 /** Consultation needs no commission validation. */

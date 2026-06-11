@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Guard from '@/components/contractant/Guard';
 import { useSCSession } from '@/lib/sc/session';
 import { scApi, type AppelOffre, type Membre } from '@/lib/sc/api';
-import { AO_TYPE_META, type AOType } from '@/lib/sc/ao-states';
+import { aoTypeLabel } from '@/lib/sc/ao-states';
 import { Card, PageHeader, Spinner, EmptyState, Modal, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
 
 function ValidationsInner() {
@@ -55,12 +55,11 @@ function ValidationsInner() {
       ) : (
         <div className="space-y-3">
           {queue.map((ao) => {
-            const type = (ao.type_procedure as AOType) || undefined;
             return (
               <Card key={ao.id_appel_offres} className="p-4 flex items-center justify-between gap-4 flex-wrap">
                 <div className="min-w-0">
                   <p className="font-semibold" style={{ color: '#1C4532' }}>{ao.titre || ao.reference}</p>
-                  <p className="text-xs text-gray-400">{ao.reference} · {type ? (isArabic ? AO_TYPE_META[type].ar : AO_TYPE_META[type].fr) : ''}</p>
+                  <p className="text-xs text-gray-400">{ao.reference} · {aoTypeLabel(ao.type_procedure, lang, '')}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {canAssign && (

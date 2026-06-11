@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { normaliseRole, permissionsForRole, roleLabel, type SCRole, type Permission } from './permissions';
+import { authedFetch } from './auth-tokens';
 
 interface SCSession {
   ready: boolean;
@@ -89,13 +90,9 @@ export function SCSessionProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const [serviceRes, membreRes] = await Promise.all([
-          fetch('/api/proxy/contractant?path=my-service', {
-            headers: token ? { Authorization: `Bearer ${token}`, Accept: 'application/json' } : { Accept: 'application/json' },
-          }),
+          authedFetch('/api/proxy/contractant?path=my-service', { headers: { Accept: 'application/json' } }),
           membreId
-            ? fetch(`/api/proxy/acteurs?path=membres/${membreId}/`, {
-              headers: token ? { Authorization: `Bearer ${token}`, Accept: 'application/json' } : { Accept: 'application/json' },
-            })
+            ? authedFetch(`/api/proxy/acteurs?path=membres/${membreId}/`, { headers: { Accept: 'application/json' } })
             : Promise.resolve(null),
         ]);
         if (serviceRes.ok) {

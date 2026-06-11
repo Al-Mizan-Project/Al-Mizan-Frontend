@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import Guard from '@/components/contractant/Guard';
 import { useSCSession } from '@/lib/sc/session';
 import { scApi, type AppelOffre } from '@/lib/sc/api';
-import { deriveState, STATE_META, AO_TYPE_META, type AOType } from '@/lib/sc/ao-states';
+import { deriveState, STATE_META, AO_TYPE_META, aoTypeLabel, type AOType } from '@/lib/sc/ao-states';
 import { Card, PageHeader, Spinner, Badge, EmptyState } from '@/lib/sc/ui';
 
 function MarchesInner() {
@@ -101,14 +101,13 @@ function MarchesInner() {
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((a) => {
                   const st = deriveState(a);
-                  const type = (a.type_procedure as AOType) || undefined;
                   return (
                     <tr key={a.id_appel_offres} className="hover:bg-[#F4F7F4]">
                       <td className="px-5 py-3">
                         <Link href={`${base}/marches/${a.id_appel_offres}`} className="font-semibold text-[#00738C] hover:underline">{a.reference || `#${a.id_appel_offres}`}</Link>
                       </td>
                       <td className="px-5 py-3 max-w-xs truncate" style={{ color: '#1C4532' }}>{a.titre || '—'}</td>
-                      <td className="px-5 py-3 text-gray-500">{type ? (isArabic ? AO_TYPE_META[type].ar : AO_TYPE_META[type].fr) : '—'}</td>
+                      <td className="px-5 py-3 text-gray-500">{aoTypeLabel(a.type_procedure, lang)}</td>
                       <td className="px-5 py-3 text-gray-500">{a.montant_estime ? `${Number(a.montant_estime).toLocaleString('fr-DZ')} DA` : '—'}</td>
                       <td className="px-5 py-3"><Badge tone={STATE_META[st].tone}>{isArabic ? STATE_META[st].ar : STATE_META[st].fr}</Badge></td>
                     </tr>

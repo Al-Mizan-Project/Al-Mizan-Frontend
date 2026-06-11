@@ -9,25 +9,29 @@ import {
   scApi,
   type CommissionEvaluation,
   type CommissionEvaluationMembre,
-  type CommissionInterne,
-  type CommissionInterneMembre,
   type Membre,
 } from '@/lib/sc/api';
+import { normaliseRole, type SCRole } from '@/lib/sc/permissions';
 import { Badge, Card, EmptyState, GHOST_BTN, Modal, PageHeader, PRIMARY_BTN, PRIMARY_BTN_STYLE, Spinner, useUI } from '@/lib/sc/ui';
 
-type FormState =
-  | { kind: 'evaluation'; nom_comission: string; categorie: string; selectedUsers: number[]; labels: Record<number, 'president' | 'secretaire' | 'membre'>; ctUsers: number[] }
-  | { kind: 'interne'; nom_comission: string; type_comission: string; selectedMembers: number[] };
+// Eligible roles for COPEO membership — all designed Service Contractant roles.
+// The COPEO commission handles both evaluation AND internal validation.
+const COPEO_ROLES: SCRole[] = ['EVALUATEUR', 'RESP_SC', 'RESP_VALID_INTERN', 'VALIDATEUR_INTERNE_MARCHE', 'VALIDATEUR_INTERNE_CDC'];
 
-type MemberPanel =
-  | { kind: 'evaluation'; commission: CommissionEvaluation; membres: CommissionEvaluationMembre[]; ct: { id_utilisateur: number }[] }
-  | { kind: 'interne'; commission: CommissionInterne; membres: CommissionInterneMembre[] };
+type Label = 'president' | 'secretaire' | 'membre';
 
-function memberIntId(id: string | number): number | null {
-  const text = String(id);
-  const last = text.includes('-') ? text.split('-').at(-1) || '' : text;
-  const parsed = Number.parseInt(last, text.includes('-') ? 16 : 10);
-  return Number.isFinite(parsed) ? parsed : null;
+interface FormState {
+  nom_comission: string;
+  categorie: string;
+  selectedUsers: number[];
+  labels: Record<number, Label>;
+  ctUsers: number[];
+}
+
+interface MemberPanel {
+  commission: CommissionEvaluation;
+  membres: CommissionEvaluationMembre[];
+  ct: { id_utilisateur: number }[];
 }
 
 function userIdOf(membre: Membre): number | null {
@@ -36,6 +40,10 @@ function userIdOf(membre: Membre): number | null {
 
 function roleOf(membre: Membre): string {
   return membre.compte_auth?.role || membre.role || membre.fonction || '';
+}
+
+function roleKeyOf(membre: Membre): SCRole | null {
+  return normaliseRole(roleOf(membre));
 }
 
 function fullName(membre: Membre) {
@@ -48,33 +56,30 @@ function CommissionsInner() {
   const { ready, serviceId, orgId } = useSCSession();
   const { toast, confirm } = useUI();
 
-  const [evaluations, setEvaluations] = useState<CommissionEvaluation[]>([]);
-  const [internes, setInternes] = useState<CommissionInterne[]>([]);
+  const [commissions, setCommissions] = useState<CommissionEvaluation[]>([]);
   const [membres, setMembres] = useState<Membre[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<FormState | null>(null);
   const [panel, setPanel] = useState<MemberPanel | null>(null);
 
   const coPeoCandidates = useMemo(
-    () => membres.filter((m) => userIdOf(m) && ['EVALUATEUR', 'RESP_SC', 'RESP_VALID_INTERN'].includes(roleOf(m))),
+    () => membres.filter((m) => {
+      const role = roleKeyOf(m);
+      return userIdOf(m) && !!role && COPEO_ROLES.includes(role);
+    }),
     [membres],
   );
   const ctCandidates = useMemo(
-    () => membres.filter((m) => userIdOf(m) && roleOf(m) === 'MEMBRE_COMITE_TECHNIQUE'),
+    () => membres.filter((m) => userIdOf(m) && roleKeyOf(m) === 'MEMBRE_COMITE_TECHNIQUE'),
     [membres],
   );
 
-  async function hydrateEvaluation(commission: CommissionEvaluation) {
+  async function hydrate(commission: CommissionEvaluation) {
     const [linked, ct] = await Promise.all([
       scApi.listCommissionEvaluationMembres(commission.id_comission),
       scApi.listCT(commission.id_comission),
     ]);
     return { ...commission, membres: linked, ct };
-  }
-
-  async function hydrateInterne(commission: CommissionInterne) {
-    const linked = await scApi.listCommissionInterneMembres(commission.id_comission_interne);
-    return { ...commission, membres: linked };
   }
 
   async function load() {
@@ -83,41 +88,19 @@ function CommissionsInner() {
       return;
     }
     setLoading(true);
-    const [evalBase, interneBase, orgMembers] = await Promise.all([
+    const [base, orgMembers] = await Promise.all([
       scApi.listCommissionsEvaluation(serviceId),
-      scApi.listCommissionsInternes(serviceId),
       orgId ? scApi.listMembres(orgId) : Promise.resolve([]),
     ]);
-    const [evalFull, interneFull] = await Promise.all([
-      Promise.all(evalBase.map(hydrateEvaluation)),
-      Promise.all(interneBase.map(hydrateInterne)),
-    ]);
-    setEvaluations(evalFull);
-    setInternes(interneFull);
+    setCommissions(await Promise.all(base.map(hydrate)));
     setMembres(orgMembers);
     setLoading(false);
   }
 
   useEffect(() => { if (ready) load(); }, [ready, serviceId, orgId]);
 
-  function openEvaluationForm() {
-    setForm({
-      kind: 'evaluation',
-      nom_comission: '',
-      categorie: 'Travaux publics',
-      selectedUsers: [],
-      labels: {},
-      ctUsers: [],
-    });
-  }
-
-  function openInterneForm() {
-    setForm({
-      kind: 'interne',
-      nom_comission: '',
-      type_comission: 'permanente',
-      selectedMembers: [],
-    });
+  function openForm() {
+    setForm({ nom_comission: '', categorie: 'Travaux publics', selectedUsers: [], labels: {}, ctUsers: [] });
   }
 
   async function create() {
@@ -125,27 +108,18 @@ function CommissionsInner() {
       toast('warning', isArabic ? 'اسم اللجنة مطلوب.' : 'Le nom de la commission est requis.');
       return;
     }
+    if (form.selectedUsers.length < 3) {
+      toast('warning', isArabic ? 'لجنة COPEO تتطلب 3 أعضاء على الأقل.' : 'Une commission COPEO nécessite au moins 3 membres.');
+      return;
+    }
     try {
-      if (form.kind === 'evaluation') {
-        if (form.selectedUsers.length < 3) {
-          toast('warning', isArabic ? 'لجنة COPEO تتطلب 3 أعضاء على الأقل.' : 'Une commission COPEO nécessite au moins 3 membres.');
-          return;
-        }
-        const commission = await scApi.createCommissionEvaluation({
-          id_service: serviceId,
-          nom_comission: form.nom_comission.trim(),
-          categorie: form.categorie.trim() || 'Marchés publics',
-        });
-        await Promise.all(form.selectedUsers.map((id) => scApi.addCommissionEvaluationMembre(commission.id_comission, id, form.labels[id] || 'membre')));
-        await Promise.all(form.ctUsers.map((id) => scApi.assignCT(commission.id_comission, id)));
-      } else {
-        const commission = await scApi.createCommissionInterne({
-          id_service: serviceId,
-          nom_comission: form.nom_comission.trim(),
-          type_comission: form.type_comission,
-        });
-        await Promise.all(form.selectedMembers.map((id) => scApi.addCommissionInterneMembre(commission.id_comission_interne, id)));
-      }
+      const commission = await scApi.createCommissionEvaluation({
+        id_service: serviceId,
+        nom_comission: form.nom_comission.trim(),
+        categorie: form.categorie.trim() || 'Marchés publics',
+      });
+      await Promise.all(form.selectedUsers.map((id) => scApi.addCommissionEvaluationMembre(commission.id_comission, id, form.labels[id] || 'membre')));
+      await Promise.all(form.ctUsers.map((id) => scApi.assignCT(commission.id_comission, id)));
       toast('success', isArabic ? 'تم إنشاء اللجنة.' : 'Commission créée.');
       setForm(null);
       load();
@@ -154,7 +128,7 @@ function CommissionsInner() {
     }
   }
 
-  async function removeEvaluation(commission: CommissionEvaluation) {
+  async function remove(commission: CommissionEvaluation) {
     const ok = await confirm({
       title: isArabic ? 'حذف لجنة COPEO' : 'Supprimer la commission COPEO',
       message: commission.nom_comission || `COPEO #${commission.id_comission}`,
@@ -170,25 +144,9 @@ function CommissionsInner() {
     }
   }
 
-  async function removeInterne(commission: CommissionInterne) {
-    const ok = await confirm({
-      title: isArabic ? 'حذف اللجنة الداخلية' : 'Supprimer la commission interne',
-      message: commission.nom_comission || '',
-      danger: true,
-    });
-    if (!ok) return;
+  async function toggleMember(commission: CommissionEvaluation, utilisateurId: number, checked: boolean, lbl: Label = 'membre') {
     try {
-      await scApi.deleteCommissionInterne(commission.id_comission_interne);
-      toast('success', isArabic ? 'تم الحذف.' : 'Commission supprimée.');
-      load();
-    } catch {
-      toast('error', isArabic ? 'تعذر الحذف.' : 'Suppression indisponible.');
-    }
-  }
-
-  async function toggleEvaluationMember(commission: CommissionEvaluation, utilisateurId: number, checked: boolean, label: 'president' | 'secretaire' | 'membre' = 'membre') {
-    try {
-      if (checked) await scApi.addCommissionEvaluationMembre(commission.id_comission, utilisateurId, label);
+      if (checked) await scApi.addCommissionEvaluationMembre(commission.id_comission, utilisateurId, lbl);
       else await scApi.removeCommissionEvaluationMembre(commission.id_comission, utilisateurId);
       toast('success', isArabic ? 'تم تحديث الأعضاء.' : 'Membres mis à jour.');
       load();
@@ -208,17 +166,6 @@ function CommissionsInner() {
     }
   }
 
-  async function toggleInterneMember(commission: CommissionInterne, membreId: number, checked: boolean) {
-    try {
-      if (checked) await scApi.addCommissionInterneMembre(commission.id_comission_interne, membreId);
-      else await scApi.removeCommissionInterneMembre(commission.id_comission_interne, membreId);
-      toast('success', isArabic ? 'تم تحديث الأعضاء.' : 'Membres mis à jour.');
-      load();
-    } catch {
-      toast('error', isArabic ? 'تعذر تحديث الأعضاء.' : 'Mise à jour indisponible.');
-    }
-  }
-
   if (loading) return <Spinner />;
 
   const field = 'w-full mt-1 px-4 py-2.5 rounded-xl text-sm bg-[#F4F7F4] border border-transparent focus:border-[#97A675] focus:outline-none';
@@ -227,70 +174,43 @@ function CommissionsInner() {
   return (
     <div>
       <PageHeader
-        title={isArabic ? 'اللجان' : 'Commissions'}
+        title={isArabic ? 'لجان COPEO' : 'Commissions COPEO'}
         breadcrumb={isArabic ? 'مؤسستي' : 'Mon organisation'}
-        action={(
-          <div className="flex gap-2 flex-wrap">
-            <button className={GHOST_BTN} onClick={openInterneForm}>+ {isArabic ? 'لجنة تحقق' : 'Commission interne'}</button>
-            <button className={PRIMARY_BTN} style={PRIMARY_BTN_STYLE} onClick={openEvaluationForm}>+ {isArabic ? 'لجنة COPEO' : 'Commission COPEO'}</button>
-          </div>
-        )}
+        action={<button className={PRIMARY_BTN} style={PRIMARY_BTN_STYLE} onClick={openForm}>+ {isArabic ? 'لجنة COPEO' : 'Commission COPEO'}</button>}
       />
 
-      <section className="mb-8">
-        <h3 className="text-lg font-bold mb-3" style={{ color: '#1C4532' }}>{isArabic ? 'لجان COPEO للتقييم' : 'Commissions COPEO d’évaluation'}</h3>
-        {evaluations.length === 0 ? (
-          <Card><EmptyState title={isArabic ? 'لا توجد لجنة COPEO' : 'Aucune commission COPEO'} hint={isArabic ? 'أنشئ لجنة تضم 3 أعضاء على الأقل ثم اربطها بالمناقصة.' : 'Créez une commission avec au moins 3 membres, puis liez-la à l’appel d’offres.'} /></Card>
-        ) : (
-          <div className="grid lg:grid-cols-2 gap-4">
-            {evaluations.map((c) => (
-              <Card key={c.id_comission} className="p-5">
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div>
-                    <h4 className="font-bold" style={{ color: '#1C4532' }}>{c.nom_comission || `COPEO #${c.id_comission}`}</h4>
-                    <p className="text-xs text-gray-400">{c.categorie || 'Marchés publics'}</p>
-                  </div>
-                  <Badge tone={(c.membres?.length || 0) >= 3 ? 'success' : 'warning'}>{c.membres?.length || 0} {isArabic ? 'أعضاء' : 'membres'}</Badge>
-                </div>
-                <p className="text-xs text-gray-400 mb-4">{isArabic ? 'اللجنة المستخدمة في سجل الاستلام وفتح الأظرفة والتقييم.' : 'Utilisée par le registre de réception, l’ouverture des plis et l’évaluation.'}</p>
-                <div className="flex gap-2 flex-wrap">
-                  <button className={GHOST_BTN} onClick={() => setPanel({ kind: 'evaluation', commission: c, membres: c.membres || [], ct: (c as any).ct || [] })}>{isArabic ? 'الأعضاء و CT' : 'Membres & CT'}</button>
-                  <button className="text-xs font-semibold text-red-500 hover:underline" onClick={() => removeEvaluation(c)}>{isArabic ? 'حذف' : 'Supprimer'}</button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
+      <p className="text-sm text-gray-400 mb-5 max-w-2xl">
+        {isArabic
+          ? 'لجنة COPEO هي اللجنة الوحيدة: تتولى التحقق والتقييم وفتح الأظرفة وسجل الاستلام. أضف 3 أعضاء على الأقل من الأدوار المؤهلة.'
+          : "La commission COPEO est l’unique commission : elle assure la validation, l’évaluation, l’ouverture des plis et le registre de réception. Ajoutez au moins 3 membres parmi les rôles éligibles."}
+      </p>
 
-      <section>
-        <h3 className="text-lg font-bold mb-3" style={{ color: '#1C4532' }}>{isArabic ? 'لجان التحقق الداخلية' : 'Commissions internes de validation'}</h3>
-        {internes.length === 0 ? (
-          <Card><EmptyState title={isArabic ? 'لا توجد لجان تحقق' : 'Aucune commission interne'} hint={isArabic ? 'اختيارية حسب طريقة عمل الخدمة المتعاقدة.' : 'Optionnel selon l’organisation interne du service contractant.'} /></Card>
-        ) : (
-          <div className="grid lg:grid-cols-2 gap-4">
-            {internes.map((c) => (
-              <Card key={c.id_comission_interne} className="p-5">
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div>
-                    <h4 className="font-bold" style={{ color: '#1C4532' }}>{c.nom_comission}</h4>
-                    <p className="text-xs text-gray-400">{c.type_comission || 'permanente'}</p>
-                  </div>
-                  <Badge tone="info">{c.membres?.length || 0} {isArabic ? 'أعضاء' : 'membres'}</Badge>
+      {commissions.length === 0 ? (
+        <Card><EmptyState title={isArabic ? 'لا توجد لجنة COPEO' : 'Aucune commission COPEO'} hint={isArabic ? 'أنشئ لجنة تضم 3 أعضاء على الأقل ثم اربطها بالمناقصة.' : 'Créez une commission avec au moins 3 membres, puis liez-la à l’appel d’offres.'} /></Card>
+      ) : (
+        <div className="grid lg:grid-cols-2 gap-4">
+          {commissions.map((c) => (
+            <Card key={c.id_comission} className="p-5">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div>
+                  <h4 className="font-bold" style={{ color: '#1C4532' }}>{c.nom_comission || `COPEO #${c.id_comission}`}</h4>
+                  <p className="text-xs text-gray-400">{c.categorie || 'Marchés publics'}</p>
                 </div>
-                <div className="flex gap-2 flex-wrap">
-                  <button className={GHOST_BTN} onClick={() => setPanel({ kind: 'interne', commission: c, membres: c.membres || [] })}>{isArabic ? 'الأعضاء' : 'Gérer les membres'}</button>
-                  <button className="text-xs font-semibold text-red-500 hover:underline" onClick={() => removeInterne(c)}>{isArabic ? 'حذف' : 'Supprimer'}</button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
+                <Badge tone={(c.membres?.length || 0) >= 3 ? 'success' : 'warning'}>{c.membres?.length || 0} {isArabic ? 'أعضاء' : 'membres'}</Badge>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">{isArabic ? 'اللجنة المستخدمة في التحقق والتقييم وسجل الاستلام وفتح الأظرفة.' : 'Validation, évaluation, registre de réception et ouverture des plis.'}</p>
+              <div className="flex gap-2 flex-wrap">
+                <button className={GHOST_BTN} onClick={() => setPanel({ commission: c, membres: c.membres || [], ct: (c as unknown as { ct?: { id_utilisateur: number }[] }).ct || [] })}>{isArabic ? 'الأعضاء و CT' : 'Membres & CT'}</button>
+                <button className="text-xs font-semibold text-red-500 hover:underline" onClick={() => remove(c)}>{isArabic ? 'حذف' : 'Supprimer'}</button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Modal
         open={!!form}
-        title={form?.kind === 'evaluation' ? (isArabic ? 'لجنة COPEO جديدة' : 'Nouvelle commission COPEO') : (isArabic ? 'لجنة داخلية جديدة' : 'Nouvelle commission interne')}
+        title={isArabic ? 'لجنة COPEO جديدة' : 'Nouvelle commission COPEO'}
         onClose={() => setForm(null)}
         wide
         footer={<><button className={GHOST_BTN} onClick={() => setForm(null)}>{isArabic ? 'إلغاء' : 'Annuler'}</button><button className={PRIMARY_BTN} style={PRIMARY_BTN_STYLE} onClick={create}>{isArabic ? 'إنشاء' : 'Créer'}</button></>}
@@ -299,90 +219,61 @@ function CommissionsInner() {
           <div className="space-y-5">
             <div>
               <label className={label}>{isArabic ? 'الاسم' : 'Nom'} *</label>
-              <input className={field} value={form.nom_comission} onChange={(e) => setForm({ ...form, nom_comission: e.target.value } as FormState)} />
+              <input className={field} value={form.nom_comission} onChange={(e) => setForm({ ...form, nom_comission: e.target.value })} />
             </div>
-            {form.kind === 'evaluation' ? (
-              <>
-                <div>
-                  <label className={label}>{isArabic ? 'الصنف' : 'Catégorie'}</label>
-                  <input className={field} value={form.categorie} onChange={(e) => setForm({ ...form, categorie: e.target.value })} />
-                </div>
-                <Chooser
-                  title={isArabic ? 'أعضاء COPEO (3 على الأقل)' : 'Membres COPEO (minimum 3)'}
-                  empty={isArabic ? 'لا يوجد أعضاء مؤهلون.' : 'Aucun membre éligible.'}
-                  membres={coPeoCandidates}
-                  isArabic={isArabic}
-                  selected={(m) => !!userIdOf(m) && form.selectedUsers.includes(userIdOf(m) as number)}
-                  onToggle={(m, checked) => {
-                    const id = userIdOf(m);
-                    if (!id) return;
-                    setForm({
-                      ...form,
-                      selectedUsers: checked ? [...form.selectedUsers, id] : form.selectedUsers.filter((x) => x !== id),
-                      labels: checked ? { ...form.labels, [id]: form.labels[id] || 'membre' } : form.labels,
-                    });
-                  }}
-                  extra={(m) => {
-                    const id = userIdOf(m);
-                    if (!id || !form.selectedUsers.includes(id)) return null;
-                    return (
-                      <select
-                        className="px-2 py-1 rounded-lg text-xs bg-white border border-gray-100"
-                        value={form.labels[id] || 'membre'}
-                        onChange={(e) => setForm({ ...form, labels: { ...form.labels, [id]: e.target.value as 'president' | 'secretaire' | 'membre' } })}
-                      >
-                        <option value="president">{isArabic ? 'رئيس' : 'Président'}</option>
-                        <option value="secretaire">{isArabic ? 'كاتب' : 'Secrétaire'}</option>
-                        <option value="membre">{isArabic ? 'عضو' : 'Membre'}</option>
-                      </select>
-                    );
-                  }}
-                />
-                <Chooser
-                  title={isArabic ? 'تعيين اللجنة التقنية CT' : 'Assigner le Comité Technique'}
-                  empty={isArabic ? 'لا يوجد أعضاء CT.' : 'Aucun membre CT.'}
-                  membres={ctCandidates}
-                  isArabic={isArabic}
-                  selected={(m) => !!userIdOf(m) && form.ctUsers.includes(userIdOf(m) as number)}
-                  onToggle={(m, checked) => {
-                    const id = userIdOf(m);
-                    if (!id) return;
-                    setForm({ ...form, ctUsers: checked ? [...form.ctUsers, id] : form.ctUsers.filter((x) => x !== id) });
-                  }}
-                />
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className={label}>{isArabic ? 'النوع' : 'Type'}</label>
-                  <select className={field} value={form.type_comission} onChange={(e) => setForm({ ...form, type_comission: e.target.value })}>
-                    <option value="permanente">{isArabic ? 'دائمة' : 'Permanente'}</option>
-                    <option value="adhoc">{isArabic ? 'خاصة' : 'Ad hoc'}</option>
+            <div>
+              <label className={label}>{isArabic ? 'الصنف' : 'Catégorie'}</label>
+              <input className={field} value={form.categorie} onChange={(e) => setForm({ ...form, categorie: e.target.value })} />
+            </div>
+            <Chooser
+              title={isArabic ? 'أعضاء COPEO (3 على الأقل)' : 'Membres COPEO (minimum 3)'}
+              empty={isArabic ? 'لا يوجد أعضاء مؤهلون.' : 'Aucun membre éligible.'}
+              membres={coPeoCandidates}
+              isArabic={isArabic}
+              selected={(m) => !!userIdOf(m) && form.selectedUsers.includes(userIdOf(m) as number)}
+              onToggle={(m, checked) => {
+                const id = userIdOf(m);
+                if (!id) return;
+                setForm({
+                  ...form,
+                  selectedUsers: checked ? [...form.selectedUsers, id] : form.selectedUsers.filter((x) => x !== id),
+                  labels: checked ? { ...form.labels, [id]: form.labels[id] || 'membre' } : form.labels,
+                });
+              }}
+              extra={(m) => {
+                const id = userIdOf(m);
+                if (!id || !form.selectedUsers.includes(id)) return null;
+                return (
+                  <select
+                    className="px-2 py-1 rounded-lg text-xs bg-white border border-gray-100"
+                    value={form.labels[id] || 'membre'}
+                    onChange={(e) => setForm({ ...form, labels: { ...form.labels, [id]: e.target.value as Label } })}
+                  >
+                    <option value="president">{isArabic ? 'رئيس' : 'Président'}</option>
+                    <option value="secretaire">{isArabic ? 'كاتب' : 'Secrétaire'}</option>
+                    <option value="membre">{isArabic ? 'عضو' : 'Membre'}</option>
                   </select>
-                </div>
-                <Chooser
-                  title={isArabic ? 'الأعضاء' : 'Membres'}
-                  empty={isArabic ? 'لا يوجد أعضاء.' : 'Aucun membre.'}
-                  membres={membres}
-                  isArabic={isArabic}
-                  selected={(m) => {
-                    const id = memberIntId(m.id_membre);
-                    return !!id && form.selectedMembers.includes(id);
-                  }}
-                  onToggle={(m, checked) => {
-                    const id = memberIntId(m.id_membre);
-                    if (!id) return;
-                    setForm({ ...form, selectedMembers: checked ? [...form.selectedMembers, id] : form.selectedMembers.filter((x) => x !== id) });
-                  }}
-                />
-              </>
-            )}
+                );
+              }}
+            />
+            <Chooser
+              title={isArabic ? 'تعيين اللجنة التقنية CT' : 'Assigner le Comité Technique'}
+              empty={isArabic ? 'لا يوجد أعضاء CT.' : 'Aucun membre CT.'}
+              membres={ctCandidates}
+              isArabic={isArabic}
+              selected={(m) => !!userIdOf(m) && form.ctUsers.includes(userIdOf(m) as number)}
+              onToggle={(m, checked) => {
+                const id = userIdOf(m);
+                if (!id) return;
+                setForm({ ...form, ctUsers: checked ? [...form.ctUsers, id] : form.ctUsers.filter((x) => x !== id) });
+              }}
+            />
           </div>
         )}
       </Modal>
 
-      <Modal open={!!panel} title={panel?.kind === 'evaluation' ? (isArabic ? 'أعضاء COPEO و CT' : 'Membres COPEO & CT') : (isArabic ? 'أعضاء اللجنة' : 'Membres de la commission')} onClose={() => setPanel(null)} wide>
-        {panel?.kind === 'evaluation' && (
+      <Modal open={!!panel} title={isArabic ? 'أعضاء COPEO و CT' : 'Membres COPEO & CT'} onClose={() => setPanel(null)} wide>
+        {panel && (
           <div className="space-y-5">
             <Chooser
               title={isArabic ? 'أعضاء COPEO' : 'Membres COPEO'}
@@ -390,7 +281,7 @@ function CommissionsInner() {
               membres={coPeoCandidates}
               isArabic={isArabic}
               selected={(m) => !!userIdOf(m) && panel.membres.some((x) => x.id_utilisateur === userIdOf(m))}
-              onToggle={(m, checked) => { const id = userIdOf(m); if (id) toggleEvaluationMember(panel.commission, id, checked); }}
+              onToggle={(m, checked) => { const id = userIdOf(m); if (id) toggleMember(panel.commission, id, checked); }}
               extra={(m) => {
                 const id = userIdOf(m);
                 const linked = panel.membres.find((x) => x.id_utilisateur === id);
@@ -406,22 +297,6 @@ function CommissionsInner() {
               onToggle={(m, checked) => { const id = userIdOf(m); if (id) toggleCT(panel.commission, id, checked); }}
             />
           </div>
-        )}
-        {panel?.kind === 'interne' && (
-          <Chooser
-            title={isArabic ? 'الأعضاء' : 'Membres'}
-            empty={isArabic ? 'لا يوجد أعضاء.' : 'Aucun membre.'}
-            membres={membres}
-            isArabic={isArabic}
-            selected={(m) => {
-              const id = memberIntId(m.id_membre);
-              return !!id && panel.membres.some((x) => x.id_membre === id);
-            }}
-            onToggle={(m, checked) => {
-              const id = memberIntId(m.id_membre);
-              if (id) toggleInterneMember(panel.commission, id, checked);
-            }}
-          />
         )}
       </Modal>
     </div>

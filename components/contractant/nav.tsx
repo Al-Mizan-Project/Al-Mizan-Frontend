@@ -47,7 +47,7 @@ export const CONTRACTANT_NAV: NavItem[] = [
     icon: i(<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>),
   },
   {
-    key: 'commissions', segment: 'organisation/commissions', fr: 'Commissions internes', ar: 'اللجان الداخلية',
+    key: 'commissions', segment: 'organisation/commissions', fr: 'Commissions COPEO', ar: 'لجان COPEO',
     anyOf: ['membre_civ:manage', 'role:assign', 'marche:create'],
     icon: i(<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>),
   },
