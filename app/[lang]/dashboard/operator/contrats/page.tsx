@@ -30,7 +30,6 @@ type Contrat = {
   dateFin: string;
   montant: number;
   statut: 'en_cours' | 'termine' | 'resilie' | 'en_attente_signature';
-  tauxExecution: number;
   documents: string[];
 };
 
@@ -76,7 +75,6 @@ export default function ContratsPage({
       dateFin: '2026-08-01',
       montant: 45000000,
       statut: 'en_cours',
-      tauxExecution: 65,
       documents: ['contrat_signe.pdf', 'avenant_01.pdf']
     },
     {
@@ -91,7 +89,6 @@ export default function ContratsPage({
       dateFin: '2026-06-30',
       montant: 28000000,
       statut: 'en_cours',
-      tauxExecution: 90,
       documents: ['contrat_signe.pdf']
     },
     {
@@ -106,7 +103,6 @@ export default function ContratsPage({
       dateFin: '2025-03-31',
       montant: 67000000,
       statut: 'termine',
-      tauxExecution: 100,
       documents: ['contrat_signe.pdf', 'pv_reception.pdf']
     },
   ];
@@ -159,7 +155,6 @@ export default function ContratsPage({
       dateSignature: 'Date de signature',
       periode: 'Période',
       montant: 'Montant',
-      execution: 'Taux d\'exécution',
       statut: 'Statut',
       documents: 'Documents',
       details: 'Voir les détails',
@@ -183,7 +178,6 @@ export default function ContratsPage({
       dateSignature: 'تاريخ التوقيع',
       periode: 'الفترة',
       montant: 'المبلغ',
-      execution: 'معدل التنفيذ',
       statut: 'الحالة',
       documents: 'الوثائق',
       details: 'عرض التفاصيل',
@@ -344,22 +338,6 @@ export default function ContratsPage({
                       </div>
                     </div>
                   </div>
-
-                  {/* Execution Progress */}
-                  {contrat.statut === 'en_cours' && (
-                    <div className="mb-6">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-gray-700">{t.execution}</span>
-                        <span className="text-sm font-bold text-[#306B6F]">{contrat.tauxExecution}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3">
-                        <div 
-                          className="bg-gradient-to-r from-[#306B6F] to-[#418387] h-3 rounded-full transition-all duration-500"
-                          style={{ width: `${contrat.tauxExecution}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
 
                   {/* Documents */}
                   <div className="pt-6 border-t border-gray-100">
