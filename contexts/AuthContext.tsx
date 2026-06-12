@@ -20,6 +20,7 @@ export type User = {
   nom?: string;
   prenom?: string;
   id_membre?: string | number;
+  id_membre?: string | number;
   id_role?: number;
   role?: string;            // ← branch adds this
 };

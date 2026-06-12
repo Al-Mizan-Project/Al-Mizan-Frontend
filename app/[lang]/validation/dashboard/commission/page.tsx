@@ -1,17 +1,13 @@
 'use client';
 
-import { useEffect, useState, useMemo, use } from 'react';
+import { useMemo, use } from 'react';
 import { useRouter } from 'next/navigation';
 import StatCard from '../../components/dashboard/StatsCard';
 import DelayChart from '../../components/dashboard/DelayChart';
 import EmployeeChart from '../../components/dashboard/EmployeeChart';
 import FilesTable from '../../components/dashboard/FilesTable';
-import { useAuth } from '@/lib/auth';
-
-// Import des APIs officielles
-import { soumissionsApi } from '@/lib/api/soumissions';
-import { evaluationsApi } from '@/lib/api/evaluations';
-import { validationsApi } from '@/lib/api/validation';
+import { useAuth } from '../../../../../contexts/AuthContext';
+import { useCommissionUserAttributions } from './useCommissionAttributions';
 
 import '../../validation.css';
 
@@ -29,119 +25,20 @@ export default function CommissionPage(props: CommissionPageProps) {
   const { lang } = use(params);
   const { status: statusParam } = use(searchParams);
   const router = useRouter();
-  const { token, user, isLoading: authLoading } = useAuth();
 
   const currentStatus: DashboardStatus = tabs.includes(statusParam as DashboardStatus)
     ? (statusParam as DashboardStatus)
     : 'overview';
 
-  const [allSubmissions, setAllSubmissions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [transmitting, setTransmitting] = useState(false);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const effectiveToken =
-        token ||
-        localStorage.getItem('access_token') ||
-        localStorage.getItem('authToken') ||
-        localStorage.getItem('token') ||
-        localStorage.getItem('validation_token');
-
-      if (!effectiveToken && !authLoading) {
-        router.push(`/${lang}/login`);
-        return;
-      }
-
-      const [soumissionsRaw, evaluationsRaw, validationsRaw] = await Promise.all([
-        soumissionsApi.getSoumissions(),
-        evaluationsApi.getEvaluations(),
-        validationsApi.getValidations(),
-      ]);
-
-      const soumissions = Array.isArray(soumissionsRaw) ? soumissionsRaw : (soumissionsRaw as any).results ?? [];
-      const evaluations = Array.isArray(evaluationsRaw) ? evaluationsRaw : (evaluationsRaw as any).results ?? [];
-      const validations = Array.isArray(validationsRaw) ? validationsRaw : (validationsRaw as any).results ?? [];
-
-      const filteredSoums = soumissions;
-
-      const processed = filteredSoums
-        .filter((s: any) => {
-          const sEvals = evaluations.filter((e: any) => Number(e.id_soumission) === Number(s.id_soumission));
-          const types = sEvals.map((e: any) => (e.type ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-
-          const hasAdm = types.includes('administrative');
-          const hasTec = types.includes('technique');
-          const hasFin = types.includes('financiere');
-
-          return hasAdm && hasTec && hasFin;
-        })
-        .map((s: any) => {
-          const val = validations.find((v: any) => Number(v.id_soumission) === Number(s.id_soumission));
-          let subStatus: DashboardStatus = 'En Attente';
-          let delayDays = 0;
-
-          if (val) {
-            if (val.is_validated) {
-              subStatus = 'Prêt';
-            } else {
-              const deadline = new Date(val.created_at || new Date());
-              deadline.setDate(deadline.getDate() + 7);
-              if (new Date() > deadline) {
-                subStatus = 'En Retard';
-                delayDays = Math.floor((Date.now() - deadline.getTime()) / (1000 * 3600 * 24));
-              } else {
-                subStatus = 'En Cours';
-              }
-            }
-          }
-
-          return {
-            id: `ID-${String(s.id_soumission).padStart(3, '0')}`,
-            rawId: s.id_soumission,
-            reference: `Dossier ${s.id_soumission}`,
-            economicOperator: 'Opérateur',
-            submissionDate: s.date_soumission ? new Date(s.date_soumission).toISOString().split('T')[0] : '—',
-            status: subStatus,
-            delayDays: delayDays > 0 ? delayDays : undefined,
-            validationDeadline: '7 Jours',
-            etape: 'Evaluation Administrative',
-          };
-        });
-
-      setAllSubmissions(processed);
-    } catch (err) {
-      console.error('Erreur dashboard commission:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTransmit = async (dossier: any) => {
-    if (!confirm('Voulez-vous vraiment transmettre ce dossier ?')) return;
-    try {
-      setTransmitting(true);
-      await validationsApi.transmitDossier(dossier.rawId);
-      await fetchData();
-      alert('Dossier transmis avec succès aux responsables compétents.');
-    } catch (err: any) {
-      console.error('Erreur transmission:', err);
-      alert(`Erreur: ${err.message}`);
-    } finally {
-      setTransmitting(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!authLoading) fetchData();
-  }, [token, user, authLoading, router, lang]);
+  const auth = useAuth();
+  const { appels: allSubmissions, stats, isLoading, error, refresh } = useCommissionUserAttributions();
 
   const tableData = useMemo(() =>
     currentStatus === 'overview' ? allSubmissions : allSubmissions.filter(s => s.status === currentStatus),
     [allSubmissions, currentStatus]);
 
-  const stats = useMemo(() => {
+  const overviewStats = useMemo(() => {
+    if (stats) return stats;
     const total = allSubmissions.length;
     const count = (st: string) => allSubmissions.filter(s => s.status === st).length;
     const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0;
@@ -152,7 +49,7 @@ export default function CommissionPage(props: CommissionPageProps) {
       enRetard: cR, enRetardPct: pct(cR),
       pret: cP, pretPct: pct(cP),
     };
-  }, [allSubmissions]);
+  }, [stats, allSubmissions]);
 
   const dynamicDelayData = useMemo(() => {
     const delayed = allSubmissions.filter(s => s.status === 'En Retard');
@@ -184,6 +81,22 @@ export default function CommissionPage(props: CommissionPageProps) {
     return Object.entries(groups).map(([employee, v]) => ({ employee, ...v }));
   }, [allSubmissions]);
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <div className="val-empty-icon">
+          <svg className="w-16 h-16 text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold text-gray-700">Erreur lors du chargement des données</h2>
+        <p className="text-sm text-gray-400 max-w-md text-center">{error}</p>
+        <button onClick={refresh} className="val-reset-button">Réessayer</button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="val-tabs-container">
@@ -205,10 +118,10 @@ export default function CommissionPage(props: CommissionPageProps) {
       {currentStatus === 'overview' ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mt-6">
-            <StatCard title="Dossiers en attente d'affectation" value={stats.enAttente} trend={stats.enAttentePct} />
-            <StatCard title="Dossiers en cours de validation" value={stats.enCours} trend={stats.enCoursPct} />
-            <StatCard title="Dossiers en retard" value={stats.enRetard} trend={stats.enRetardPct} />
-            <StatCard title="Dossiers prêts à transmettre" value={stats.pret} trend={stats.pretPct} />
+            <StatCard title="Dossiers en attente d'affectation" value={overviewStats.enAttente} trend={overviewStats.enAttentePct} />
+            <StatCard title="Dossiers en cours de validation" value={overviewStats.enCours} trend={overviewStats.enCoursPct} />
+            <StatCard title="Dossiers en retard" value={overviewStats.enRetard} trend={overviewStats.enRetardPct} />
+            <StatCard title="Dossiers prêts à transmettre" value={overviewStats.pret} trend={overviewStats.pretPct} />
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 w-full">
             <DelayChart data={dynamicDelayData} title="Dossiers en retards par durée" legend="Numero de dossiers en retard" lang={lang} />
@@ -217,7 +130,7 @@ export default function CommissionPage(props: CommissionPageProps) {
         </>
       ) : (
         <div className="mt-6 bg-white rounded-lg shadow">
-          {loading ? (
+          {isLoading ? (
             <div className="p-6 text-center text-gray-500">Chargement des données...</div>
           ) : (tableData.length === 0 ? (
             <div className="p-10 text-center text-gray-400">Aucun dossier trouvé dans cet état.</div>
@@ -226,12 +139,17 @@ export default function CommissionPage(props: CommissionPageProps) {
               data={tableData}
               status={currentStatus as Exclude<DashboardStatus, 'overview'>}
               lang={lang}
-              onAffecter={(dossier: any) => {
-                if (dossier.status === 'Prêt') {
-                  handleTransmit(dossier);
+              onAction={(dossier: any) => {
+                const dossierId = dossier.rawId || dossier.id.replace('ID-', '');
+                if (currentStatus === 'Prêt') {
+                  router.push(`/${lang}/validation/dossier/${dossierId}/commission?action=transmettre`);
                 } else {
-                  router.push(`/${lang}/validation/affectation/${dossier.rawId || dossier.id.replace('ID-', '')}`);
+                  router.push(`/${lang}/validation/AffectationSoumission/${dossierId}`);
                 }
+              }}
+              onView={(dossier: any) => {
+                const dossierId = dossier.rawId || dossier.id.replace('ID-', '');
+                router.push(`/${lang}/validation/dossier/${dossierId}/commission`);
               }}
             />
           ))}

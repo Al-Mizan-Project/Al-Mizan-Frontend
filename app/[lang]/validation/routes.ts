@@ -11,6 +11,7 @@ export const commissionRoutes = {
   profile: '/validation/Profile/commission',
   parametres: '/validation/Parametres/commission',
   notifications: '/validation/Notifications/commission',
+  appelsOffres: '/validation/appels-offres/commission',
 };
 
 export const validatorRoutes = {

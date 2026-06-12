@@ -9,11 +9,12 @@ import {
   faUsers,
   faHistory,
   faBook,
-  faSearch
+  faSearch,
+  faClipboardList
 } from '@fortawesome/free-solid-svg-icons';
 
 import { commissionRoutes, validatorRoutes } from '../../../validation/routes';
-import { useValidationAuth } from '../../context/ValidationAuthContext';
+import { useAuth } from '../../../../../contexts/AuthContext';
 
 type UserRole = 'commission' | 'validator';
 
@@ -27,6 +28,7 @@ const getMenuItems = (role: UserRole, isAr: boolean, user: any) => {
     const items = [
       { icon: faHome, label: isAr ? 'نظرة عامة' : 'Vue globale', href: commissionRoutes.dashboard },
       { icon: faFolder, label: isAr ? 'الملفات' : 'Dossiers', href: commissionRoutes.tousLesDossiers },
+      { icon: faClipboardList, label: isAr ? 'طلبات العروض' : "Appels d'offres", href: commissionRoutes.appelsOffres },
       { icon: faUsers, label: isAr ? 'تعيين الملفات' : 'Affectation', href: commissionRoutes.affectationDossiers },
       { icon: faHistory, label: isAr ? 'سجل التحققات' : 'Historique', href: commissionRoutes.historique },
       { icon: faBook, label: isAr ? 'المراجع' : 'Références', href: commissionRoutes.references },
@@ -43,8 +45,18 @@ const getMenuItems = (role: UserRole, isAr: boolean, user: any) => {
 
     return items;
   } else {
+    // Déterminer le bon dashboard selon le rôle du validateur
+    let dashboardHref = validatorRoutes.dashboard;
+    const userRoleStr = (user?.role || '').toLowerCase();
+    
+    if (userRoleStr.includes('cdc')) {
+      dashboardHref = '/validation/dashboard/validatorCDC';
+    } else if (userRoleStr.includes('marche')) {
+      dashboardHref = '/validation/dashboard/validatorMarche';
+    }
+
     return [
-      { icon: faHome, label: isAr ? 'نظرتي الشخصية' : 'Vue personnelle', href: validatorRoutes.dashboard },
+      { icon: faHome, label: isAr ? 'نظرتي الشخصية' : 'Vue personnelle', href: dashboardHref },
       { icon: faFolder, label: isAr ? 'ملفاتي' : 'Dossiers', href: validatorRoutes.tousLesDossiers },
       { icon: faBook, label: isAr ? 'المراجع' : 'Références', href: validatorRoutes.references },
     ];
@@ -53,7 +65,7 @@ const getMenuItems = (role: UserRole, isAr: boolean, user: any) => {
 
 export default function Sidebar({ lang, role }: SidebarProps) {
   const pathname = usePathname();
-  const { user } = useValidationAuth();
+  const { user } = useAuth();
   const isAr = lang === 'ar';
   const menuItems = getMenuItems(role, isAr, user);
 

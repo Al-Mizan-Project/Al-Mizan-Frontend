@@ -1,104 +1,44 @@
 'use client';
 
-import { useState } from 'react';
-
-interface Notification {
-  id: string;
-  type: 'new' | 'warning' | 'danger' | 'info';
-  title: string;
-  description: string;
-  date: string;
-  reference?: string;
-}
-
-interface NotificationsByDate {
-  [key: string]: Notification[];
-}
+import { useMemo } from 'react';
+import { useNotifications, BackendNotification } from './useNotifications';
+import { useRouter } from 'next/navigation';
 
 export default function NotificationsList() {
-  const [notifications] = useState<NotificationsByDate>({
-    "Aujourd'hui": [
-      {
-        id: '1',
-        type: 'new',
-        title: 'Nouveau Dossier',
-        description: 'Nouveau Dossier Reçu',
-        date: new Date().toISOString(),
-        reference: 'Nouveau Dossier Reçu'
-      },
-      {
-        id: '2',
-        type: 'new',
-        title: 'Nouveau Dossier',
-        description: 'Nouveau Dossier Reçu',
-        date: new Date().toISOString(),
-        reference: 'Nouveau Dossier Reçu'
-      },
-      {
-        id: '3',
-        type: 'warning',
-        title: 'Référence Dossier ID',
-        description: '3 jours restants pour l\'évaluation',
-        date: new Date().toISOString(),
-        reference: '3 jours restants'
-      }
-    ],
-    "Hier": [
-      {
-        id: '4',
-        type: 'danger',
-        title: 'Référence Dossier',
-        description: 'Dépassement du delais pour le dossier ID',
-        date: new Date(Date.now() - 86400000).toISOString(),
-        reference: 'Dépassement du delais'
-      },
-      {
-        id: '5',
-        type: 'warning',
-        title: 'Référence Dossier ID',
-        description: '3 jours restants pour l\'évaluation',
-        date: new Date(Date.now() - 86400000).toISOString(),
-        reference: '3 jours restants'
-      },
-      {
-        id: '6',
-        type: 'info',
-        title: 'Title. Subtitle.',
-        description: 'Subtitle.',
-        date: new Date(Date.now() - 86400000).toISOString(),
-        reference: 'Subtitle.'
-      },
-      {
-        id: '7',
-        type: 'info',
-        title: 'Référence Dossier ID soumis évalué',
-        description: 'Dossier soumis par évaluateur',
-        date: new Date(Date.now() - 86400000).toISOString(),
-        reference: 'Dossier soumis par évaluateur'
-      }
-    ],
-    "Le 20 Mars": [
-      {
-        id: '8',
-        type: 'new',
-        title: 'Nouveau Dossier',
-        description: 'Nouveau Dossier Reçu',
-        date: '2026-03-20',
-        reference: 'Nouveau Dossier Reçu'
-      },
-      {
-        id: '9',
-        type: 'danger',
-        title: 'Référence Dossier',
-        description: 'Dépassement du delais pour le dossier ID',
-        date: '2026-03-20',
-        reference: 'Dépassement du delais'
-      }
-    ]
-  });
+  const { notifications, isLoading, error, refresh, markAsRead, markAllAsRead, unreadCount } = useNotifications();
+  const router = useRouter();
 
-  const getNotificationIcon = (type: Notification['type']) => {
-    switch (type) {
+  const groupedNotifications = useMemo(() => {
+    const groups: Record<string, BackendNotification[]> = {};
+
+    notifications.forEach((notif) => {
+      // Basic grouping by date string or "Aujourd'hui" / "Hier"
+      const dateObj = new Date(notif.date_creation);
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      let groupKey = '';
+      if (dateObj.toDateString() === today.toDateString()) {
+        groupKey = "Aujourd'hui";
+      } else if (dateObj.toDateString() === yesterday.toDateString()) {
+        groupKey = "Hier";
+      } else {
+        groupKey = dateObj.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+      }
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(notif);
+    });
+
+    return groups;
+  }, [notifications]);
+
+  const getNotificationIcon = (type: string) => {
+    const lowerType = (type || 'INFO').toLowerCase();
+    switch (lowerType) {
       case 'new':
         return (
           <div className="val-notification-icon val-notification-icon-new">
@@ -134,56 +74,86 @@ export default function NotificationsList() {
     }
   };
 
-  const handleVoirNotification = (notification: Notification) => {
-    console.log('Voir notification:', notification.id);
-    // TODO: Navigation vers le dossier concerné
+  const handleVoirNotification = async (notification: BackendNotification) => {
+    if (!notification.est_lu) {
+      await markAsRead(notification.id);
+    }
+    if (notification.lien_relatif) {
+      router.push(notification.lien_relatif);
+    }
   };
+
+  if (isLoading) {
+    return <div className="p-8 text-center text-gray-500">Chargement des notifications...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-500 mb-4">{error}</p>
+        <button onClick={refresh} className="px-4 py-2 bg-blue-600 text-white rounded">Réessayer</button>
+      </div>
+    );
+  }
 
   return (
     <div className="val-notifications-container">
-      {Object.entries(notifications).map(([date, dateNotifications]) => (
-        <div key={date} className="val-notifications-section">
-          <h3 className="val-notifications-section-title">{date}</h3>
-          
-          <div className="val-notifications-list">
-            {dateNotifications.map((notification) => (
-              <div 
-                key={notification.id} 
-                className={`val-notification-item val-notification-item-${notification.type}`}
-              >
-                <div className="val-notification-border" />
-                
-                <div className="val-notification-content">
-                  <div className="val-notification-icon-wrapper">
-                    {getNotificationIcon(notification.type)}
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold">Notifications {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full ml-2">{unreadCount} non lues</span>}</h2>
+        {unreadCount > 0 && (
+          <button onClick={markAllAsRead} className="text-sm text-blue-600 hover:underline">
+            Marquer tout comme lu
+          </button>
+        )}
+      </div>
+
+      {Object.keys(groupedNotifications).length === 0 ? (
+        <div className="p-10 text-center text-gray-400">Aucune notification pour le moment.</div>
+      ) : (
+        Object.entries(groupedNotifications).map(([date, dateNotifications]) => (
+          <div key={date} className="val-notifications-section">
+            <h3 className="val-notifications-section-title">{date}</h3>
+            
+            <div className="val-notifications-list">
+              {dateNotifications.map((notification) => (
+                <div 
+                  key={notification.id} 
+                  className={`val-notification-item val-notification-item-${(notification.type || 'info').toLowerCase()} ${!notification.est_lu ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
+                >
+                  <div className="val-notification-border" />
+                  
+                  <div className="val-notification-content">
+                    <div className="val-notification-icon-wrapper">
+                      {getNotificationIcon(notification.type)}
+                    </div>
+                    
+                    <div className="val-notification-text">
+                      <div className={`val-notification-title ${!notification.est_lu ? 'font-semibold' : ''}`}>
+                        {notification.titre}
+                        {notification.reference_dossier && (
+                          <span className="val-notification-reference">
+                            {' '}{notification.reference_dossier}
+                          </span>
+                        )}
+                      </div>
+                      <div className="val-notification-description">
+                        {notification.message}
+                      </div>
+                    </div>
                   </div>
                   
-                  <div className="val-notification-text">
-                    <div className="val-notification-title">
-                      {notification.title}
-                      {notification.reference && (
-                        <span className="val-notification-reference">
-                          {' '}{notification.reference}
-                        </span>
-                      )}
-                    </div>
-                    <div className="val-notification-description">
-                      {notification.description}
-                    </div>
-                  </div>
+                  <button 
+                    onClick={() => handleVoirNotification(notification)}
+                    className="val-notification-action"
+                  >
+                    Voir
+                  </button>
                 </div>
-                
-                <button 
-                  onClick={() => handleVoirNotification(notification)}
-                  className="val-notification-action"
-                >
-                  Voir
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }

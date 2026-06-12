@@ -3,7 +3,7 @@
 import React from 'react';
 import Sidebar from '../components/layout/Sidebar';
 import Header from '../components/layout/Header';
-import { useValidationAuth } from '../context/ValidationAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function UserManagementLayout({
   children,
@@ -12,7 +12,8 @@ export default function UserManagementLayout({
   children: React.ReactNode;
   params: { lang: string };
 }) {
-  const { role, isLoading } = useValidationAuth();
+  const { user, isLoading } = useAuth();
+  const role = user?.role ?? null;
   const isAr = lang === 'ar';
 
   if (isLoading) {

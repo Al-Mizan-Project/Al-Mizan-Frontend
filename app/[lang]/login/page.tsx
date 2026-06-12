@@ -3,12 +3,12 @@ import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useState, FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  faEnvelope, 
-  faLock, 
-  faEye, 
+import {
+  faEnvelope,
+  faLock,
+  faEye,
   faEyeSlash,
-  faBuildingColumns 
+  faBuildingColumns
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 
@@ -17,13 +17,24 @@ type PageProps = {
 };
 
 const ROLE_REDIRECTS: Record<string, string> = {
-  admin:                '/fr/system-admin',
+  admin: '/fr/system-admin',
   operateur_economique: '/fr/dashboard/operator',
-  service_contractant:  '/fr/dashboard/contractant',
-  commission_externe:   '/fr/validation/dashboard/validator',
-  tutelle:              '/fr/validation/dashboard/validator',
+  service_contractant: '/fr/dashboard/contractant',
+
+  // Nouveaux rôles
+  resp_valid_intern: '/fr/validation/dashboard/commission',
+  resp_cm: '/fr/validation/dashboard/commission',
+  validateur_interne_cdc: '/fr/validation/dashboard/validatorCDC',
+  validateur_interne_marche: '/fr/validation/dashboard/validatorMarche',
+  validateur_externe_cdc: '/fr/validation/dashboard/validatorCDC',
+  validateur_externe_marche: '/fr/validation/dashboard/validatorMarche',
 };
 
+/**
+ * Détermine l'URL de redirection selon le rôle extrait du token JWT.
+ * Accepte aussi bien les noms bruts (ex: "Commission Externe") que
+ * les formes normalisées (ex: "commission_externe").
+ */
 function getRedirectPath(roleName: string, idRole: number): string {
   const normalized = roleName
     .toLowerCase()
@@ -32,11 +43,18 @@ function getRedirectPath(roleName: string, idRole: number): string {
 
   if (ROLE_REDIRECTS[normalized]) return ROLE_REDIRECTS[normalized];
 
-  if (normalized.includes('admin'))       return ROLE_REDIRECTS.admin;
-  if (normalized.includes('operateur'))   return ROLE_REDIRECTS.operateur_economique;
+  // Correspondance partielle (fallback)
+  if (normalized.includes('admin')) return ROLE_REDIRECTS.admin;
+  if (normalized.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
   if (normalized.includes('contractant')) return ROLE_REDIRECTS.service_contractant;
-  if (normalized.includes('commission'))  return ROLE_REDIRECTS.commission_externe;
-  if (normalized.includes('tutelle'))     return ROLE_REDIRECTS.tutelle;
+  if (normalized.includes('resp_valid_intern') || normalized.includes('resp_cm')) return ROLE_REDIRECTS.resp_valid_intern;
+  if (normalized.includes('validateur')) {
+    if (normalized.includes('cdc')) return ROLE_REDIRECTS.validateur_interne_cdc;
+    if (normalized.includes('marche')) return ROLE_REDIRECTS.validateur_interne_marche;
+    return ROLE_REDIRECTS.validateur_interne_cdc;
+  }
+  if (normalized.includes('commission')) return ROLE_REDIRECTS.commission_externe;
+  if (normalized.includes('tutelle')) return ROLE_REDIRECTS.tutelle;
 
   const idRoleMap: Record<number, string> = {
     1: ROLE_REDIRECTS.admin,
@@ -89,58 +107,12 @@ export default function LoginPage({ params }: PageProps) {
     }
 
     try {
-      // 1. Login
-      const response = await fetch('/api/proxy/auth?path=auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.detail || errorData.error || 'Identifiants incorrects');
-      }
-
-      const data = await response.json();
-      const accessToken  = data.access  || data.access_token;
-      const refreshToken = data.refresh || data.refresh_token;
-
-      if (!accessToken) {
-        throw new Error('Token non reçu dans la réponse du serveur');
-      }
-
-      // 2. Decode JWT
-      const base64Url = accessToken.split('.')[1];
-      const decoded = JSON.parse(atob(base64Url.replace(/-/g, '+').replace(/_/g, '/')));
-
-      // 3. Save tokens + user_id
-      localStorage.setItem('access_token', accessToken);
-      if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
-      localStorage.setItem('user_id', String(decoded.user_id || ''));
-
-      // 4. Fetch membre_id — it's not in the JWT, so we get it from the user endpoint
-      try {
-        const userRes = await fetch(`/api/proxy/auth?path=users/${decoded.user_id}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (userRes.ok) {
-          const userData = await userRes.json();
-          if (userData.id_membre) {
-            localStorage.setItem('membre_id', String(userData.id_membre));
-          }
-        }
-      } catch {
-        // Non-blocking — profile page will show empty state if this fails
-      }
-
-      // 5. Redirect based on role
-      const roleName = decoded.role || decoded.role_name || '';
-      const idRole   = decoded.id_role || 0;
-      const redirectPath = getRedirectPath(roleName, idRole);
-      window.location.href = redirectPath;
-
+      // Utiliser la méthode centralisée d'authentification du contexte
+      await authLogin(email, password);
+      // AuthContext gère le stockage du token et la redirection par défaut
+      return;
     } catch (err: any) {
-      if (err.response?.status === 401 || err.message?.includes('Identifiants')) {
+      if (err.response?.status === 401 || err.message?.includes('Invalid') || err.message?.includes('Identifiants')) {
         setError(isArabic ? 'بيانات الدخول غير صحيحة' : 'Identifiants incorrects');
       } else {
         setError(err.message || (isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion'));
@@ -178,9 +150,9 @@ export default function LoginPage({ params }: PageProps) {
 
           <div className="mt-12 flex flex-col gap-3 text-sm text-[#589C9F]">
             {[
-              { ar: 'متوافق مع القانون 23-12',          fr: 'Conforme Loi 23-12' },
+              { ar: 'متوافق مع القانون 23-12', fr: 'Conforme Loi 23-12' },
               { ar: 'حماية البيانات حسب القانون 18-07', fr: 'Protection des données Loi 18-07' },
-              { ar: 'استضافة سيادية جزائرية',           fr: 'Hébergement souverain algérien' },
+              { ar: 'استضافة سيادية جزائرية', fr: 'Hébergement souverain algérien' },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2 justify-center">
                 <span className="w-2 h-2 bg-[#9BCFCF] rounded-full"></span>
@@ -336,11 +308,10 @@ export default function LoginPage({ params }: PageProps) {
                 <Link
                   key={l}
                   href={`/${l}/login`}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    lang === l
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${lang === l
                       ? 'bg-[#306B6F] text-white'
                       : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
-                  }`}
+                    }`}
                 >
                   {l === 'fr' ? 'Français' : 'العربية'}
                 </Link>

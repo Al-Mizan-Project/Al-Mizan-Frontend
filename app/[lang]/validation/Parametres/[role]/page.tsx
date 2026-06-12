@@ -1,6 +1,6 @@
 import { getDictionary } from '@/lib/get-dictionary';
 import type { Locale } from '@/dictionaries/types';
-
+import ParametresView from '../../components/parametres/ParametresView';
 
 interface PageProps {
   params: Promise<{ lang: string }>;
@@ -14,7 +14,7 @@ export default async function ParametresPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6">
-
+      <ParametresView lang={lang} dict={dict} />
     </div>
   );
 }

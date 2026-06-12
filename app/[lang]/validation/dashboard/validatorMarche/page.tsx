@@ -4,12 +4,8 @@ import { useEffect, useState, useMemo, use } from 'react';
 import StatCard from '../../components/dashboard/StatsCard';
 import FilesTable from '../../components/dashboard/FilesTable';
 import DelayChart from '../../components/dashboard/DelayChart';
-import { useValidationAuth } from '../../context/ValidationAuthContext';
-
-// Import des APIs officielles
-import { soumissionsApi } from '@/lib/api/soumissions';
-import { evaluationsApi } from '@/lib/api/evaluations';
-import { validationsApi } from '@/lib/api/validation';
+import { useAuth } from '@/contexts/AuthContext';
+import { appelsApi, AppelOffre } from '@/lib/api/appels';
 
 import '../../validation.css';
 
@@ -27,7 +23,7 @@ export default function ValidatorPage(props: ValidatorPageProps) {
   const { lang } = use(params);
   const { status: statusParam } = use(searchParams);
 
-  const { token, user, isLoading: authLoading } = useValidationAuth();
+  const { token, user, isLoading: authLoading } = useAuth();
 
   const currentStatus: DashboardStatus = tabs.includes(statusParam as DashboardStatus)
     ? (statusParam as DashboardStatus)
@@ -41,60 +37,49 @@ export default function ValidatorPage(props: ValidatorPageProps) {
       if (!token || !user) return;
 
       try {
-        const CURRENT_VALIDATOR_ID = user.id_utilisateur;
-
-        // On utilise les APIs officielles qui gèrent le bypass 401 via proxy
-        // OPTIMISATION : On ne récupère que les validations de cet expert
-        const [soumissionsRaw, evaluationsRaw, validationsRaw] = await Promise.all([
-          soumissionsApi.getSoumissions(),
-          evaluationsApi.getEvaluations(),
-          validationsApi.getValidations({ id_utilisateur: CURRENT_VALIDATOR_ID }),
-        ]);
-
-        const soumissions: any[] = Array.isArray(soumissionsRaw) ? soumissionsRaw : (soumissionsRaw as any).results ?? [];
-        const validations: any[] = Array.isArray(validationsRaw) ? validationsRaw : (validationsRaw as any).results ?? [];
-        const validatorSubmissions: any[] = [];
-
-        // On parcourt toutes les soumissions
-        soumissions.forEach((s: any) => {
-          // Trouver la validation pour cette soumission assignée au validateur courant
-          const val = validations.find((v: any) => 
-            Number(v.id_soumission) === Number(s.id_soumission) && 
-            Number(v.id_utilisateur) === Number(CURRENT_VALIDATOR_ID) &&
-            !v.is_validated
-          );
-
-          if (val) {
-            let subStatus: DashboardStatus = 'En Cours';
-            let delayDays = 0;
-
-            const validationDate = new Date(val.created_at || new Date());
-            const deadline = new Date(validationDate);
-            deadline.setDate(deadline.getDate() + 7);
-            const now = new Date();
-
-            if (now > deadline) {
-              subStatus = 'En Retard';
-              delayDays = Math.floor((now.getTime() - deadline.getTime()) / (1000 * 3600 * 24));
-            }
-
-            validatorSubmissions.push({
-              id: `ID-${String(s.id_soumission).padStart(3, '0')}`,
-              rawId: s.id_soumission,
-              reference: `Dossier ${s.id_soumission}`,
-              economicOperator: 'Opérateur',
-              validator: {
-                name: `Moi (Expert #${CURRENT_VALIDATOR_ID})`,
-                id: `VAL-${val.id_validation}`
-              },
-              submissionDate: s.date_soumission ? new Date(s.date_soumission).toISOString().split('T')[0] : '—',
-              assignmentDate: new Date(val.created_at).toISOString().split('T')[0],
-              validationDeadline: '7 Jours',
-              status: subStatus,
-              delayDays: delayDays > 0 ? delayDays : undefined,
-              etape: 'Validation en cours',
-            });
+        const CURRENT_VALIDATOR_ID = user.id_utilisateur ?? user.id ?? user.id_membre;
+        if (!CURRENT_VALIDATOR_ID) {
+          throw new Error('Impossible de déterminer l\'identifiant du validateur.');
+        }
+        const response = await fetch(`/api/proxy/contrats/validator-attributions?user_id=${CURRENT_VALIDATOR_ID}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
           }
+        });
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          console.error('Erreur attributions:', response.status, errBody);
+          setAllSubmissions([]);
+          return;
+        }
+
+        const data = await response.json();
+        const attributionsRaw = data.attributions || [];
+
+        const validatorSubmissions: any[] = attributionsRaw.map((attr: any) => {
+          const soumission = attr.soumission_details || attr.soumission;
+          const soumissionaireId = attr.id_soumissionnaire ?? (soumission && typeof soumission === 'object' ? soumission.id_soumissionnaire : null);
+          const soumissionaireLabel = soumissionaireId
+            ? `Soumissionaire #${soumissionaireId}`
+            : (attr.soumission_id ? `Soumission #${attr.soumission_id}` : 'Soumissionnaire inconnu');
+
+          return {
+            id: `ID-${String(attr.soumission_id ?? attr.id).padStart(3, '0')}`,
+            rawId: attr.soumission_id ?? attr.id,
+            reference: `Soumission ${attr.soumission_id ?? attr.appel_id ?? 'N/A'}`,
+            economicOperator: soumissionaireLabel,
+            validator: {
+              name: `Moi (Expert #${CURRENT_VALIDATOR_ID})`,
+              id: `VAL-${String(attr.validated_by ?? CURRENT_VALIDATOR_ID)}`,
+            },
+            submissionDate: attr.created_at ? new Date(attr.created_at).toISOString().split('T')[0] : '—',
+            assignmentDate: attr.assignmentDate ? new Date(attr.assignmentDate).toISOString().split('T')[0] : '—',
+            validationDeadline: attr.validationDeadline ? new Date(attr.validationDeadline).toISOString().split('T')[0] : '—',
+            status: attr.status || 'En Cours',
+            delayDays: attr.delayDays > 0 ? attr.delayDays : undefined,
+            etape: 'Validation en cours',
+          };
         });
 
         setAllSubmissions(validatorSubmissions);
@@ -155,7 +140,7 @@ export default function ValidatorPage(props: ValidatorPageProps) {
           {tabs.map(status => (
             <a
               key={status}
-              href={`/${lang}/validation/dashboard/validator?status=${status}`}
+              href={`/${lang}/validation/dashboard/validatorMarche?status=${status}`}
               className={currentStatus === status ? 'val-tab-active' : 'val-tab-inactive'}
             >
               <span className={currentStatus === status ? 'val-tab-active-text' : 'val-tab-inactive-text'}>
