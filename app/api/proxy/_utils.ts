@@ -233,7 +233,6 @@ export async function proxyRequest(req: NextRequest, method: string, options: Pr
       upstreamUrl,
       requestInit
     );
-    clearTimeout(timeout);
 
     if (upstream.status === 204) {
       return new NextResponse(null, { status: upstream.status });
