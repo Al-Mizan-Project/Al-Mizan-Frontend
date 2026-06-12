@@ -10,15 +10,23 @@ import {
   faFilePdf,
   faGavel,
   faShieldHalved,
-  faInfoCircle
+  faInfoCircle,
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import {
+  createRecours,
+  fetchSoumissionById,
+  fetchSoumissionsByOperator,
+  uploadDocument,
+  type SoumissionApi,
+} from '@/lib/operator-api';
 
 type FormData = {
   typeRecours: string;
+  objet: string;
   motif: string;
+  explications: string;
   documents: File[];
-  accepterConditions: boolean;
 };
 
 type FormErrors = Partial<Record<keyof FormData, string>>;
@@ -32,76 +40,95 @@ export default function DeposerRecoursPage({
   const searchParams = useSearchParams();
   const [lang, setLang] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  
-  const submissionId = searchParams.get('submissionId');
+  const [soumission, setSoumission] = useState<SoumissionApi | null>(null);
+  const [soumissionError, setSoumissionError] = useState('');
+
+  // For soumission picker when no submissionId in URL
+  const [soumissions, setSoumissions] = useState<SoumissionApi[]>([]);
+  const [selectedSoumissionId, setSelectedSoumissionId] = useState<string>('');
+
+  const submissionIdParam = searchParams.get('submissionId');
+  const effectiveSubmissionId = submissionIdParam || selectedSoumissionId;
 
   const [formData, setFormData] = useState<FormData>({
     typeRecours: '',
+    objet: '',
     motif: '',
+    explications: '',
     documents: [],
-    accepterConditions: false,
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
 
   useEffect(() => {
     let isMounted = true;
-
-    const loadLang = async () => {
-      const resolvedParams = await params;
-      if (isMounted) {
-        setLang(resolvedParams.lang);
-      }
-    };
-
-    loadLang();
-
-    return () => {
-      isMounted = false;
-    };
+    params.then((p) => { if (isMounted) setLang(p.lang); });
+    return () => { isMounted = false; };
   }, [params]);
 
   const isArabic = lang === 'ar';
 
-  // Mock data - Replace with API call
-  const soumission = {
-    id: 1,
-    appelOffreReference: 'AO/N°01/2026',
-    appelOffreTitre: 'Acquisition de matériel informatique pour les lycées de la wilaya d\'Alger',
-    dateSoumission: '2026-03-01T08:00:00',
-    montantSoumis: 72500000,
-    statut: 'refusee',
-    motifRefus: 'Le certificat CNAS fourni est expiré depuis le 01/01/2026.',
-    dateNotification: '2026-04-20T10:45:00',
-  };
+  // If no submissionId in URL, load soumissions list for picker
+  useEffect(() => {
+    if (submissionIdParam) return;
+    const operateurId = Number(
+      typeof window !== 'undefined' ? localStorage.getItem('operateur_id') || '1' : '1'
+    );
+    fetchSoumissionsByOperator(operateurId)
+      .then(setSoumissions)
+      .catch(() => {});
+  }, [submissionIdParam]);
+
+  // Fetch soumission detail when ID is known
+  useEffect(() => {
+    if (!effectiveSubmissionId) return;
+    setSoumissionError('');
+    fetchSoumissionById(Number(effectiveSubmissionId))
+      .then(setSoumission)
+      .catch(() => setSoumissionError('Impossible de charger les informations de la soumission.'));
+  }, [effectiveSubmissionId]);
 
   const typeRecoursOptions = [
-    { value: 'conformite_admin', label: isArabic ? 'طعن في المطابقة الإدارية' : 'Recours sur la conformité administrative' },
-    { value: 'conformite_technique', label: isArabic ? 'طعن في المطابقة التقنية' : 'Recours sur la conformité technique' },
-    { value: 'conformite_financiere', label: isArabic ? 'طعن في المطابقة المالية' : 'Recours sur la conformité financière' },
-    { value: 'procedure', label: isArabic ? 'طعن في الإجراءات' : 'Recours sur la procédure' },
-    { value: 'autre', label: isArabic ? 'أخرى' : 'Autre' },
+    {
+      value: 'GRACIEUX',
+      label: isArabic ? 'تظلم ودي' : 'Recours gracieux',
+      desc: isArabic ? 'موجه للجهة المتعاقدة مباشرة' : 'Adressé directement au service contractant',
+    },
+    {
+      value: 'HIERARCHIQUE',
+      label: isArabic ? 'تظلم هرمي' : 'Recours hiérarchique',
+      desc: isArabic ? 'موجه للسلطة الوصية' : "Adressé à l'autorité de tutelle",
+    },
+    {
+      value: 'CONTENTIEUX',
+      label: isArabic ? 'طعن قضائي' : 'Recours contentieux',
+      desc: isArabic ? 'أمام الجهة القضائية المختصة' : 'Devant la juridiction compétente',
+    },
   ];
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
+
+    if (!effectiveSubmissionId) {
+      newErrors.objet = isArabic ? 'يرجى اختيار طلب' : 'Veuillez sélectionner une soumission';
+    }
 
     if (!formData.typeRecours) {
       newErrors.typeRecours = isArabic ? 'نوع الطعن مطلوب' : 'Type de recours requis';
     }
 
     if (!formData.motif.trim()) {
-      newErrors.motif = isArabic ? 'التفصيل مطلوب' : 'Motif détaillé requis';
+      newErrors.motif = isArabic ? 'الدوافع مطلوبة' : 'Motif requis';
     } else if (formData.motif.length < 50) {
-      newErrors.motif = isArabic ? 'يجب أن يكون التفصيل 50 حرفاً على الأقل' : 'Le motif doit contenir au moins 50 caractères';
+      newErrors.motif = isArabic
+        ? 'يجب أن يكون الدوافع 50 حرفاً على الأقل'
+        : 'Le motif doit contenir au moins 50 caractères';
     }
 
     if (formData.documents.length === 0) {
-      newErrors.documents = isArabic ? 'يجب إرفاق وثيقة واحدة على الأقل' : 'Au moins un document requis';
-    }
-
-    if (!formData.accepterConditions) {
-      newErrors.accepterConditions = isArabic ? 'يجب قبول الشروط' : 'Vous devez accepter les conditions';
+      newErrors.documents = isArabic
+        ? 'يجب إرفاق وثيقة واحدة على الأقل'
+        : 'Au moins un document justificatif requis';
     }
 
     setErrors(newErrors);
@@ -109,124 +136,130 @@ export default function DeposerRecoursPage({
   };
 
   const handleFileChange = (files: FileList | null) => {
-    if (files) {
-      const newFiles = Array.from(files).filter(file => file.type === 'application/pdf');
-      setFormData(prev => ({ ...prev, documents: [...prev.documents, ...newFiles] }));
-      if (errors.documents) {
-        setErrors(prev => ({ ...prev, documents: undefined }));
-      }
-    }
+    if (!files) return;
+    const pdfs = Array.from(files).filter((f) => f.type === 'application/pdf');
+    setFormData((prev) => ({ ...prev, documents: [...prev.documents, ...pdfs] }));
+    if (errors.documents) setErrors((prev) => ({ ...prev, documents: undefined }));
   };
 
   const removeDocument = (index: number) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      documents: prev.documents.filter((_, i) => i !== index)
+      documents: prev.documents.filter((_, i) => i !== index),
     }));
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
-
     try {
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      
-      console.log('Submitting recours:', {
-        submissionId,
-        typeRecours: formData.typeRecours,
+      // 1. Upload documents
+      const uploadedIds: number[] = [];
+      for (const file of formData.documents) {
+        const uploaded = await uploadDocument({
+          file,
+          relatedType: `recours:${effectiveSubmissionId}`,
+          isEncrypted: false,
+        });
+        uploadedIds.push(uploaded.id_document);
+      }
+
+      // 2. Get operator ID from localStorage
+      const operateurId = Number(
+        typeof window !== 'undefined' ? localStorage.getItem('operateur_id') || '1' : '1'
+      );
+
+      // 3. Create recours
+      await createRecours({
+        id_operateur_economique: operateurId,
+        id_soumission: Number(effectiveSubmissionId),
         motif: formData.motif,
-        documents: formData.documents.map(d => d.name),
-        timestamp: new Date().toISOString(),
+        type_recours: formData.typeRecours as 'GRACIEUX' | 'HIERARCHIQUE' | 'CONTENTIEUX',
+        objet: formData.objet,
+        explications: formData.explications || formData.motif,
+        document_ids: uploadedIds,
       });
 
-      // Redirect to recours list
       router.push(`/${lang}/dashboard/operator/recours`);
-      
     } catch (error) {
-      console.error('Recours error:', error);
-      alert(isArabic ? 'حدث خطأ في تقديم الطعن' : 'Erreur lors du dépôt du recours');
+      const msg = error instanceof Error ? error.message : 'Erreur inconnue';
+      alert(isArabic ? `حدث خطأ: ${msg}` : `Erreur lors du dépôt: ${msg}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatMontant = (montant: number) => {
-    return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
+  const formatMontant = (montant: number | string | null) => {
+    if (!montant) return '—';
+    return new Intl.NumberFormat('fr-DZ').format(Number(montant)) + ' DA';
   };
 
   const translations = {
     fr: {
       back: 'Retour',
       title: 'Déposer un recours',
-      subtitle: 'Contester la décision de rejet',
+      subtitle: 'Contester une décision',
+      pickSoumission: 'Sélectionner la soumission concernée',
+      pickSoumissionPlaceholder: '— Choisir une soumission —',
       soumissionInfo: {
-        title: 'Informations sur la soumission',
-        reference: 'Référence',
-        titre: 'Titre',
-        dateSoumission: 'Date de soumission',
+        title: 'Soumission concernée',
+        id: 'Référence',
+        appelOffre: "Appel d'offres",
         montant: 'Montant soumis',
-        motifRefus: 'Motif du refus',
-        dateNotification: 'Date de notification'
+        dateSoumission: 'Date de soumission',
       },
       form: {
         title: 'Détails du recours',
         typeRecours: 'Type de recours',
-        typeRecoursPlaceholder: 'Sélectionnez le type de recours',
-        motif: 'Motif détaillé du recours',
-        motifPlaceholder: 'Expliquez en détail les raisons de votre recours. Soyez précis et fournissez tous les éléments justificatifs nécessaires. (Minimum 50 caractères)',
+        objet: 'Objet du recours',
+        objetPlaceholder: 'Résumé en une phrase de votre recours',
+        motif: 'Motif détaillé',
+        motifPlaceholder:
+          'Expliquez en détail les raisons de votre recours. Citez les faits et les preuves. (Minimum 50 caractères)',
+        explications: 'Explications complémentaires (optionnel)',
+        explicationsPlaceholder: "Tout élément de contexte supplémentaire utile à l'examen du recours.",
         documents: 'Documents justificatifs',
-        documentsHelp: 'Formats acceptés: PDF uniquement. Taille max: 10MB par fichier.',
-        upload: 'Télécharger des documents',
-        conditions: 'Je déclare que:',
-        condition1: 'Les informations fournies sont exactes et complètes',
-        condition2: 'Je respecte le délai légal de recours (15 jours à compter de la notification)',
-        condition3: 'Je suis conscient que ce recours sera examiné par la commission compétente',
-        warning: 'Attention: Le dépôt d\'un recours ne suspend pas automatiquement la procédure d\'attribution du marché.'
+        documentsHelp: 'Format PDF uniquement. Taille max : 10 MB par fichier.',
+        upload: 'Ajouter des documents PDF',
+        warning: "Le dépôt d'un recours ne suspend pas automatiquement la procédure d'attribution.",
       },
       submit: 'Déposer le recours',
       submitting: 'Dépôt en cours...',
-      success: 'Recours déposé avec succès',
-      characters: 'caractères'
+      characters: 'caractères',
     },
     ar: {
       back: 'رجوع',
       title: 'تقديم طعن',
-      subtitle: 'الطعن في قرار الرفض',
+      subtitle: 'الطعن في قرار',
+      pickSoumission: 'اختر الطلب المعني',
+      pickSoumissionPlaceholder: '— اختر طلباً —',
       soumissionInfo: {
-        title: 'معلومات عن الطلب',
-        reference: 'المرجع',
-        titre: 'العنوان',
-        dateSoumission: 'تاريخ التقديم',
+        title: 'الطلب المعني',
+        id: 'المرجع',
+        appelOffre: 'نداء العروض',
         montant: 'المبلغ المقدم',
-        motifRefus: 'سبب الرفض',
-        dateNotification: 'تاريخ الإشعار'
+        dateSoumission: 'تاريخ التقديم',
       },
       form: {
         title: 'تفاصيل الطعن',
         typeRecours: 'نوع الطعن',
-        typeRecoursPlaceholder: 'اختر نوع الطعن',
-        motif: 'تفصيل الطعن',
-        motifPlaceholder: 'اشرح بالتفصيل أسباب طعنك. كن دقيقاً وقدم جميع العناصر المبررة اللازمة. (50 حرفاً على الأقل)',
+        objet: 'موضوع الطعن',
+        objetPlaceholder: 'ملخص طعنك في جملة واحدة',
+        motif: 'دوافع الطعن بالتفصيل',
+        motifPlaceholder: 'اشرح بالتفصيل أسباب طعنك. استشهد بالوقائع والأدلة. (50 حرفاً على الأقل)',
+        explications: 'توضيحات إضافية (اختياري)',
+        explicationsPlaceholder: 'أي سياق إضافي مفيد لدراسة الطعن.',
         documents: 'الوثائق المثبتة',
-        documentsHelp: 'الصيغ المقبولة: PDF فقط. الحجم الأقصى: 10 ميجا بايت لكل ملف.',
-        upload: 'تحميل الوثائق',
-        conditions: 'أصرح بأن:',
-        condition1: 'المعلومات المقدمة دقيقة وكاملة',
-        condition2: 'أحترم المهلة القانونية للطعن (15 يوماً من تاريخ الإشعار)',
-        condition3: 'أدرك أن هذا الطعن ستدرسه اللجنة المختصة',
-        warning: 'تنبيه: تقديم الطعن لا يوقف تلقائياً إجراء إسناد الصفقة.'
+        documentsHelp: 'صيغة PDF فقط. الحجم الأقصى: 10 ميجا بايت لكل ملف.',
+        upload: 'إضافة وثائق PDF',
+        warning: 'تقديم الطعن لا يوقف تلقائياً إجراء إسناد الصفقة.',
       },
       submit: 'تقديم الطعن',
       submitting: 'جاري التقديم...',
-      success: 'تم تقديم الطعن بنجاح',
-      characters: 'حرف'
-    }
+      characters: 'حرف',
+    },
   };
 
   const t = translations[lang as 'fr' | 'ar'] || translations.fr;
@@ -236,11 +269,11 @@ export default function DeposerRecoursPage({
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
-        
-        {/* Back Button */}
+
+        {/* Back */}
         <div className="mb-6">
           <Link
-            href={`/${lang}/dashboard/operator/soumissions/${submissionId}`}
+            href={`/${lang}/dashboard/operator/recours`}
             className="inline-flex items-center gap-2 text-[#418387] hover:text-[#173C3F] font-medium transition-colors"
           >
             <FontAwesomeIcon icon={faArrowLeft} className={isArabic ? 'rotate-180' : ''} />
@@ -250,7 +283,7 @@ export default function DeposerRecoursPage({
 
         {/* Header */}
         <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-4">
             <div className="w-14 h-14 bg-[#306B6F] rounded-xl flex items-center justify-center">
               <FontAwesomeIcon icon={faGavel} className="text-white text-2xl" />
             </div>
@@ -261,68 +294,118 @@ export default function DeposerRecoursPage({
           </div>
         </div>
 
-        {/* Submission Info */}
-        <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
-          <h2 className="text-xl font-bold text-[#0D2527] mb-6 font-cairo">{t.soumissionInfo.title}</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">{t.soumissionInfo.reference}</p>
-              <p className="font-bold text-[#0D2527]">{soumission.appelOffreReference}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">{t.soumissionInfo.dateSoumission}</p>
-              <p className="font-bold text-[#0D2527]">
-                {new Date(soumission.dateSoumission).toLocaleString('fr-DZ')}
-              </p>
-            </div>
-            <div className="md:col-span-2">
-              <p className="text-sm text-gray-600 mb-1">{t.soumissionInfo.titre}</p>
-              <p className="font-bold text-[#0D2527]">{soumission.appelOffreTitre}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">{t.soumissionInfo.montant}</p>
-              <p className="font-bold text-[#173C3F]">{formatMontant(soumission.montantSoumis)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">{t.soumissionInfo.dateNotification}</p>
-              <p className="font-bold text-[#0D2527]">
-                {new Date(soumission.dateNotification).toLocaleString('fr-DZ')}
-              </p>
-            </div>
+        {/* Soumission picker — only shown if no submissionId in URL */}
+        {!submissionIdParam && (
+          <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
+            <label className="block text-sm font-medium text-[#173C3F] mb-2">
+              {t.pickSoumission} <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedSoumissionId}
+              onChange={(e) => setSelectedSoumissionId(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#306B6F] outline-none"
+            >
+              <option value="">{t.pickSoumissionPlaceholder}</option>
+              {soumissions.map((s) => (
+                <option key={s.id_soumission} value={String(s.id_soumission)}>
+                  {s.reference || `#${s.id_soumission}`} — AO #{s.id_appel_offre}
+                  {s.reference_ao ? ` (${s.reference_ao})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
+        )}
 
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
-            <p className="text-sm text-gray-600 mb-2">{t.soumissionInfo.motifRefus}</p>
-            <p className="text-red-800 font-medium">{soumission.motifRefus}</p>
+        {/* Soumission info */}
+        {soumissionError && (
+          <div className="mb-6 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+            {soumissionError}
           </div>
-        </div>
+        )}
+        {soumission && (
+          <div className="bg-white rounded-2xl p-8 mb-6 shadow-sm">
+            <h2 className="text-xl font-bold text-[#0D2527] mb-6 font-cairo">
+              {t.soumissionInfo.title}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">{t.soumissionInfo.id}</p>
+                <p className="font-bold text-[#0D2527]">
+                  {soumission.reference || `#${soumission.id_soumission}`}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">{t.soumissionInfo.appelOffre}</p>
+                <p className="font-bold text-[#0D2527]">
+                  {soumission.reference_ao || `AO #${soumission.id_appel_offre}`}
+                </p>
+              </div>
+              {soumission.titre_ao && (
+                <div className="md:col-span-2">
+                  <p className="text-sm text-gray-600 mb-1">Titre</p>
+                  <p className="font-bold text-[#0D2527]">{soumission.titre_ao}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-sm text-gray-600 mb-1">{t.soumissionInfo.montant}</p>
+                <p className="font-bold text-[#173C3F]">
+                  {formatMontant(soumission.montant_financier)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">{t.soumissionInfo.dateSoumission}</p>
+                <p className="font-bold text-[#0D2527]">
+                  {new Date(soumission.date_soumission).toLocaleString('fr-DZ')}
+                </p>
+              </div>
+            </div>
+            {soumission.conformite_statut && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-sm text-gray-600 mb-1">Statut de conformité</p>
+                <p className="text-red-800 font-medium">{soumission.conformite_statut}</p>
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* Recours Form */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-8 shadow-sm">
           <h2 className="text-xl font-bold text-[#0D2527] mb-6 font-cairo">{t.form.title}</h2>
 
           <div className="space-y-6">
+
             {/* Type de recours */}
             <div>
-              <label className="block text-sm font-medium text-[#173C3F] mb-2">
-                {t.form.typeRecours}
-                <span className="text-red-500 ms-1">*</span>
+              <label className="block text-sm font-medium text-[#173C3F] mb-3">
+                {t.form.typeRecours} <span className="text-red-500">*</span>
               </label>
-              <select
-                value={formData.typeRecours}
-                onChange={(e) => setFormData(prev => ({ ...prev, typeRecours: e.target.value }))}
-                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-[#306B6F] outline-none ${
-                  errors.typeRecours ? 'border-red-400' : 'border-gray-200'
-                }`}
-              >
-                <option value="">{t.form.typeRecoursPlaceholder}</option>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {typeRecoursOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
+                  <label
+                    key={option.value}
+                    className={`flex flex-col gap-1 p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                      formData.typeRecours === option.value
+                        ? 'border-[#306B6F] bg-[#EEF8F8]'
+                        : 'border-gray-200 hover:border-[#9BCFCF]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="typeRecours"
+                      value={option.value}
+                      checked={formData.typeRecours === option.value}
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, typeRecours: e.target.value }));
+                        if (errors.typeRecours)
+                          setErrors((prev) => ({ ...prev, typeRecours: undefined }));
+                      }}
+                      className="sr-only"
+                    />
+                    <span className="font-bold text-[#0D2527] text-sm">{option.label}</span>
+                    <span className="text-xs text-gray-500">{option.desc}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
               {errors.typeRecours && (
                 <p className="text-red-600 text-sm mt-2 flex items-center gap-2">
                   <FontAwesomeIcon icon={faExclamationTriangle} />
@@ -331,15 +414,31 @@ export default function DeposerRecoursPage({
               )}
             </div>
 
-            {/* Motif détaillé */}
+            {/* Objet */}
             <div>
               <label className="block text-sm font-medium text-[#173C3F] mb-2">
-                {t.form.motif}
-                <span className="text-red-500 ms-1">*</span>
+                {t.form.objet}
+              </label>
+              <input
+                type="text"
+                value={formData.objet}
+                onChange={(e) => setFormData((prev) => ({ ...prev, objet: e.target.value }))}
+                placeholder={t.form.objetPlaceholder}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#306B6F] outline-none"
+              />
+            </div>
+
+            {/* Motif */}
+            <div>
+              <label className="block text-sm font-medium text-[#173C3F] mb-2">
+                {t.form.motif} <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={formData.motif}
-                onChange={(e) => setFormData(prev => ({ ...prev, motif: e.target.value }))}
+                onChange={(e) => {
+                  setFormData((prev) => ({ ...prev, motif: e.target.value }));
+                  if (errors.motif) setErrors((prev) => ({ ...prev, motif: undefined }));
+                }}
                 placeholder={t.form.motifPlaceholder}
                 rows={8}
                 className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-[#306B6F] outline-none resize-none ${
@@ -361,14 +460,28 @@ export default function DeposerRecoursPage({
               </div>
             </div>
 
-            {/* Documents justificatifs */}
+            {/* Explications */}
             <div>
               <label className="block text-sm font-medium text-[#173C3F] mb-2">
-                {t.form.documents}
-                <span className="text-red-500 ms-1">*</span>
+                {t.form.explications}
+              </label>
+              <textarea
+                value={formData.explications}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, explications: e.target.value }))
+                }
+                placeholder={t.form.explicationsPlaceholder}
+                rows={4}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#306B6F] outline-none resize-none"
+              />
+            </div>
+
+            {/* Documents */}
+            <div>
+              <label className="block text-sm font-medium text-[#173C3F] mb-2">
+                {t.form.documents} <span className="text-red-500">*</span>
               </label>
               <p className="text-sm text-gray-600 mb-3">{t.form.documentsHelp}</p>
-              
               <div className="border-2 border-dashed border-[#9BCFCF] rounded-xl p-8 text-center hover:border-[#306B6F] transition-colors bg-[#FCFFFF]">
                 <input
                   type="file"
@@ -383,11 +496,13 @@ export default function DeposerRecoursPage({
                   <p className="font-bold text-[#0D2527] mb-2">{t.form.upload}</p>
                 </label>
               </div>
-
               {formData.documents.length > 0 && (
                 <div className="mt-4 space-y-2">
                   {formData.documents.map((doc, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
+                    >
                       <div className="flex items-center gap-3">
                         <FontAwesomeIcon icon={faFilePdf} className="text-red-500 text-xl" />
                         <div>
@@ -416,43 +531,16 @@ export default function DeposerRecoursPage({
               )}
             </div>
 
-            {/* Conditions */}
-            <div className="border-t border-gray-200 pt-6">
-              <p className="font-bold text-[#0D2527] mb-4">{t.form.conditions}</p>
-              
-              {[
-                t.form.condition1,
-                t.form.condition2,
-                t.form.condition3
-              ].map((condition, index) => (
-                <label key={index} className="flex items-start gap-3 p-4 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors mb-3">
-                  <input
-                    type="checkbox"
-                    checked={formData.accepterConditions}
-                    onChange={(e) => setFormData(prev => ({ ...prev, accepterConditions: e.target.checked }))}
-                    className="mt-1 w-5 h-5 text-[#306B6F] border-gray-300 rounded focus:ring-[#306B6F]"
-                  />
-                  <span className="text-gray-700">{condition}</span>
-                </label>
-              ))}
-              {errors.accepterConditions && (
-                <p className="text-red-600 text-sm mt-2 flex items-center gap-2">
-                  <FontAwesomeIcon icon={faExclamationTriangle} />
-                  {errors.accepterConditions}
-                </p>
-              )}
-            </div>
-
             {/* Warning */}
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
               <div className="flex items-start gap-3">
-                <FontAwesomeIcon icon={faInfoCircle} className="text-yellow-600 mt-1" />
-                <p className="text-yellow-800 text-sm font-medium">{t.form.warning}</p>
+                <FontAwesomeIcon icon={faInfoCircle} className="text-yellow-600 mt-1 flex-shrink-0" />
+                <p className="text-yellow-800 text-sm">{t.form.warning}</p>
               </div>
             </div>
 
-            {/* Submit Button */}
-            <div className="flex justify-end pt-6">
+            {/* Submit */}
+            <div className="flex justify-end pt-2">
               <button
                 type="submit"
                 disabled={loading}

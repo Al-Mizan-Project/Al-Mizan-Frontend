@@ -444,11 +444,11 @@ export default function OperatorDashboardPage({ params }: PageProps) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {membres.slice(0, 3).map(m => (
+               {membres.slice(0, 3).filter(m => m.prenom && m.nom).map(m => (
                     <div key={m.id_membre} className="flex items-center gap-3 py-1.5">
                       <div className="w-8 h-8 bg-[#EEF7F7] rounded-full flex items-center justify-center flex-shrink-0">
                         <span className="text-xs font-bold text-[#306B6F]">
-                          {m.prenom[0]}{m.nom[0]}
+                         {m.prenom?.[0]?.toUpperCase()}{m.nom?.[0]?.toUpperCase()}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">

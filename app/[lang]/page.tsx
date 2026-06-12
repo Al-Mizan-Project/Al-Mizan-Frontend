@@ -135,48 +135,18 @@ export default async function Page({
                   {space.desc}
                 </p>
 
-                <a
-                  href={space.url}
+                <p
                   className="mt-auto w-full text-center text-xs font-semibold text-white bg-[#005c6e] hover:bg-[#004a59] px-4 py-2 rounded transition-colors duration-200"
                 >
                   Déclarer {space.title}
-                </a>
+                </p>
               </div>
             ))}
           </div>
         
       </div>
     </section>
-    <section className="z-10 py-16 bg-white px-6 md:px-12">
-      <div className="max-w-7xl mx-auto">
-        
-        {/* En-tête de section classique */}
-        <div className="mb-12 border-b-2 border-gray-100 pb-6 flex justify-between items-end">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 uppercase tracking-tight">
-              {lang === 'ar' ? 'آخر المنشورات' : 'Dernières Publications'}
-            </h2>
-            <p className="text-gray-500 text-sm mt-1 italic">
-              {lang === 'ar' ? 'تابعوا أحدث إعلانات الصفقات العمomية' : 'Consultez les derniers avis de marchés publics parus.'}
-            </p>
-          </div>
-          <button className="hidden md:block text-[#005c6e] font-bold text-sm border-2 border-[#005c6e] px-4 py-2 hover:bg-[#005c6e] hover:text-white transition-colors">
-            <Link href={`/${lang}/appel`}>{lang === 'ar' ? 'عرض الكل' : 'Voir tout'}</Link>
-          </button>
-        </div>
-
-        {/* Grille de cartes réutilisables */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {publications.map((pub, idx) => (
-            <PublicationCard 
-              key={idx}
-              {...pub}
-              lang={lang}
-            />
-          ))}
-        </div>
-      </div>
-    </section>
+   
     <div className="fixed inset-0 w-full h-full -z-20 overflow-hidden pointer-events-none">
         <img 
           src="/footer.png" 
