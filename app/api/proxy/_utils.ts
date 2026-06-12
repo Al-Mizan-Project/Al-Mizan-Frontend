@@ -37,8 +37,8 @@ async function buildRequestInit(req: NextRequest, method: string, includeInterna
   const contentType = req.headers.get('content-type');
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    Origin: 'http://localhost:8002',
-    Referer: 'http://localhost:8002/',
+    Origin: 'http://localhost:8080',
+    Referer: 'http://localhost:8080/',
   };
 
   if (contentType) {
