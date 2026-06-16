@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const locales = ['fr', 'ar']
+let locales = ['fr', 'ar']
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -11,7 +11,7 @@ export function middleware(request: NextRequest) {
 
   if (pathnameHasLocale) return
 
-  const locale = 'fr' // Default language
+  const locale = 'ar' // Langue par défaut
   request.nextUrl.pathname = `/${locale}${pathname}`
   return NextResponse.redirect(request.nextUrl)
 }
