@@ -122,6 +122,23 @@ export default function AppelsOffresPage({
     return `${days}j ${hours}h ${minutes}min`;
   };
 
+  // Normalize raw backend value to a display label + color
+  const getProcedureConfig = (type: string) => {
+    const normalized = (type || '').toUpperCase().replace(/[-_\s]/g, '_');
+
+    if (normalized.includes('RESTREINT')) {
+      return { label: isArabic ? 'مقيد' : 'Restreint', color: 'bg-purple-100 text-purple-700' };
+    }
+    if (normalized.includes('GRE') || normalized.includes('GRÉ')) {
+      return { label: isArabic ? 'تراضي' : 'Gré à gré', color: 'bg-orange-100 text-orange-700' };
+    }
+    if (normalized.includes('OUVERT')) {
+      return { label: isArabic ? 'مفتوح' : 'Ouvert', color: 'bg-blue-100 text-blue-700' };
+    }
+    // Fallback: display raw value as-is
+    return { label: type || '—', color: 'bg-gray-100 text-gray-600' };
+  };
+
   const translations = {
     fr: {
       title: 'Appels d\'offres publiés',
@@ -306,100 +323,102 @@ export default function AppelsOffresPage({
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {filteredOffres.map((offre) => (
-            <div key={offre.id} className="bg-white rounded-xl border-2 border-gray-200 hover:border-[#306B6F] transition-all shadow-sm hover:shadow-lg">
-              {/* Card Header */}
-              <div className="p-6 border-b border-gray-100">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <p className="text-sm text-[#418387] font-medium mb-1">{offre.reference}</p>
-                    <h3 className="text-xl font-bold text-[#0D2527] mb-2 line-clamp-2">{offre.titre}</h3>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    offre.statut === 'ouverte' 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-red-100 text-red-700'
-                  }`}>
-                    {offre.statut === 'ouverte' ? 'Ouverte' : 'Fermée'}
-                  </span>
-                </div>
-                <p className="text-gray-600 text-sm line-clamp-2">{offre.description}</p>
-              </div>
-
-              {/* Card Body */}
-              <div className="p-6 space-y-4">
-                {/* Montant */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#FCFFFF] rounded-lg flex items-center justify-center flex-shrink-0">
-                    <FontAwesomeIcon icon={faMoneyBillWave} className="text-[#306B6F]" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">{t.montant}</p>
-                    <p className="font-bold text-[#173C3F]">{formatMontant(offre.montantEstime)}</p>
-                  </div>
-                </div>
-
-                {/* Service Contractant */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#FCFFFF] rounded-lg flex items-center justify-center flex-shrink-0">
-                    <FontAwesomeIcon icon={faMapMarkerAlt} className="text-[#306B6F]" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">{t.serviceContractant}</p>
-                    <p className="font-medium text-[#173C3F]">{offre.serviceContractant} - {offre.wilaya}</p>
-                  </div>
-                </div>
-
-                {/* Dates */}
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <FontAwesomeIcon icon={faCalendar} className="text-[#418387] text-sm" />
-                      <p className="text-xs text-gray-500">{t.dateLimite}</p>
+          {filteredOffres.map((offre) => {
+            const procedureConfig = getProcedureConfig(offre.typeProcedure);
+            return (
+              <div key={offre.id} className="bg-white rounded-xl border-2 border-gray-200 hover:border-[#306B6F] transition-all shadow-sm hover:shadow-lg">
+                {/* Card Header */}
+                <div className="p-6 border-b border-gray-100">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="text-sm text-[#418387] font-medium mb-1">{offre.reference}</p>
+                      <h3 className="text-xl font-bold text-[#0D2527] mb-2 line-clamp-2">{offre.titre}</h3>
                     </div>
-                    <p className="text-sm font-medium text-[#0D2527]">
-                      {new Date(offre.dateLimiteSoumission).toLocaleDateString('fr-DZ')}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <FontAwesomeIcon icon={faClock} className="text-[#418387] text-sm" />
-                      <p className="text-xs text-gray-500">{t.tempsRestant}</p>
+                    {/* Procedure type badge */}
+                    <div className="flex-shrink-0 ms-3">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${procedureConfig.color}`}>
+                        {procedureConfig.label}
+                      </span>
                     </div>
-                    <p className={`text-sm font-bold ${
-                      getTimeRemaining(offre.dateLimiteSoumission) === 'Expiré' 
-                        ? 'text-red-600' 
-                        : 'text-green-600'
-                    }`}>
-                      {getTimeRemaining(offre.dateLimiteSoumission)}
-                    </p>
+                  </div>
+                  <p className="text-gray-600 text-sm line-clamp-2">{offre.description}</p>
+                </div>
+
+                {/* Card Body */}
+                <div className="p-6 space-y-4">
+                  {/* Montant */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#FCFFFF] rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FontAwesomeIcon icon={faMoneyBillWave} className="text-[#306B6F]" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">{t.montant}</p>
+                      <p className="font-bold text-[#173C3F]">{formatMontant(offre.montantEstime)}</p>
+                    </div>
+                  </div>
+
+                  {/* Service Contractant */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#FCFFFF] rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FontAwesomeIcon icon={faMapMarkerAlt} className="text-[#306B6F]" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">{t.serviceContractant}</p>
+                      <p className="font-medium text-[#173C3F]">{offre.serviceContractant} - {offre.wilaya}</p>
+                    </div>
+                  </div>
+
+                  {/* Dates */}
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <FontAwesomeIcon icon={faCalendar} className="text-[#418387] text-sm" />
+                        <p className="text-xs text-gray-500">{t.dateLimite}</p>
+                      </div>
+                      <p className="text-sm font-medium text-[#0D2527]">
+                        {new Date(offre.dateLimiteSoumission).toLocaleDateString('fr-DZ')}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <FontAwesomeIcon icon={faClock} className="text-[#418387] text-sm" />
+                        <p className="text-xs text-gray-500">{t.tempsRestant}</p>
+                      </div>
+                      <p className={`text-sm font-bold ${
+                        getTimeRemaining(offre.dateLimiteSoumission) === 'Expiré' 
+                          ? 'text-red-600' 
+                          : 'text-green-600'
+                      }`}>
+                        {getTimeRemaining(offre.dateLimiteSoumission)}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Card Footer - Actions */}
-              <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-xl flex gap-3">
-                <Link
-                  href={`/${lang}/dashboard/operator/appels-offres/${offre.id}`}
-                  className="flex-1 px-4 py-2.5 border-2 border-[#306B6F] text-[#306B6F] rounded-xl font-bold hover:bg-[#FCFFFF] transition-colors flex items-center justify-center gap-2"
-                >
-                  <FontAwesomeIcon icon={faEye} />
-                  {t.details}
-                </Link>
-                
-                {offre.statut === 'ouverte' && (
+                {/* Card Footer - Actions */}
+                <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-xl flex gap-3">
                   <Link
-                    href={`/${lang}/dashboard/operator/appels-offres/${offre.id}/soumettre`}
-                    className="flex-1 px-4 py-2.5 bg-[#306B6F] text-white rounded-xl font-bold hover:bg-[#173C3F] transition-colors flex items-center justify-center gap-2"
+                    href={`/${lang}/dashboard/operator/appels-offres/${offre.id}`}
+                    className="flex-1 px-4 py-2.5 border-2 border-[#306B6F] text-[#306B6F] rounded-xl font-bold hover:bg-[#FCFFFF] transition-colors flex items-center justify-center gap-2"
                   >
-                    <FontAwesomeIcon icon={faFileSignature} />
-                    {t.postuler}
+                    <FontAwesomeIcon icon={faEye} />
+                    {t.details}
                   </Link>
-                )}
+                  
+                  {offre.statut === 'ouverte' && (
+                    <Link
+                      href={`/${lang}/dashboard/operator/appels-offres/${offre.id}/soumettre`}
+                      className="flex-1 px-4 py-2.5 bg-[#306B6F] text-white rounded-xl font-bold hover:bg-[#173C3F] transition-colors flex items-center justify-center gap-2"
+                    >
+                      <FontAwesomeIcon icon={faFileSignature} />
+                      {t.postuler}
+                    </Link>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

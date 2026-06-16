@@ -1,24 +1,32 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8080';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 });
 
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const t = localStorage.getItem('access_token');
+    if (t) config.headers.Authorization = `Bearer ${t}`;
+  }
+  return config;
+});
 // ─── Auth Interceptor (called from AuthContext) ───────────────────────────────
 
-export function setupAuthInterceptor(token: string | null) {
+export function setupAuthInterceptor(_token: string | null){
   api.interceptors.request.clear();
 
-  api.interceptors.request.use((config) => {
-    const t = token ?? localStorage.getItem('access_token');
-    if (t) {
-      config.headers.Authorization = `Bearer ${t}`;
-    }
-    return config;
-  });
+  // Replace the existing request interceptor setup with this permanent one
+api.interceptors.request.use((config) => {
+  const t = localStorage.getItem('access_token');
+  if (t) {
+    config.headers.Authorization = `Bearer ${t}`;
+  }
+  return config;
+});
 }
 
 // ─── Response interceptor – refresh token on 401 ─────────────────────────────
@@ -204,4 +212,150 @@ export const fetchAppelsOffres = async (): Promise<AppelOffres[]> => {
 export const fetchSoumissions = async () => {
   const { data } = await api.get('/soumissions');
   return data;
+};
+
+// ─── Evaluation Session ────────────────────────────────────────────────────────
+
+export const evaluationAPI = {
+  getState: async (commissionId: string) => {
+    const { data } = await api.get(`/commissions/${commissionId}/state/`);
+    return data;
+  },
+  creerPV: async (commissionId: string, type_pv: 'ouverture' | 'evaluation') => {
+  const { data } = await api.post(`/commissions/${commissionId}/pv/${type_pv}/`);
+  return data;
+},
+
+  confirmerIntegrite: async (commissionId: string, confirmed_by: number) => {
+    const { data } = await api.post(`/commissions/${commissionId}/registre/confirmer-integrite/`, { confirmed_by });
+    return data;
+  },
+
+  demarrerSeance: async (commissionId: string, date_ouverture_plis?: string) => {
+    const { data } = await api.post(`/commissions/${commissionId}/seance/demarrer/`, { date_ouverture_plis });
+    return data;
+  },
+
+  cloturerSeance: async (commissionId: string) => {
+    const { data } = await api.post(`/commissions/${commissionId}/seance/cloturer/`);
+    return data;
+  },
+
+  ouvrirPli: async (commissionId: string, id_soumission: number, montant_declare?: number) => {
+    const { data } = await api.post(`/commissions/${commissionId}/seance/ouvrir-pli/`, { id_soumission, montant_declare });
+    return data;
+  },
+
+  parapherPli: async (commissionId: string, id_soumission: number, id_utilisateur: number) => {
+    const { data } = await api.post(`/commissions/${commissionId}/seance/plis/${id_soumission}/parapher/`, { id_utilisateur });
+    return data;
+  },
+
+ updateConformite: async (commissionId: string, id_soumission: number, payload: Record<string, boolean | null | string>) => {
+  const { data } = await api.post(`/commissions/${commissionId}/conformite/`, { id_soumission, ...payload });
+  return data;
+},
+
+updateCapacites: async (commissionId: string, id_soumission: number, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/commissions/${commissionId}/capacites/`, { id_soumission, ...payload });
+  return data;
+},
+
+updateEvalTechnique: async (commissionId: string, id_soumission: number, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/commissions/${commissionId}/eval-technique/`, { id_soumission, ...payload });
+  return data;
+},
+
+lockTechniqueOffer: async (commissionId: string, id_soumission: number, score_total?: number, threshold?: number) => {
+  const { data } = await api.post(`/commissions/${commissionId}/eval-technique/lock/`, { id_soumission, score_total, threshold: threshold ?? 70 });
+  return data;
+},
+updateEvalFinanciere: async (commissionId: string, id_soumission: number, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/commissions/${commissionId}/eval-financiere/`, { id_soumission, ...payload });
+  return data;
+},
+
+lockFinanciereOffer: async (commissionId: string, id_soumission: number) => {
+  console.log('lockFinanciere', commissionId, id_soumission);
+  const { data } = await api.post(`/commissions/${commissionId}/eval-financiere/lock/`, { id_soumission });
+  return data;
+},
+
+calculerClassement: async (commissionId: string) => {
+  const { data } = await api.post(`/commissions/${commissionId}/classement/calculer/`, {
+    methodology: 'weighted',
+    poids_technique: 60,
+    poids_financier: 40,
+  });
+  return data;
+},
+
+  ecarterProvisional: async (commissionId: string, id_soumission: number, motif: string) => {
+  const { data } = await api.post(`/commissions/${commissionId}/classement/ecarter-provisional/`, {
+    id_soumission,
+    motif,
+  });
+  return data;
+},
+
+  signerPV: async (commissionId: string, type_pv: 'ouverture' | 'evaluation', id_utilisateur: number, reserve?: string) => {
+    const { data } = await api.post(`/commissions/${commissionId}/pv/${type_pv}/signer/`, { id_utilisateur, reserve: reserve ?? '' });
+    return data;
+  },
+
+  verrouillerPV: async (commissionId: string, type_pv: 'ouverture' | 'evaluation') => {
+    const { data } = await api.post(`/commissions/${commissionId}/pv/${type_pv}/verrouiller/`);
+    return data;
+  },
+
+  soumettreAuSC: async (commissionId: string) => {
+    const { data } = await api.post(`/commissions/${commissionId}/soumettre-sc/`);
+    return data;
+  },
+
+  submitCTReport: async (commissionId: string, payload: {
+    methodologie: string;
+    equipe: string;
+    materiels: string;
+    anomalies: string;
+    avis_global: 'favorable' | 'reserve' | 'defavorable';
+  }) => {
+    const { data } = await api.post(`/commissions/${commissionId}/rapport-technique/`, payload);
+    return data;
+  },
+};
+
+export const soumissionsAPI = {
+  getByCommission: async (commissionId: number) => {
+    const { data } = await api.get(`/api/soumissions/by-commission/${commissionId}/`);
+    return data;
+  },
+};
+export const commissionAPI = {
+  getByMembre: async (id_utilisateur: number) => {
+    const { data } = await api.get(`/commissions/`, {
+      params: { membre: id_utilisateur }
+    });
+    return data as {
+      id_comission: number;
+      nom_comission: string;
+      categorie: string;
+      role_label: string;
+    };
+  },
+};
+// CT API
+export const ctAPI = {
+  getCommission: async (id_utilisateur: number) => {
+    const { data } = await api.get(`/ct/commission/?utilisateur=${id_utilisateur}`);
+    return data;
+  },
+  getRapport: async (commissionId: number) => {
+    const { data } = await api.get(`/commissions/${commissionId}/rapport-ct/`);
+    return data;
+  },
+  saveRapport: async (commissionId: number, payload: Record<string, unknown>) => {
+    const { data } = await api.post(`/commissions/${commissionId}/rapport-ct/`, payload);
+    return data;
+  },
 };

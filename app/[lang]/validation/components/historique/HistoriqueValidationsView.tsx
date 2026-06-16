@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import DossiersFilters from '../../components/ToutLesDossiers/DossierFilters';
 import FilesTable from '../dashboard/FilesTable';
 import { fileRecord } from '@/app/[lang]/validation/types';
+import { useCommissionUserAttributions } from '../../dashboard/commission/useCommissionAttributions';
 
 interface HistoriqueValidationsViewProps {
   lang: string;
@@ -11,117 +12,32 @@ interface HistoriqueValidationsViewProps {
 }
 
 export default function HistoriqueValidationsView({ lang, dict }: HistoriqueValidationsViewProps) {
-  const [hasResults, setHasResults] = useState<boolean>(true);
   const [filters, setFilters] = useState<any>({});
+  const { appels, isLoading, error, refresh } = useCommissionUserAttributions();
 
-  // Données de démonstration pour l'historique
-  const MOCK_DATA: fileRecord[] = [
-    {
-      id: 'REF-001',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-001', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation Administrative',
-    },
-    {
-      id: 'REF-002',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-002', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation des Offres',
-    },
-    {
-      id: 'REF-003',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-003', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation Administrative',
-    },
-    {
-      id: 'REF-004',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-004', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation des Offres',
-    },
-    {
-      id: 'REF-005',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-005', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation Administrative',
-    },
-    {
-      id: 'REF-006',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-006', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation des Offres',
-    },
-    {
-      id: 'REF-007',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-007', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation Administrative',
-    },
-    {
-      id: 'REF-008',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-008', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation des Offres',
-    },
-    {
-      id: 'REF-009',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-009', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation Administrative',
-    },
-    {
-      id: 'REF-010',
-      reference: 'Référence Dossier ID',
-      validator: { id: 'V-010', name: 'Nom Prénom' },
-      economicOperator: 'Opérateur',
-      assignmentDate: '2026-02-01',
-      validationDeadline: '2026-02-31',
-      status: 'Soumis',
-      etape: 'Evaluation des Offres',
-    },
-  ];
+  // Keep only 'Prêt' status
+  const pretAppels = useMemo(() => {
+    return appels.filter(appel => appel.status === 'Prêt');
+  }, [appels]);
+
+  const filteredData = useMemo(() => {
+    return pretAppels.filter((item) => {
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const refMatch = item.reference?.toLowerCase().includes(searchLower);
+        const opMatch = item.economicOperator?.toLowerCase().includes(searchLower);
+        if (!refMatch && !opMatch) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [pretAppels, filters]);
+
+  const hasResults = filteredData.length > 0;
 
   const handleFiltersChange = (newFilters: any) => {
     setFilters(newFilters);
-    const hasText = !newFilters.search || newFilters.search.length > 0;
-    setHasResults(hasText);
   };
 
   const handleExport = () => {
@@ -133,57 +49,65 @@ export default function HistoriqueValidationsView({ lang, dict }: HistoriqueVali
     // TODO: Navigation vers les détails du dossier
   };
 
-  const filteredData = useMemo(() => {
-    if (!hasResults) return [];
-    return MOCK_DATA.filter((item) => {
-      if (filters.search && !item.reference.toLowerCase().includes(filters.search.toLowerCase())) {
-        return false;
-      }
-      return true;
-    });
-  }, [hasResults, filters]);
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <div className="text-red-500 mb-2">
+          <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-medium text-gray-900">Erreur lors du chargement</h3>
+        <p className="text-sm text-gray-500">{error}</p>
+        <button onClick={refresh} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+          Réessayer
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Filtres */}
       <DossiersFilters
         onFiltersChange={handleFiltersChange}
-        hasResults={hasResults}
+        hasResults={hasResults || isLoading}
         onExport={handleExport}
         showValidatorFilter={false} // Pas de filtre Validateur pour l'historique
         showExportButton={false}    // Pas de bouton Export
+        showStatusFilter={false}    // Pas de filtre de statut
         viewType="dossiers"
       />
 
       {/* Tableau ou état vide */}
-      {hasResults && filteredData.length > 0 ? (
+      {isLoading ? (
+        <div className="p-10 text-center text-gray-500">Chargement de l'historique...</div>
+      ) : hasResults ? (
         <div className="val-table-wrapper">
           <FilesTable
             data={filteredData}
-            status="En Cours" // Status temporaire pour l'affichage
+            status="Prêt" 
             lang={lang}
             dict={dict}
-            onAffecter={handleVoirDossier}
+            onView={handleVoirDossier}
             viewMode="standard"
           />
-           {/* Pagination */}
-      <div className="val-pagination-container">
-        <button className="val-pagination-button" disabled>Previous</button>
-        <div className="flex items-center gap-1">
-          {[1, 2, 3, 4, 5, '...', 11].map((page, idx) => (
-            <button
-              key={idx}
-              className={`val-pagination-button ${page === 2 ? 'val-pagination-button-active' : ''}`}
-              disabled={page === '...'}
-            >
-              {page}
-            </button>
-          ))}
+          {/* Pagination */}
+          <div className="val-pagination-container">
+            <button className="val-pagination-button" disabled>Previous</button>
+            <div className="flex items-center gap-1">
+              {[1].map((page, idx) => (
+                <button
+                  key={idx}
+                  className={`val-pagination-button ${page === 1 ? 'val-pagination-button-active' : ''}`}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+            <button className="val-pagination-button" disabled>Next</button>
+          </div>
         </div>
-        <button className="val-pagination-button">Next</button>
-      </div>
-        </div>
-        
       ) : (
         /* État vide */
         <div className="val-empty-state">
@@ -204,7 +128,6 @@ export default function HistoriqueValidationsView({ lang, dict }: HistoriqueVali
           <button
             onClick={() => {
               setFilters({});
-              setHasResults(true);
             }}
             className="val-reset-button"
           >

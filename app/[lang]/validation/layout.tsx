@@ -1,13 +1,13 @@
 'use client';
 
 import React, { ReactNode } from 'react';
-import { ValidationAuthProvider } from './context/ValidationAuthContext';
+import { AuthProvider } from '../../../contexts/AuthContext';
 import './validation.css';
 
 export default function ValidationRootLayout({ children }: { children: ReactNode }) {
   return (
-    <ValidationAuthProvider>
+    <AuthProvider>
       {children}
-    </ValidationAuthProvider>
+    </AuthProvider>
   );
 }

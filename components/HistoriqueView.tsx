@@ -307,7 +307,7 @@ export default function HistoriqueView() {
               </tbody>
             </table>
           </div>
-          <Pagination current={currentPage} total={totalPages} onChange={setCurrentPage} />
+          
         </div>
       )}
     </div>

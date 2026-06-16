@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { proxyRequest } from '../_utils';
 
-const EVALUATIONS_BASE = process.env.NEXT_PUBLIC_EVALUATIONS_SERVICE_URL || 'http://localhost:8000';
+const EVALUATIONS_BASE = process.env.NEXT_PUBLIC_EVALUATIONS_SERVICE_URL || 'http://localhost:8080';
 
 const options = {
   baseUrl: EVALUATIONS_BASE,

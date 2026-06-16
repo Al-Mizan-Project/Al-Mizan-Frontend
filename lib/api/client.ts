@@ -1,7 +1,7 @@
 import { getApiUrl, createTimeoutController } from '../../apiConfig';
 import type { ServiceName } from '../../apiConfig';
 
-function getAuthToken(): string {
+export function getAuthToken(): string {
   if (typeof window === 'undefined') {
     return process.env.NEXT_PUBLIC_AUTH_TOKEN || '';
   }

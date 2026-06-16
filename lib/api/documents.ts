@@ -1,3 +1,5 @@
+import { getAuthToken } from './client';
+
 export interface DocumentMetadata {
   id_document: number;
   nom: string;
@@ -6,15 +8,24 @@ export interface DocumentMetadata {
   uploaded_at: string;
 }
 
+const getAuthHeaders = (): Record<string, string> => {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export const documentsApi = {
   getDocument: async (id: number): Promise<DocumentMetadata> => {
-    const response = await fetch(`/api/proxy/documents?path=documents/${id}`);
+    const response = await fetch(`/api/proxy/documents?path=documents/${id}`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error(`Failed to fetch document ${id}`);
     return response.json();
   },
 
   getDownloadUrl: async (id: number): Promise<{ download_url: string }> => {
-    const response = await fetch(`/api/proxy/documents?path=documents/${id}/download-url`);
+    const response = await fetch(`/api/proxy/documents?path=documents/${id}/download-url`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error(`Failed to fetch download URL for document ${id}`);
     return response.json();
   },

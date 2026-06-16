@@ -319,7 +319,11 @@ export default function UtilisateursView({ onNavigateToRoles, onNavigateToPermis
             </table>
           </div>
           {totalPages > 1 && (
+<<<<<<< HEAD
             <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={sorted.length} rowsPerPage={ROWS_PER_PAGE} />
+=======
+            
+>>>>>>> origin/YasmineIntegration
           )}
         </>
       )}
