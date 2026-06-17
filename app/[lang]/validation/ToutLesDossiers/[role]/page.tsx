@@ -91,8 +91,8 @@ function mapToFileRecord(attribution: AttributionBackendItem): fileRecord {
     : 0;
 
   const soumissionaireLabel = attribution.soumission && (typeof attribution.soumission === 'object')
-    ? (`Soumissionaire #${(attribution.soumission as any).id_soumissionnaire ?? attribution.soumission_id}`)
-    : (attribution.soumission_id ? `Soumission #${attribution.soumission_id}` : 'Soumissionnaire inconnu');
+    ? (`Soumissionaire ${(attribution.soumission as any).id_soumissionnaire ?? attribution.soumission_id}`)
+    : (attribution.soumission_id ? `Soumission ${attribution.soumission_id}` : 'Soumissionnaire inconnu');
 
   return {
     id: `ID-${attribution.soumission_id ?? 'unknown'}`,
@@ -105,7 +105,7 @@ function mapToFileRecord(attribution: AttributionBackendItem): fileRecord {
     status,
     etape: 'Validation',
     delayDays,
-    validator: attribution.validated_by ? { name: `Membre ${attribution.validated_by}`, id: `#${attribution.validated_by}` } : undefined,
+    validator: attribution.validated_by ? { name: `Membre ${attribution.validated_by}`, id: `${attribution.validated_by}` } : undefined,
   };
 }
 
@@ -115,7 +115,7 @@ function getUserIdFromStorage(): string | null {
   if (rawUser) {
     try {
       const parsed = JSON.parse(rawUser);
-      // Prefer numeric id_utilisateur for backend filtering (validated_by is IntegerField)
+      if (parsed?.id_membre) return String(parsed.id_membre);
       if (parsed?.id_utilisateur) return String(parsed.id_utilisateur);
       if (parsed?.user_id) return String(parsed.user_id);
       if (parsed?.id) return String(parsed.id);
@@ -123,7 +123,7 @@ function getUserIdFromStorage(): string | null {
       // ignore invalid JSON
     }
   }
-  return window.localStorage.getItem('id_utilisateur') || window.localStorage.getItem('user_id');
+  return window.localStorage.getItem('id_membre') || window.localStorage.getItem('id_utilisateur') || window.localStorage.getItem('user_id');
 }
 
 function getUserRoleFromStorage(): string | null {
@@ -189,8 +189,11 @@ export default function DossierPage({ params }: DossierPageProps) {
         setIsLoading(true);
         setError(null);
 
-        const CURRENT_VALIDATOR_ID = user?.id_utilisateur ?? user?.id ?? user?.id_membre ?? getUserIdFromStorage();
-        if (!CURRENT_VALIDATOR_ID) {
+        // Pour CDC on utilise id_utilisateur, mais pour commission/marche on préfère id_membre
+        const cdcValidatorId = user?.id_utilisateur ?? user?.id ?? user?.id_membre ?? getUserIdFromStorage();
+        const marcheUserId = user?.id_membre ?? getUserIdFromStorage();
+        
+        if (!cdcValidatorId && !marcheUserId) {
           throw new Error('Impossible de déterminer l\'identifiant du validateur.');
         }
 
@@ -200,7 +203,7 @@ export default function DossierPage({ params }: DossierPageProps) {
           // ===============================
           // LOGIQUE CDC (Appels d'offres)
           // ===============================
-          const appelsRaw = await appelsApi.getAppelsByValidatedBy(CURRENT_VALIDATOR_ID);
+          const appelsRaw = await appelsApi.getAppelsByValidatedBy(cdcValidatorId!);
           const appels: any[] = Array.isArray(appelsRaw) ? appelsRaw : (appelsRaw as any).results ?? [];
 
           const validatorSubmissions: fileRecord[] = appels.map((appel: any) => {
@@ -210,8 +213,8 @@ export default function DossierPage({ params }: DossierPageProps) {
               reference: appel.reference || `Appel ${appel.id_appel_offres}`,
               economicOperator: appel.wilaya || appel.type_procedure || 'Appel d\'offre',
               validator: {
-                name: `Moi (Expert #${CURRENT_VALIDATOR_ID})`,
-                id: `VAL-${String(appel.validated_by ?? CURRENT_VALIDATOR_ID)}`,
+                name: `Moi (Expert ${cdcValidatorId})`,
+                id: `VAL-${String(appel.validated_by ?? cdcValidatorId)}`,
               },
               submissionDate: appel.created_at ? new Date(appel.created_at).toISOString().split('T')[0] : '-',
               assignmentDate: appel.assignmentDate ? new Date(appel.assignmentDate).toISOString().split('T')[0] : undefined,
@@ -226,37 +229,77 @@ export default function DossierPage({ params }: DossierPageProps) {
           // ===============================
           // LOGIQUE MARCHE (Attributions)
           // ===============================
-          const requestPath = `/api/proxy/contrats/validator-attributions?user_id=${CURRENT_VALIDATOR_ID}`;
-          
-          const response = await fetch(requestPath, {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${effectiveToken.trim()}`,
-            },
-            cache: 'no-store',
-          });
-
-          if (response.status === 401) {
-            throw new Error('401 Unauthorized from upstream service');
-          }
-
-          if (!response.ok) {
-            const body = await response.text();
-            let parsed = body;
-            try {
-              const json = JSON.parse(body);
-              parsed = json.detail || json.error || body;
-            } catch {
-              parsed = body;
+          if (userRole === 'validator') {
+            const response = await fetch(`/api/proxy/contrats/validator-attributions?user_id=${marcheUserId}`, {
+              headers: { Authorization: `Bearer ${effectiveToken.trim()}` },
+              cache: 'no-store',
+            });
+            if (response.status === 401) throw new Error('401 Unauthorized from upstream service');
+            if (!response.ok) {
+              const body = await response.text();
+              throw new Error(body || `Erreur HTTP ${response.status}`);
             }
-            throw new Error(parsed || `Erreur HTTP ${response.status}`);
-          }
+            const data = await response.json();
+            const attributionsRaw = data.attributions || [];
+            const validatorSubmissions: fileRecord[] = attributionsRaw.map((attr: any) => {
+              const soumission = attr.soumission_details || attr.soumission;
+              const soumissionaireId = attr.id_soumissionnaire ?? (soumission && typeof soumission === 'object' ? soumission.id_soumissionnaire : null);
+              const soumissionaireLabel = soumissionaireId
+                ? `Soumissionaire #${soumissionaireId}`
+                : (attr.soumission_id ? `Soumission #${attr.soumission_id}` : 'Soumissionnaire inconnu');
 
-          const data = await response.json();
-          const attributions: AttributionBackendItem[] = Array.isArray(data?.attributions) ? data.attributions : [];
-          
-          const allRecords = attributions.map((item) => mapToFileRecord(item));
-          setAllDossiers(allRecords);
+              return {
+                id: `ID-${String(attr.soumission_id ?? attr.id).padStart(3, '0')}`,
+                rawId: attr.soumission_id ?? attr.id,
+                reference: `Soumission ${attr.soumission_id ?? attr.appel_id ?? 'N/A'}`,
+                economicOperator: soumissionaireLabel,
+                validator: {
+                  name: `Moi (Expert #${marcheUserId})`,
+                  id: `VAL-${String(attr.validated_by ?? marcheUserId)}`,
+                },
+                submissionDate: attr.created_at ? new Date(attr.created_at).toISOString().split('T')[0] : '—',
+                assignmentDate: attr.assignmentDate ? new Date(attr.assignmentDate).toISOString().split('T')[0] : undefined,
+                validationDeadline: attr.validationDeadline ? new Date(attr.validationDeadline).toISOString().split('T')[0] : '—',
+                status: attr.status || 'En Cours',
+                delayDays: attr.delayDays > 0 ? attr.delayDays : 0,
+                etape: 'Validation',
+              };
+            });
+            setAllDossiers(validatorSubmissions);
+          } else {
+            const userRoleParam = user?.nom_role || user?.role || getUserRoleFromStorage() || 'RESP_CM';
+            const requestPath = buildRequestPath(userRoleParam, marcheUserId!, marcheUserId!);
+            
+            const response = await fetch(requestPath, {
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${effectiveToken.trim()}`,
+              },
+              cache: 'no-store',
+            });
+
+            if (response.status === 401) {
+              throw new Error('401 Unauthorized from upstream service');
+            }
+
+            if (!response.ok) {
+              const body = await response.text();
+              let parsed = body;
+              try {
+                const json = JSON.parse(body);
+                parsed = json.detail || json.error || body;
+              } catch {
+                parsed = body;
+              }
+              throw new Error(parsed || `Erreur HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const attributions: AttributionBackendItem[] = Array.isArray(data?.attributions) ? data.attributions : [];
+            
+            const allRecords = attributions.map((item) => mapToFileRecord(item));
+            setAllDossiers(allRecords);
+          }
         }
 
       } catch (err: any) {

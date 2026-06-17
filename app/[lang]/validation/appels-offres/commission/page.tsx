@@ -108,6 +108,33 @@ export default function CommissionAppelsOffresPage(props: PageProps) {
     [appels, currentStatus]
   );
 
+  // Enrich tableData with validation status fetched from the detailed endpoint
+  const [enrichedTableData, setEnrichedTableData] = useState<any[]>([]);
+
+  useMemo(() => {
+    let mounted = true;
+    (async () => {
+      if (!tableData || tableData.length === 0) {
+        setEnrichedTableData([]);
+        return;
+      }
+
+      const results = await Promise.all(tableData.map(async (a: any) => {
+        try {
+          const id = extractNumericId(a) || Number(a.id_appel_offres || a.rawId || a.id);
+          if (!id) return { ...a, statutValidation: a.statut };
+          const details = await appelsApi.getAppelOffre(id);
+          return { ...a, statutValidation: details.statut ?? a.statut };
+        } catch (err) {
+          return { ...a, statutValidation: a.statut };
+        }
+      }));
+
+      if (mounted) setEnrichedTableData(results);
+    })();
+    return () => { mounted = false; };
+  }, [tableData]);
+
   // ── Données graphique retards (calculées depuis la liste réelle) ──────────
   const delayChartData = useMemo(() => {
     const retards = appels.filter(a => a.status === 'En Retard');
@@ -318,7 +345,7 @@ export default function CommissionAppelsOffresPage(props: PageProps) {
           ) : (
             <>
               <FilesTable
-                data={tableData}
+                data={(enrichedTableData.length > 0 ? enrichedTableData : tableData).map((a: any) => ({ ...a, statutValidation: a.statutValidation ?? a.statut }))}
                 status={currentStatus as Exclude<DashboardStatus, 'overview'>}
                 lang={lang}
                 dict={customDict}

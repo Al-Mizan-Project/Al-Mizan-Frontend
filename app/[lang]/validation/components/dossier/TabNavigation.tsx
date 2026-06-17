@@ -7,6 +7,7 @@ interface TabNavigationProps {
   onTabChange: (tab: TabType) => void;
   dict?: any;
   lang?: string;
+  showDecision?: boolean;
 }
 
 const tabs = [
@@ -21,14 +22,15 @@ export default function TabNavigation({
   activeTab, 
   onTabChange, 
   dict,
-  lang 
+  lang,
+  showDecision = true
 }: TabNavigationProps) {
   const isAr = lang === 'ar';
 
   return (
     <div className="val-tabs-container">
       <div className={`flex items-center gap-6 ${isAr ? 'flex-row-reverse' : ''}`}>
-        {tabs.map((tab) => {
+        {tabs.filter(tab => showDecision || tab.id !== 'decision').map((tab) => {
           const isActive = activeTab === tab.id;
           const label = dict?.dossier?.tabs?.[tab.key] || tab.defaultLabel;
           

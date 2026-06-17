@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import { Organisation, OrgType } from '@/lib/types';
+import CreateMemberUserForm from './CreateMemberUserForm';
 
 interface Props {
   orgType: OrgType;
@@ -11,6 +12,9 @@ interface Props {
 }
 
 export default function CreateOrganisationForm({ orgType, onBack, onSuccess }: Props) {
+  const [step, setStep] = useState<'org' | 'responsable'>('org');
+  const [createdOrg, setCreatedOrg] = useState<Organisation | null>(null);
+
   const [base, setBase] = useState({
     nom_officiel: '', adresse_siege: '', email_contact: '', type_entite: '',
   });
@@ -34,7 +38,8 @@ export default function CreateOrganisationForm({ orgType, onBack, onSuccess }: P
         operateur_economique: '/admin/organisations/operateurs/',
       };
       const orgRes = await api.post(endpointMap[orgType], { ...base });
-      onSuccess(orgRes.data);
+      setCreatedOrg(orgRes.data);
+      setStep('responsable');
     } catch {
       setError("Erreur lors de la création.");
     } finally {
@@ -45,6 +50,19 @@ export default function CreateOrganisationForm({ orgType, onBack, onSuccess }: P
   const inputCls = "w-full border rounded-lg p-2 text-sm focus:outline-none focus:border-[#00738C]";
   const labelCls = "block text-xs font-semibold text-gray-500 mb-1";
 
+  // ── Étape 2 : Création du responsable ──────────────────────────────────
+  if (step === 'responsable' && createdOrg) {
+    return (
+      <CreateMemberUserForm
+        organisation={createdOrg}
+        orgType={orgType}
+        onBack={() => onSuccess(createdOrg)} // org already created; "back" just finishes
+        onSuccess={() => onSuccess(createdOrg)}
+      />
+    );
+  }
+
+  // ── Étape 1 : Création de l'organisation ────────────────────────────────
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
       <div className="flex items-center gap-3 mb-8">
@@ -150,7 +168,7 @@ export default function CreateOrganisationForm({ orgType, onBack, onSuccess }: P
 
       <button onClick={handleSubmit} disabled={loading || !base.nom_officiel}
         className="w-full py-2.5 bg-[#00738C] text-white font-bold rounded-lg disabled:opacity-50 hover:bg-[#005f75] transition-colors">
-        {loading ? 'Création...' : 'Créer l\'organisation'}
+        {loading ? 'Création...' : 'Créer l\'organisation et continuer'}
       </button>
     </div>
   );

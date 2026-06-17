@@ -5,6 +5,7 @@ import { fileRecord } from '../../types';
 import { documentsApi, DocumentMetadata } from '@/lib/api/documents';
 import { appelsApi } from '@/lib/api/appels';
 import { useAuth } from '@/contexts/AuthContext';
+import DocumentViewer from '../dossier/DocumentViewer';
 
 type ValidationDecision = 'valide' | 'refuse' | 'ferme';
 
@@ -27,8 +28,6 @@ export default function ValidationCDCModal({ dossier, onClose, onValidated }: Va
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  const [docBlobUrl, setDocBlobUrl] = useState<string | null>(null);
-
   // Fetch document metadata and download URL
   useEffect(() => {
     async function fetchDoc() {
@@ -43,32 +42,13 @@ export default function ValidationCDCModal({ dossier, onClose, onValidated }: Va
         const numericId = typeof docId === 'string' ? parseInt(docId, 10) : docId;
         const [meta, urlData] = await Promise.all([
           documentsApi.getDocument(numericId),
-          documentsApi.getDownloadUrl(numericId),
+          documentsApi.getDownloadUrl(numericId).catch(() => ({ download_url: null, storage_url: null })),
         ]);
         setDocMeta(meta);
-        const downloadUrl = urlData.download_url || urlData.storage_url || null;
-        setDocUrl(downloadUrl);
-
-        // Fetch the file as a Blob to bypass the backend's "attachment" header
-        // This allows the iframe to render the PDF instead of downloading it
-        const isPdfType = meta?.type_document?.toLowerCase() === 'pdf' || meta?.nom?.toLowerCase().endsWith('.pdf');
         
-        if (isPdfType && downloadUrl) {
-          try {
-            const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-            const headers: Record<string, string> = {};
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-
-            const response = await fetch(downloadUrl, { headers });
-            if (response.ok) {
-              const blob = await response.blob();
-              const pdfBlob = new Blob([blob], { type: 'application/pdf' });
-              setDocBlobUrl(URL.createObjectURL(pdfBlob));
-            }
-          } catch (e) {
-            console.warn('Could not fetch blob for preview:', e);
-          }
-        }
+        // Ensure we pass through the proxy to avoid CORS issues from the frontend
+        const downloadUrl = `/api/proxy/documents?path=api/documents/${numericId}/`;
+        setDocUrl(downloadUrl);
       } catch (err: any) {
         console.error('Error fetching CDC document:', err);
         setDocError('Impossible de charger le document CDC.');
@@ -80,16 +60,7 @@ export default function ValidationCDCModal({ dossier, onClose, onValidated }: Va
     fetchDoc();
   }, [dossier.id_doc_cdc]);
 
-  // Clean up object URL on unmount
-  useEffect(() => {
-    return () => {
-      if (docBlobUrl) {
-        URL.revokeObjectURL(docBlobUrl);
-      }
-    };
-  }, [docBlobUrl]);
 
-  // Submit validation decision
   const handleSubmit = useCallback(async () => {
     if (!decision) return;
 
@@ -284,34 +255,13 @@ export default function ValidationCDCModal({ dossier, onClose, onValidated }: Va
                         </p>
                       </div>
                     </div>
-                    {docUrl && (
-                      <a
-                        href={docUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors"
-                        style={{ color: '#306B6F', backgroundColor: '#E2F3F2' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#c8e6e5'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#E2F3F2'; }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="7 10 12 15 17 10" />
-                          <line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        Télécharger
-                      </a>
-                    )}
                   </div>
 
-                  {/* Document preview iframe */}
-                  {isPdf && (docBlobUrl || docUrl) ? (
-                    <iframe
-                      src={docBlobUrl || docUrl || ''}
-                      className="w-full border-0"
-                      style={{ height: '400px' }}
-                      title="Aperçu CDC"
-                    />
+                  {/* Document preview */}
+                  {docUrl ? (
+                    <div className="h-[400px] overflow-hidden">
+                      <DocumentViewer url={docUrl} />
+                    </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 bg-gray-50">
                       <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: '#E2F3F2' }}>
@@ -328,19 +278,6 @@ export default function ValidationCDCModal({ dossier, onClose, onValidated }: Va
                       <p className="text-gray-400 text-sm mb-4">
                         L'aperçu n'est pas disponible pour ce format.
                       </p>
-                      {docUrl && (
-                        <a
-                          href={docUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
-                          style={{ backgroundColor: '#306B6F' }}
-                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#245457'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#306B6F'; }}
-                        >
-                          Ouvrir le document
-                        </a>
-                      )}
                     </div>
                   )}
                 </div>

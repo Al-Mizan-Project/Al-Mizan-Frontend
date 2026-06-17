@@ -103,13 +103,50 @@ export default function DossierPage({ id, role }: DossierPageProps) {
           }
         }
 
+        // Rechercher les documents de décision de validation uploadés par le validateur
+        // Ces documents ne sont pas liés via document_ids mais via related_type + id_operateur
+        if (soum?.id_soumissionnaire) {
+          try {
+            const token = getAuthToken();
+            const authHeaders: Record<string, string> = {};
+            if (token) authHeaders['Authorization'] = `Bearer ${token}`;
+            const decisionDocsRes = await fetch(
+              `/api/proxy/documents?path=api/documents/by-operateur/${soum.id_soumissionnaire}/&related_type=decision_validation`,
+              { headers: authHeaders }
+            );
+            if (decisionDocsRes.ok) {
+              const decisionDocs = await decisionDocsRes.json();
+              // Filtrer ceux qui correspondent à cette soumission (par nom de fichier)
+              const matchingDocs = (Array.isArray(decisionDocs) ? decisionDocs : []).filter(
+                (d: any) => d?.nom?.includes(`soumission_${id}`)
+              );
+              for (const dd of matchingDocs) {
+                const existing = documents.find((doc) => doc.id_document === dd.id_document);
+                if (!existing) {
+                  // Charger le download_url pour ce document
+                  const fullDoc = await loadDocumentWithDownloadUrl(dd.id_document);
+                  if (fullDoc) documents.push(fullDoc);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Recherche documents décision échouée', e);
+          }
+        }
+
+        const sortedDocuments = [...documents].sort((a, b) => {
+          const dateA = a.uploaded_at ? new Date(a.uploaded_at).getTime() : 0;
+          const dateB = b.uploaded_at ? new Date(b.uploaded_at).getTime() : 0;
+          return dateB - dateA; // Sort descending by date so we get the newest first
+        });
+
         const documentsByType: Record<string, any> = {
-          financiere: documents.find((doc) => documentMatchesType(doc, 'financiere')),
-          technique: documents.find((doc) => documentMatchesType(doc, 'technique')),
-          cdc: documents.find((doc) => documentMatchesType(doc, 'cdc')),
-          evaluation_administrative: documents.find((doc) => documentMatchesType(doc, 'evaluation_administrative')),
-          evaluation_offre: documents.find((doc) => documentMatchesType(doc, 'evaluation_offre')),
-          decision_validation: documents.find((doc) => documentMatchesType(doc, 'decision_validation')),
+          financiere: sortedDocuments.find((doc) => documentMatchesType(doc, 'financiere')),
+          technique: sortedDocuments.find((doc) => documentMatchesType(doc, 'technique')),
+          cdc: sortedDocuments.find((doc) => documentMatchesType(doc, 'cdc')),
+          evaluation_administrative: sortedDocuments.find((doc) => documentMatchesType(doc, 'evaluation_administrative')),
+          evaluation_offre: sortedDocuments.find((doc) => documentMatchesType(doc, 'evaluation_offre')),
+          decision_validation: sortedDocuments.find((doc) => documentMatchesType(doc, 'decision_validation')),
         };
 
         let evaluations: any[] = [];
@@ -126,39 +163,56 @@ export default function DossierPage({ id, role }: DossierPageProps) {
         let attributionIdFromAppel = null;
 
         try {
-          // If we can't get it by user_id, let's fetch by soumission_id directly from the provisoirs endpoint
-          const attrRes = await fetch(`/api/proxy/contrats?path=attributions-provisoires/?soumission_id=${id}`);
+          // Fetch from provisoires first
+          const token = getAuthToken();
+          const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+          const attrRes = await fetch(`/api/proxy/contrats?path=attributions-provisoires/?soumission_id=${id}`, {
+            headers: authHeaders
+          });
           if (attrRes.ok) {
             const attributions = await attrRes.json();
             attribution = attributions.find((a: any) => a.soumission_id === Number(id)) || attributions[0] || null;
-            if (attribution) attributionIdFromAppel = attribution.id;
           }
+
+          // Fallback to definitives if not found
+          if (!attribution) {
+            const defRes = await fetch(`/api/proxy/contrats?path=attributions-definitives/?soumission_id=${id}`, {
+              headers: authHeaders
+            });
+            if (defRes.ok) {
+              const defAttributions = await defRes.json();
+              attribution = defAttributions.find((a: any) => a.soumission_id === Number(id)) || defAttributions[0] || null;
+            }
+          }
+
+          if (attribution) attributionIdFromAppel = attribution.id;
         } catch (attrError) {
           console.warn(`Attribution introuvable pour la soumission ${id}`, attrError);
         }
 
+
         try {
-           if (soum?.id_soumissionnaire) {
-              const opRes = await fetch(`/api/proxy/acteurs?path=operateurs-economiques/${soum.id_soumissionnaire}/`);
-              if (opRes.ok) {
-                 const opData = await opRes.json();
-                 operateurNom = opData.nom_officiel || opData.nom;
-              }
-           }
+          if (soum?.id_soumissionnaire) {
+            const opRes = await fetch(`/api/proxy/acteurs?path=operateurs-economiques/${soum.id_soumissionnaire}/`);
+            if (opRes.ok) {
+              const opData = await opRes.json();
+              operateurNom = opData.nom_officiel || opData.nom;
+            }
+          }
         } catch (e) {
-           console.warn(`Operateur introuvable`, e);
+          console.warn(`Operateur introuvable`, e);
         }
 
         try {
-           if (appel?.id_service_contractant) {
-              const scRes = await fetch(`/api/proxy/contractant?path=services-contractants/${appel.id_service_contractant}/`);
-              if (scRes.ok) {
-                 const scData = await scRes.json();
-                 serviceNom = scData.nom_service || scData.nom;
-              }
-           }
+          if (appel?.id_service_contractant) {
+            const scRes = await fetch(`/api/proxy/contractant?path=services-contractants/${appel.id_service_contractant}/`);
+            if (scRes.ok) {
+              const scData = await scRes.json();
+              serviceNom = scData.nom_service || scData.nom;
+            }
+          }
         } catch (e) {
-           console.warn(`Service contractant introuvable`, e);
+          console.warn(`Service contractant introuvable`, e);
         }
 
         if (mounted) {
@@ -206,9 +260,11 @@ export default function DossierPage({ id, role }: DossierPageProps) {
     );
   }
 
+  const isDefinitive = dossierData?.attribution?.statut === 'definitive';
+
   return (
     <div className="space-y-6">
-      <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} showDecision={isDefinitive || role === 'validator'} />
 
       <FileDetails
         activeTab={activeTab}

@@ -76,10 +76,10 @@ function computeAttributionStatus(attribution: AttributionApiItem): 'En Attente'
     return 'En Attente';
   }
 
-  // Use creation date age to decide "En Retard" so older submissions are considered late
-  const createdAt = parseIsoDate(attribution.created_at);
-  if (createdAt) {
-    const ageDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+  // Use assignment date if validated_by is set, otherwise creation date
+  const baseDate = parseIsoDate(attribution.validated_by ? attribution.updated_at : attribution.created_at);
+  if (baseDate) {
+    const ageDays = Math.floor((Date.now() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
     return ageDays > 7 ? 'En Retard' : 'En Cours';
   }
 

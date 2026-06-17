@@ -5,34 +5,38 @@ import { useState, useEffect, useMemo } from 'react';
 import { api } from '@/lib/api';
 import Pagination from '@/components/Pagination';
 
-interface User {
-  id_utilisateur: number;
-  id_role: number | null;
-  id_membre: number | null;
-  email: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-interface Role {
-  id_role: number;
-  nom_role: string;
-}
-interface Permission {
-  id_permission: number;
-  nom_permission: string;
-}
+const ROWS_PER_PAGE = 10;
 
-type Statut = 'Actif' | 'Bloqué';
-const STATUTS: ('Tous' | Statut)[] = ['Tous', 'Actif', 'Bloqué'];
-const ROLE_BADGE: Record<string, string> = {
-  'admin': 'bg-purple-50 text-purple-700 border border-purple-200',
-  'default': 'bg-gray-50 text-gray-700 border border-gray-200',
+const ROLES: ('Tous' | SystemUser['role'])[] = [
+  'Tous', 'Administrateur Système', 'Chef de Commission',
+  'Évaluateur', 'Évaluateur Administratif', 'Service Contractant', 'Opérateur Économique',
+];
+const STATUTS: ('Tous' | SystemUser['statut'])[] = ['Tous', 'Actif', 'En attente', 'Bloqué'];
+
+const ROLE_BADGE: Record<SystemUser['role'], string> = {
+  'Administrateur Système': 'bg-purple-50 text-purple-700 border border-purple-200',
+  'Chef de Commission': 'bg-teal-50 text-teal-700 border border-teal-200',
+  'Évaluateur': 'bg-blue-50 text-blue-700 border border-blue-200',
+  'Évaluateur Administratif': 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+  'Service Contractant': 'bg-amber-50 text-amber-700 border border-amber-200',
+  'Opérateur Économique': 'bg-gray-50 text-gray-700 border border-gray-200',
+};
+
+const STATUT_STYLE: Record<SystemUser['statut'], string> = {
+  'Actif': 'text-emerald-700',
+  'En attente': 'text-amber-600',
+  'Bloqué': 'text-red-600',
 };
 const ROWS_PER_PAGE = 10;
 
-function getStatutFromUser(user: User): Statut {
-  return user.is_active ? 'Actif' : 'Bloqué';
+type SortDir = 'asc' | 'desc' | null;
+
+// ─── Simulated action history per user ───────────────────────────────────────
+function buildHistory(u: SystemUser) {
+  return [
+    { date: u.derniereAction, action: 'Dernière connexion', detail: '' },
+    { date: u.dateInscription, action: 'Compte créé', detail: `Rôle: ${u.role}` },
+  ];
 }
 
 function Dropdown<T extends string>({ label, options, value, onChange }: { label: string; options: T[]; value: T; onChange: (v: T) => void }) {
@@ -40,14 +44,22 @@ function Dropdown<T extends string>({ label, options, value, onChange }: { label
   const isActive = value !== options[0];
   return (
     <div className="relative">
-      <button onClick={() => setOpen(o => !o)} className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-all ${isActive ? 'bg-[#1C4532] text-white border-[#1C4532]' : 'bg-white text-gray-700 border-gray-200 hover:bg-[#F4F7F4]'}`}>
+      <button onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-all ${isActive ? 'bg-[#1C4532] text-white border-[#1C4532]' : 'bg-white text-gray-700 border-gray-200 hover:bg-[#F4F7F4]'
+          }`}>
         {isActive ? value : label}
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
       </button>
       {open && (
         <div className="absolute top-full mt-1 left-0 bg-white border border-gray-200 rounded-xl shadow-lg z-20 min-w-[200px] py-1">
           {options.map(opt => (
-            <button key={opt} onClick={() => { onChange(opt); setOpen(false); }} className={`w-full text-left px-4 py-2 text-sm transition-colors ${value === opt ? 'text-[#1C4532] font-bold bg-[#F4F7F4]' : 'text-gray-600 hover:bg-[#F4F7F4]'}`}>{opt}</button>
+            <button key={opt} onClick={() => { onChange(opt); setOpen(false); }}
+              className={`w-full text-left px-4 py-2 text-sm transition-colors ${value === opt ? 'text-[#1C4532] font-bold bg-[#F4F7F4]' : 'text-gray-600 hover:bg-[#F4F7F4]'
+                }`}>
+              {opt}
+            </button>
           ))}
         </div>
       )}
@@ -73,8 +85,15 @@ function ConfirmModal({ message, onConfirm, onCancel, danger = false }: { messag
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7">
         <p className="text-base font-bold text-gray-800 mb-6 leading-relaxed">{message}</p>
         <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-2.5 border-2 border-gray-200 text-gray-600 font-bold text-sm rounded-xl hover:bg-gray-50 transition-all">Annuler</button>
-          <button onClick={onConfirm} className={`flex-1 py-2.5 text-white font-bold text-sm rounded-xl transition-all ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-[#00738C] hover:bg-[#005f75]'}`}>Confirmer</button>
+          <button onClick={onCancel}
+            className="flex-1 py-2.5 border-2 border-gray-200 text-gray-600 font-bold text-sm rounded-xl hover:bg-gray-50 transition-all">
+            Annuler
+          </button>
+          <button onClick={onConfirm}
+            className={`flex-1 py-2.5 text-white font-bold text-sm rounded-xl transition-all ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-[#00738C] hover:bg-[#005f75]'
+              }`}>
+            Confirmer
+          </button>
         </div>
       </div>
     </div>
@@ -111,11 +130,11 @@ function UserDrawer({ user, roleName, onClose, onAction, onNavigateToRoles, onNa
         <div className="p-6 border-b border-gray-100 space-y-3">
           <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Informations</h4>
           {[
-            ['ID', user.id_utilisateur],
+            ['ID', user.id],
             ['Email', user.email],
-            ['Rôle', roleName],
-            ['Créé le', new Date(user.created_at).toLocaleDateString('fr-FR')],
-            ['Mis à jour', new Date(user.updated_at).toLocaleDateString('fr-FR')],
+            ['Statut', user.statut],
+            ['Date d\'inscription', user.dateInscription],
+            ['Dernière action', user.derniereAction],
           ].map(([k, v]) => (
             <div key={String(k)} className="flex items-center justify-between text-sm">
               <span className="text-gray-500 font-medium">{k}</span>
@@ -156,46 +175,17 @@ function UserDrawer({ user, roleName, onClose, onAction, onNavigateToRoles, onNa
   );
 }
 
-interface Props {
-  onNavigateToRoles?: () => void;
-  onNavigateToPermissions?: () => void;
-}
-
-export default function UtilisateursView({ onNavigateToRoles, onNavigateToPermissions }: Props) {
-  const [users, setUsers] = useState<User[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(true);
+// ─── Main export ──────────────────────────────────────────────────────────────
+export default function UtilisateursView() {
+  const [users, setUsers] = useState<SystemUser[]>(USERS);
   const [search, setSearch] = useState('');
-  const [statutFilter, setStatutFilter] = useState<'Tous' | Statut>('Tous');
+  const [roleFilter, setRoleFilter] = useState<typeof ROLES[number]>('Tous');
+  const [statutFilter, setStatutFilter] = useState<typeof STATUTS[number]>('Tous');
   const [sortBy, setSortBy] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc' | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
   const [page, setPage] = useState(1);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ message: string; action: () => void; danger?: boolean } | null>(null);
-
-  const getRoleName = (id_role: number | null): string => {
-    if (!id_role) return 'Sans rôle';
-    const role = roles.find(r => r.id_role === id_role);
-    return role?.nom_role || `Rôle #${id_role}`;
-  };
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [usersRes, rolesRes] = await Promise.all([
-        api.get('/users'),
-        api.get('/roles'),
-      ]);
-      setUsers(usersRes.data);
-      setRoles(rolesRes.data);
-    } catch (error) {
-      console.error('Failed to fetch data', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchData(); }, []);
 
   const handleSort = (key: string) => {
     if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -204,22 +194,26 @@ export default function UtilisateursView({ onNavigateToRoles, onNavigateToPermis
   };
 
   const filtered = useMemo(() => {
-    let result = users;
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(u => u.email.toLowerCase().includes(q) || u.id_utilisateur.toString().includes(q));
-    }
-    if (statutFilter !== 'Tous') result = result.filter(u => getStatutFromUser(u) === statutFilter);
-    return result;
-  }, [users, search, statutFilter]);
+    const q = search.toLowerCase();
+    return users.filter(u => {
+      const matchSearch = !q
+        || u.nom.toLowerCase().includes(q)
+        || u.prenom.toLowerCase().includes(q)
+        || u.email.toLowerCase().includes(q)
+        || u.id.toLowerCase().includes(q);
+      const matchRole = roleFilter === 'Tous' || u.role === roleFilter;
+      const matchStatut = statutFilter === 'Tous' || u.statut === statutFilter;
+      return matchSearch && matchRole && matchStatut;
+    });
+  }, [users, search, roleFilter, statutFilter]);
 
   const sorted = useMemo(() => {
     if (!sortBy) return filtered;
     return [...filtered].sort((a, b) => {
-      let av = '', bv = '';
-      if (sortBy === 'email') { av = a.email; bv = b.email; }
-      else if (sortBy === 'date') { av = a.created_at; bv = b.created_at; }
-      else if (sortBy === 'role') { av = getRoleName(a.id_role); bv = getRoleName(b.id_role); }
+      const av = sortBy === 'nom' ? `${a.nom} ${a.prenom}` : sortBy === 'email' ? a.email
+        : sortBy === 'role' ? a.role : sortBy === 'date' ? a.dateInscription : a.statut;
+      const bv = sortBy === 'nom' ? `${b.nom} ${b.prenom}` : sortBy === 'email' ? b.email
+        : sortBy === 'role' ? b.role : sortBy === 'date' ? b.dateInscription : b.statut;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
   }, [filtered, sortBy, sortDir, roles]);
@@ -227,33 +221,30 @@ export default function UtilisateursView({ onNavigateToRoles, onNavigateToPermis
   const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE);
   const paged = sorted.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
-  const applyAction = async (id: number, action: 'supprimer' | 'bloquer' | 'debloquer') => {
-    const user = users.find(u => u.id_utilisateur === id)!;
-    if (action === 'supprimer') {
-      setConfirmModal({
-        message: `Supprimer définitivement le compte ${user.email} ? Cette action est irréversible.`,
-        danger: true,
-        action: async () => {
-          await api.delete(`/users/${id}`);
-          await fetchData();
-          setConfirmModal(null);
-          setSelectedUser(null);
-        },
-      });
-    }
-    if (action === 'bloquer' || action === 'debloquer') {
-      const newState = action === 'debloquer';
-      setConfirmModal({
-        message: `${newState ? 'Débloquer' : 'Bloquer'} le compte ${user.email} ?`,
-        danger: !newState,
-        action: async () => {
-          await api.patch(`/users/${id}`, { is_active: newState });
-          await fetchData();
-          setConfirmModal(null);
-          setSelectedUser(null);
-        },
-      });
-    }
+  // ─── Action handlers ────────────────────────────────────────────────────────
+  const applyAction = (id: string, action: 'valider' | 'bloquer' | 'debloquer' | 'supprimer') => {
+    const user = users.find(u => u.id === id)!;
+    const messages: Record<string, string> = {
+      valider: `Valider le compte de ${user.prenom} ${user.nom} ?`,
+      bloquer: `Bloquer le compte de ${user.prenom} ${user.nom} ? L'utilisateur sera notifié.`,
+      debloquer: `Débloquer le compte de ${user.prenom} ${user.nom} ?`,
+      supprimer: `Supprimer définitivement le compte de ${user.prenom} ${user.nom} ? Cette action est irréversible.`,
+    };
+    setConfirmModal({
+      message: messages[action],
+      danger: action === 'supprimer' || action === 'bloquer',
+      action: () => {
+        setUsers(prev => {
+          if (action === 'supprimer') return prev.filter(u => u.id !== id);
+          return prev.map(u => u.id !== id ? u : {
+            ...u,
+            statut: action === 'valider' ? 'Actif' : action === 'bloquer' ? 'Bloqué' : 'Actif',
+          });
+        });
+        setConfirmModal(null);
+        setSelectedUser(null);
+      },
+    });
   };
 
   const resetFilters = () => { setSearch(''); setStatutFilter('Tous'); setPage(1); };
@@ -264,10 +255,16 @@ export default function UtilisateursView({ onNavigateToRoles, onNavigateToPermis
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[240px] max-w-lg">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          <input type="text" placeholder="Rechercher par email, ID…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm bg-white border border-gray-200 focus:border-[#97A675] focus:outline-none transition-all placeholder-gray-400" style={{ color: '#1C4532' }} />
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+          </svg>
+          <input type="text" placeholder="Rechercher par nom, email, ID…"
+            value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm bg-white border border-gray-200 focus:border-[#97A675] focus:outline-none transition-all placeholder-gray-400"
+            style={{ color: '#1C4532' }} />
         </div>
-        <Dropdown label="Statut" options={STATUTS} value={statutFilter} onChange={v => { setStatutFilter(v as any); setPage(1); }} />
+        <Dropdown label="Rôle" options={ROLES} value={roleFilter} onChange={v => { setRoleFilter(v); setPage(1); }} />
+        <Dropdown label="Statut" options={STATUTS} value={statutFilter} onChange={v => { setStatutFilter(v); setPage(1); }} />
       </div>
 
       <p className="text-xs text-gray-500">
@@ -276,7 +273,11 @@ export default function UtilisateursView({ onNavigateToRoles, onNavigateToPermis
 
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-28 gap-4">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="23" y1="11" x2="17" y2="11" />
+          </svg>
           <h3 className="text-2xl font-black text-gray-800">Aucun utilisateur trouvé</h3>
           <button onClick={resetFilters} className="flex items-center gap-2 px-5 py-2.5 border-2 border-[#00738C] text-[#00738C] font-bold text-sm rounded-xl hover:bg-[#D6EAD4] transition-all">Réinitialiser les filtres</button>
         </div>
