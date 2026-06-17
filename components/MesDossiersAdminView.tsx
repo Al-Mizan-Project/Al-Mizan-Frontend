@@ -236,7 +236,7 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
             </table>
           </div>
           {totalPages > 1 && (
-            
+            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={sorted.length} rowsPerPage={ROWS_PER_PAGE} />
           )}
         </>
       )}

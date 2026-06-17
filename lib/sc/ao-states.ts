@@ -42,13 +42,25 @@ export const STATE_META: Record<AOState, Meta> = {
   CLOTURE:                { fr: 'Clôturé',                 ar: 'مُغلق',              tone: 'neutral' },
 };
 
+// The 58 Algerian wilayas, in official order — used for the AO location dropdown.
+export const ALGERIAN_WILAYAS: string[] = [
+  'Adrar', 'Chlef', 'Laghouat', 'Oum El Bouaghi', 'Batna', 'Béjaïa', 'Biskra', 'Béchar',
+  'Blida', 'Bouira', 'Tamanrasset', 'Tébessa', 'Tlemcen', 'Tiaret', 'Tizi Ouzou', 'Alger',
+  'Djelfa', 'Jijel', 'Sétif', 'Saïda', 'Skikda', 'Sidi Bel Abbès', 'Annaba', 'Guelma',
+  'Constantine', 'Médéa', 'Mostaganem', "M'Sila", 'Mascara', 'Ouargla', 'Oran', 'El Bayadh',
+  'Illizi', 'Bordj Bou Arréridj', 'Boumerdès', 'El Tarf', 'Tindouf', 'Tissemsilt', 'El Oued',
+  'Khenchela', 'Souk Ahras', 'Tipaza', 'Mila', 'Aïn Defla', 'Naâma', 'Aïn Témouchent',
+  'Ghardaïa', 'Relizane', 'Timimoun', 'Bordj Badji Mokhtar', 'Ouled Djellal', 'Béni Abbès',
+  'In Salah', 'In Guezzam', 'Touggourt', 'Djanet', "El M'Ghair", 'El Meniaa',
+];
+
 export type AOType = 'publique' | 'restreint' | 'gre_a_gre' | 'consultation';
 
 export const AO_TYPE_META: Record<AOType, { fr: string; ar: string }> = {
   publique:     { fr: "Appel d'offres ouvert",       ar: 'مناقصة مفتوحة' },
   restreint:    { fr: "Appel d'offres restreint",    ar: 'مناقصة محدودة' },
   gre_a_gre:    { fr: 'Gré à gré',                   ar: 'التراضي' },
-  consultation: { fr: 'Consultation',                ar: 'استشارة' },
+  consultation: { fr: 'Achat simple / consultation', ar: 'شراء بسيط / استشارة' },
 };
 
 /** Safe label for any (possibly null/unknown) type_procedure value — never throws. */
@@ -62,6 +74,30 @@ export function aoTypeLabel(type: string | null | undefined, lang: string, fallb
 export const TYPES_SANS_PLANNING: AOType[] = ['gre_a_gre', 'consultation'];
 /** Consultation needs no commission validation. */
 export const TYPES_SANS_VALIDATION: AOType[] = ['consultation'];
+
+// Montant thresholds (Loi 23-12). Below SEUIL_AO → achat simple/consultation only.
+export const SEUIL_AO = 12_000_000;
+
+/** Min/max montant (DA) admissible per AO type. `max: null` = no upper bound. */
+export const AO_TYPE_MONTANT: Record<AOType, { min: number; max: number | null }> = {
+  consultation: { min: 0,        max: SEUIL_AO - 1 }, // < 12M DA
+  publique:     { min: SEUIL_AO, max: null },         // ≥ 12M DA
+  restreint:    { min: SEUIL_AO, max: null },         // ≥ 12M DA
+  gre_a_gre:    { min: SEUIL_AO, max: null },         // ≥ 12M DA (cas légaux)
+};
+
+/** True when `montant` (DA) fits the type's admissible range. */
+export function montantFitsType(type: AOType, montant: number): boolean {
+  const r = AO_TYPE_MONTANT[type];
+  return montant >= r.min && (r.max === null || montant <= r.max);
+}
+
+/** AO types selectable for a given montant (DA). Empty montant → all types. */
+export function typesForMontant(montant: number | null): AOType[] {
+  const all = Object.keys(AO_TYPE_MONTANT) as AOType[];
+  if (montant == null || Number.isNaN(montant) || montant <= 0) return all;
+  return all.filter((t) => montantFitsType(t, montant));
+}
 
 export interface AOLike {
   statut?: string | null;
@@ -110,7 +146,7 @@ export function deriveState(ao: AOLike, now: number = Date.now()): AOState {
 
 export interface AOAction {
   id: 'continuer' | 'supprimer' | 'soumettre' | 'modifier' | 'publier' | 'cloturer_depot'
-    | 'ouvrir_plis' | 'annuler' | 'attribuer' | 'consulter_recours';
+    | 'ouvrir_plis' | 'attribuer' | 'consulter_recours';
   fr: string;
   ar: string;
   permission: Permission;
@@ -125,18 +161,17 @@ const A: Record<AOAction['id'], AOAction> = {
   publier:          { id: 'publier',          fr: "Publier l'appel d'offres",   ar: 'نشر المناقصة',       permission: 'marche:publish', tone: 'primary' },
   cloturer_depot:   { id: 'cloturer_depot',   fr: 'Clôturer le dépôt',          ar: 'إغلاق الإيداع',      permission: 'marche:update' },
   ouvrir_plis:      { id: 'ouvrir_plis',      fr: "Déclencher l'ouverture des plis", ar: 'بدء فتح الأظرفة', permission: 'marche:update' },
-  annuler:          { id: 'annuler',          fr: "Annuler l'appel d'offres",   ar: 'إلغاء المناقصة',     permission: 'marche:update', tone: 'danger' },
   attribuer:        { id: 'attribuer',        fr: "Statuer sur l'attribution",  ar: 'البت في الإسناد',    permission: 'marche:attribuer', tone: 'primary' },
   consulter_recours:{ id: 'consulter_recours',fr: 'Consulter les recours',      ar: 'الاطلاع على الطعون', permission: 'recours:read' },
 };
 
 const STATE_ACTIONS: Record<AOState, AOAction['id'][]> = {
   BROUILLON:              ['continuer', 'soumettre', 'supprimer'],
-  EN_VALIDATION:          ['annuler'],
-  REFUSE:                 ['modifier', 'annuler'],
-  VALIDE:                 ['publier', 'annuler'],
-  PUBLIE:                 ['annuler'],
-  OUVERT:                 ['cloturer_depot', 'annuler'],
+  EN_VALIDATION:          [],
+  REFUSE:                 ['modifier'],
+  VALIDE:                 ['publier'],
+  PUBLIE:                 [],
+  OUVERT:                 ['cloturer_depot'],
   CLOTURE_DEPOT:          ['ouvrir_plis'],
   EN_OUVERTURE:           [],
   EN_EVALUATION:          [],

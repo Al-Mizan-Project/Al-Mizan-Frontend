@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { proxyRequest } from '../_utils';
 
-const CONTRATS_BASE = process.env.NEXT_PUBLIC_CONTRATS_SERVICE_URL || 'http://localhost:8080';
+const CONTRATS_BASE = process.env.NEXT_PUBLIC_CONTRATS_SERVICE_URL || 'http://localhost:8000';
 
 const options = {
   baseUrl: CONTRATS_BASE,

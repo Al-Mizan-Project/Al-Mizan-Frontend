@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 
   // Prefer explicitly passed queries from the frontend over the authDebug fallbacks
   const actualUserId = userIdQuery || memberQuery || authDebug.data?.user_id || authDebug.data?.id_utilisateur || authDebug.data?.id_membre || null;
-  const actualRole = normalizeRole(roleQuery ?? getUserRoleFromAuthDebug(authDebug.data) ?? null);
+  const actualRole = normalizeRole(roleQuery ?? getUserRoleFromAuthDebug(authDebug.data) ?? undefined);
 
   const upstreamParams = new URLSearchParams();
   if (actualUserId) {
