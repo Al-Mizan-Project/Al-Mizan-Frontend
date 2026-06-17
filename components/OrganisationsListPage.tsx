@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Organisation, OrgType, Membre } from '@/lib/types';
 import { api } from '@/lib/api';
 import CreateOrganisationForm from './CreateOrganisationForm';
@@ -13,6 +13,13 @@ interface Props {
   onInitialOrgConsumed?: () => void;
 }
 
+const endpointMap: Record<OrgType, string> = {
+  operateur_economique: '/admin/organisations/operateurs/',
+  tutelle:              '/admin/organisations/tutelle/',
+  service_contractant:  '/admin/organisations/service-contractant/',
+  commission_externe:   '/admin/organisations/commission-externe/',
+};
+
 export default function OrganisationsListPage({ orgType, title, initialOrg, onInitialOrgConsumed }: Props) {
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
   const [membres, setMembres] = useState<Membre[]>([]);
@@ -21,17 +28,17 @@ export default function OrganisationsListPage({ orgType, title, initialOrg, onIn
   const [view, setView] = useState<'list' | 'create' | 'detail'>('list');
   const [selectedOrg, setSelectedOrg] = useState<Organisation | null>(null);
 
-  useEffect(() => {
-    const endpointMap: Record<OrgType, string> = {
-      operateur_economique: '/admin/organisations/operateurs/',
-      tutelle:              '/admin/organisations/tutelle/',
-      service_contractant:  '/admin/organisations/service-contractant/',
-      commission_externe:   '/admin/organisations/commission-externe/',
-    };
+  const fetchOrganisations = useCallback(() => {
+    setLoading(true);
     api.get(endpointMap[orgType])
-.then(({ data }) => setOrganisations(Array.isArray(data) ? data : data.results ?? data.data ?? []))      .catch(() => setError('Erreur lors du chargement des organisations.'))
+      .then(({ data }) => setOrganisations(Array.isArray(data) ? data : data.results ?? data.data ?? []))
+      .catch(() => setError('Erreur lors du chargement des organisations.'))
       .finally(() => setLoading(false));
   }, [orgType]);
+
+  useEffect(() => {
+    fetchOrganisations();
+  }, [fetchOrganisations]);
 
   useEffect(() => {
     if (initialOrg) {
@@ -41,7 +48,6 @@ export default function OrganisationsListPage({ orgType, title, initialOrg, onIn
     }
   }, [initialOrg, onInitialOrgConsumed]);
 
-  // membresForOrg now uses string (UUID) comparison
   const membresForOrg = (orgId: string) => membres.filter(m => m.id_organisation === orgId);
 
   if (loading) return <div className="p-6 text-center text-gray-500">Chargement...</div>;
@@ -52,8 +58,8 @@ export default function OrganisationsListPage({ orgType, title, initialOrg, onIn
       <CreateOrganisationForm
         orgType={orgType}
         onBack={() => setView('list')}
-        onSuccess={(org) => {
-          setOrganisations(prev => [...prev, org]);
+        onSuccess={() => {
+          fetchOrganisations();
           setView('list');
         }}
       />
