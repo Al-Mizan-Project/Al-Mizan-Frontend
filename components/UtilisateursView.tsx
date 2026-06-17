@@ -13,18 +13,18 @@ const ROLES: ('Tous' | SystemUser['role'])[] = [
 const STATUTS: ('Tous' | SystemUser['statut'])[] = ['Tous', 'Actif', 'En attente', 'Bloqué'];
 
 const ROLE_BADGE: Record<SystemUser['role'], string> = {
-  'Administrateur Système':  'bg-purple-50 text-purple-700 border border-purple-200',
-  'Chef de Commission':      'bg-teal-50 text-teal-700 border border-teal-200',
-  'Évaluateur':              'bg-blue-50 text-blue-700 border border-blue-200',
-  'Évaluateur Administratif':'bg-cyan-50 text-cyan-700 border border-cyan-200',
-  'Service Contractant':     'bg-amber-50 text-amber-700 border border-amber-200',
-  'Opérateur Économique':    'bg-gray-50 text-gray-700 border border-gray-200',
+  'Administrateur Système': 'bg-purple-50 text-purple-700 border border-purple-200',
+  'Chef de Commission': 'bg-teal-50 text-teal-700 border border-teal-200',
+  'Évaluateur': 'bg-blue-50 text-blue-700 border border-blue-200',
+  'Évaluateur Administratif': 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+  'Service Contractant': 'bg-amber-50 text-amber-700 border border-amber-200',
+  'Opérateur Économique': 'bg-gray-50 text-gray-700 border border-gray-200',
 };
 
 const STATUT_STYLE: Record<SystemUser['statut'], string> = {
-  'Actif':      'text-emerald-700',
+  'Actif': 'text-emerald-700',
   'En attente': 'text-amber-600',
-  'Bloqué':     'text-red-600',
+  'Bloqué': 'text-red-600',
 };
 
 type SortDir = 'asc' | 'desc' | null;
@@ -33,7 +33,7 @@ type SortDir = 'asc' | 'desc' | null;
 function buildHistory(u: SystemUser) {
   return [
     { date: u.derniereAction, action: 'Dernière connexion', detail: '' },
-    { date: u.dateInscription, action: 'Compte créé',       detail: `Rôle: ${u.role}` },
+    { date: u.dateInscription, action: 'Compte créé', detail: `Rôle: ${u.role}` },
   ];
 }
 
@@ -46,21 +46,19 @@ function Dropdown<T extends string>({ label, options, value, onChange }: {
   return (
     <div className="relative">
       <button onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-all ${
-          isActive ? 'bg-[#1C4532] text-white border-[#1C4532]' : 'bg-white text-gray-700 border-gray-200 hover:bg-[#F4F7F4]'
-        }`}>
+        className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-all ${isActive ? 'bg-[#1C4532] text-white border-[#1C4532]' : 'bg-white text-gray-700 border-gray-200 hover:bg-[#F4F7F4]'
+          }`}>
         {isActive ? value : label}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <polyline points="6 9 12 15 18 9"/>
+          <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
       {open && (
         <div className="absolute top-full mt-1 left-0 bg-white border border-gray-200 rounded-xl shadow-lg z-20 min-w-[200px] py-1">
           {options.map(opt => (
             <button key={opt} onClick={() => { onChange(opt); setOpen(false); }}
-              className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                value === opt ? 'text-[#1C4532] font-bold bg-[#F4F7F4]' : 'text-gray-600 hover:bg-[#F4F7F4]'
-              }`}>
+              className={`w-full text-left px-4 py-2 text-sm transition-colors ${value === opt ? 'text-[#1C4532] font-bold bg-[#F4F7F4]' : 'text-gray-600 hover:bg-[#F4F7F4]'
+                }`}>
               {opt}
             </button>
           ))}
@@ -101,9 +99,8 @@ function ConfirmModal({ message, onConfirm, onCancel, danger = false }: {
             Annuler
           </button>
           <button onClick={onConfirm}
-            className={`flex-1 py-2.5 text-white font-bold text-sm rounded-xl transition-all ${
-              danger ? 'bg-red-600 hover:bg-red-700' : 'bg-[#00738C] hover:bg-[#005f75]'
-            }`}>
+            className={`flex-1 py-2.5 text-white font-bold text-sm rounded-xl transition-all ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-[#00738C] hover:bg-[#005f75]'
+              }`}>
             Confirmer
           </button>
         </div>
@@ -148,11 +145,11 @@ function UserDrawer({ user, onClose, onAction }: {
         <div className="p-6 border-b border-gray-100 space-y-3">
           <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Informations</h4>
           {[
-            ['ID',               user.id],
-            ['Email',            user.email],
-            ['Statut',           user.statut],
+            ['ID', user.id],
+            ['Email', user.email],
+            ['Statut', user.statut],
             ['Date d\'inscription', user.dateInscription],
-            ['Dernière action',  user.derniereAction],
+            ['Dernière action', user.derniereAction],
           ].map(([k, v]) => (
             <div key={k} className="flex items-center justify-between text-sm">
               <span className="text-gray-500 font-medium">{k}</span>
@@ -218,15 +215,15 @@ function UserDrawer({ user, onClose, onAction }: {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 export default function UtilisateursView() {
-  const [users,         setUsers]         = useState<SystemUser[]>(USERS);
-  const [search,        setSearch]        = useState('');
-  const [roleFilter,    setRoleFilter]    = useState<typeof ROLES[number]>('Tous');
-  const [statutFilter,  setStatutFilter]  = useState<typeof STATUTS[number]>('Tous');
-  const [sortBy,        setSortBy]        = useState<string | null>(null);
-  const [sortDir,       setSortDir]       = useState<SortDir>(null);
-  const [page,          setPage]          = useState(1);
-  const [selectedUser,  setSelectedUser]  = useState<SystemUser | null>(null);
-  const [confirmModal,  setConfirmModal]  = useState<{ message: string; action: () => void; danger?: boolean } | null>(null);
+  const [users, setUsers] = useState<SystemUser[]>(USERS);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<typeof ROLES[number]>('Tous');
+  const [statutFilter, setStatutFilter] = useState<typeof STATUTS[number]>('Tous');
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [page, setPage] = useState(1);
+  const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ message: string; action: () => void; danger?: boolean } | null>(null);
 
   const handleSort = (key: string) => {
     if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -242,7 +239,7 @@ export default function UtilisateursView() {
         || u.prenom.toLowerCase().includes(q)
         || u.email.toLowerCase().includes(q)
         || u.id.toLowerCase().includes(q);
-      const matchRole   = roleFilter === 'Tous'   || u.role   === roleFilter;
+      const matchRole = roleFilter === 'Tous' || u.role === roleFilter;
       const matchStatut = statutFilter === 'Tous' || u.statut === statutFilter;
       return matchSearch && matchRole && matchStatut;
     });
@@ -252,9 +249,9 @@ export default function UtilisateursView() {
     if (!sortBy) return filtered;
     return [...filtered].sort((a, b) => {
       const av = sortBy === 'nom' ? `${a.nom} ${a.prenom}` : sortBy === 'email' ? a.email
-               : sortBy === 'role' ? a.role : sortBy === 'date' ? a.dateInscription : a.statut;
+        : sortBy === 'role' ? a.role : sortBy === 'date' ? a.dateInscription : a.statut;
       const bv = sortBy === 'nom' ? `${b.nom} ${b.prenom}` : sortBy === 'email' ? b.email
-               : sortBy === 'role' ? b.role : sortBy === 'date' ? b.dateInscription : b.statut;
+        : sortBy === 'role' ? b.role : sortBy === 'date' ? b.dateInscription : b.statut;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
   }, [filtered, sortBy, sortDir]);
@@ -266,8 +263,8 @@ export default function UtilisateursView() {
   const applyAction = (id: string, action: 'valider' | 'bloquer' | 'debloquer' | 'supprimer') => {
     const user = users.find(u => u.id === id)!;
     const messages: Record<string, string> = {
-      valider:   `Valider le compte de ${user.prenom} ${user.nom} ?`,
-      bloquer:   `Bloquer le compte de ${user.prenom} ${user.nom} ? L'utilisateur sera notifié.`,
+      valider: `Valider le compte de ${user.prenom} ${user.nom} ?`,
+      bloquer: `Bloquer le compte de ${user.prenom} ${user.nom} ? L'utilisateur sera notifié.`,
       debloquer: `Débloquer le compte de ${user.prenom} ${user.nom} ?`,
       supprimer: `Supprimer définitivement le compte de ${user.prenom} ${user.nom} ? Cette action est irréversible.`,
     };
@@ -297,14 +294,14 @@ export default function UtilisateursView() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[240px] max-w-lg">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
           </svg>
           <input type="text" placeholder="Rechercher par nom, email, ID…"
             value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
             className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm bg-white border border-gray-200 focus:border-[#97A675] focus:outline-none transition-all placeholder-gray-400"
             style={{ color: '#1C4532' }} />
         </div>
-        <Dropdown label="Rôle"   options={ROLES}   value={roleFilter}   onChange={v => { setRoleFilter(v);   setPage(1); }} />
+        <Dropdown label="Rôle" options={ROLES} value={roleFilter} onChange={v => { setRoleFilter(v); setPage(1); }} />
         <Dropdown label="Statut" options={STATUTS} value={statutFilter} onChange={v => { setStatutFilter(v); setPage(1); }} />
       </div>
 
@@ -335,9 +332,9 @@ export default function UtilisateursView() {
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-28 gap-4">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.2">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <line x1="23" y1="11" x2="17" y2="11"/>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="23" y1="11" x2="17" y2="11" />
           </svg>
           <h3 className="text-2xl font-black text-gray-800">Aucun utilisateur trouvé</h3>
           <button onClick={resetFilters}

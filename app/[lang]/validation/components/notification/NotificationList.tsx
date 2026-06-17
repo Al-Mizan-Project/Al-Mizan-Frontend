@@ -13,7 +13,7 @@ export default function NotificationsList() {
 
     notifications.forEach((notif) => {
       // Basic grouping by date string or "Aujourd'hui" / "Hier"
-      const dateObj = new Date(notif.date_creation);
+      const dateObj = new Date(notif.created_at);
       const today = new Date();
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
@@ -75,11 +75,24 @@ export default function NotificationsList() {
   };
 
   const handleVoirNotification = async (notification: BackendNotification) => {
-    if (!notification.est_lu) {
+    if (!notification.read_at) {
       await markAsRead(notification.id);
     }
     if (notification.lien_relatif) {
       router.push(notification.lien_relatif);
+    } else if (notification.entite_liee_type === 'soumission' && notification.entite_liee_id) {
+      // Construction dynamique du lien vers le dossier
+      const lang = window.location.pathname.split('/')[1] || 'fr';
+      const role = window.location.pathname.includes('validator') ? 'validator' : 'commission';
+      router.push(`/${lang}/validation/dossier/${notification.entite_liee_id}/${role}`);
+    } else if (notification.entite_liee_type === 'attribution' && notification.entite_liee_id) {
+      const lang = window.location.pathname.split('/')[1] || 'fr';
+      const role = window.location.pathname.includes('validator') ? 'validator' : 'commission';
+      // For now, attributions also redirect to the dossier page if they're linked
+      router.push(`/${lang}/validation/dossier/${notification.entite_liee_id}/${role}`);
+    } else {
+      // Just mark as read and refresh to remove bold text
+      refresh();
     }
   };
 
@@ -99,7 +112,9 @@ export default function NotificationsList() {
   return (
     <div className="val-notifications-container">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold">Notifications {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full ml-2">{unreadCount} non lues</span>}</h2>
+        <h2 className="text-xl font-semibold">
+          {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">{unreadCount} non lues</span>}
+        </h2>
         {unreadCount > 0 && (
           <button onClick={markAllAsRead} className="text-sm text-blue-600 hover:underline">
             Marquer tout comme lu
@@ -118,17 +133,17 @@ export default function NotificationsList() {
               {dateNotifications.map((notification) => (
                 <div 
                   key={notification.id} 
-                  className={`val-notification-item val-notification-item-${(notification.type || 'info').toLowerCase()} ${!notification.est_lu ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
+                  className={`val-notification-item val-notification-item-${(notification.type_notification || 'info').toLowerCase()} ${!notification.read_at ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
                 >
                   <div className="val-notification-border" />
                   
                   <div className="val-notification-content">
                     <div className="val-notification-icon-wrapper">
-                      {getNotificationIcon(notification.type)}
+                      {getNotificationIcon(notification.type_notification)}
                     </div>
                     
                     <div className="val-notification-text">
-                      <div className={`val-notification-title ${!notification.est_lu ? 'font-semibold' : ''}`}>
+                      <div className={`val-notification-title ${!notification.read_at ? 'font-semibold' : ''}`}>
                         {notification.titre}
                         {notification.reference_dossier && (
                           <span className="val-notification-reference">
@@ -141,13 +156,6 @@ export default function NotificationsList() {
                       </div>
                     </div>
                   </div>
-                  
-                  <button 
-                    onClick={() => handleVoirNotification(notification)}
-                    className="val-notification-action"
-                  >
-                    Voir
-                  </button>
                 </div>
               ))}
             </div>

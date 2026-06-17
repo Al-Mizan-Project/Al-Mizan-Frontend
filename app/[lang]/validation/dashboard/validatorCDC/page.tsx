@@ -49,10 +49,46 @@ export default function ValidatorPage(props: ValidatorPageProps) {
       if (!CURRENT_VALIDATOR_ID) {
         throw new Error('Impossible de déterminer l\'identifiant du validateur.');
       }
+
       const appelsRaw = await appelsApi.getAppelsByValidatedBy(CURRENT_VALIDATOR_ID);
       const appels: AppelOffre[] = Array.isArray(appelsRaw) ? appelsRaw : (appelsRaw as any).results ?? [];
 
-      const validatorSubmissions: any[] = appels.map((appel: any) => {
+      // Enrichir chaque appel avec son statut de validation depuis l'endpoint détaillé
+      const appelsEnrichis = await Promise.all(appels.map(async (appel) => {
+        try {
+          const id = Number(appel.id_appel_offres || (appel as any).rawId || (appel as any).id);
+          if (!id) return { ...appel, statutValidation: appel.statut } as AppelOffre;
+          const details = await appelsApi.getAppelOffre(id);
+          return { ...appel, statutValidation: details.statut ?? (appel.statut as any) } as AppelOffre & { statutValidation?: string };
+        } catch (err) {
+          return { ...appel, statutValidation: (appel.statut as any) } as AppelOffre & { statutValidation?: string };
+        }
+      }));
+
+      const DELAI_JOURS = 7;
+      const now = new Date();
+
+      const validatorSubmissions: any[] = appelsEnrichis.map((appel: any) => {
+        // Calcul du délai côté front : même logique que le backend
+        // Priorité : updated_at (date d'affectation) > created_at > fallback
+        const referenceDate = appel.updated_at
+          ? new Date(appel.updated_at)
+          : appel.created_at
+          ? new Date(appel.created_at)
+          : null;
+
+        let computedStatus: 'En Cours' | 'En Retard' = 'En Cours';
+        let delayDays = 0;
+        let deadline: Date | null = null;
+
+        if (referenceDate) {
+          deadline = new Date(referenceDate.getTime() + DELAI_JOURS * 24 * 60 * 60 * 1000);
+          if (now > deadline) {
+            computedStatus = 'En Retard';
+            delayDays = Math.floor((now.getTime() - deadline.getTime()) / (24 * 60 * 60 * 1000));
+          }
+        }
+
         return {
           id: `ID-${String(appel.id_appel_offres).padStart(3, '0')}`,
           rawId: appel.id_appel_offres,
@@ -64,11 +100,12 @@ export default function ValidatorPage(props: ValidatorPageProps) {
             id: `VAL-${String(appel.validated_by ?? CURRENT_VALIDATOR_ID)}`,
           },
           submissionDate: appel.created_at ? new Date(appel.created_at).toISOString().split('T')[0] : '—',
-          assignmentDate: appel.assignmentDate ? new Date(appel.assignmentDate).toISOString().split('T')[0] : '—',
-          validationDeadline: appel.validationDeadline ? new Date(appel.validationDeadline).toISOString().split('T')[0] : '—',
-          status: appel.status || 'En Cours',
-          delayDays: appel.delayDays > 0 ? appel.delayDays : undefined,
+          assignmentDate: appel.updated_at ? new Date(appel.updated_at).toISOString().split('T')[0] : '—',
+          validationDeadline: deadline ? deadline.toISOString().split('T')[0] : '—',
+          status: computedStatus,
+          delayDays: delayDays > 0 ? delayDays : undefined,
           etape: 'Validation en cours',
+          statutValidation: (appel as any).statutValidation ?? (appel.statut as any) ?? 'Inconnu',
         };
       });
 

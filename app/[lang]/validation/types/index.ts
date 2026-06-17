@@ -34,15 +34,19 @@ export interface fileRecord{
     status:'En Attente'|'En Cours'|'En Retard'|'Prêt'|'Soumis';
     delayDays?:number;
     etape?: 'Evaluation Administrative' | 'Evaluation des Offres' | 'Validation';
+    statutValidation?: string;
 
 }
 export interface Validator {
   id: string;
+  utilisateurId?: number | null;   // id_utilisateur (entier) du compte auth
   nom: string;
   prenom: string;
   matricule: string;
   chargeActuelle: number;
   disponibilite: 'Recommandé' | 'Conflit' | 'Indisponible' | 'Disponible' | 'Surchargé';
+  role?: string;
+  fonction?: string;
 }
 
 export interface DossierInfo {
