@@ -359,3 +359,56 @@ export const ctAPI = {
     return data;
   },
 };
+// ─── ADD to api.ts ──────────────────────────────────────────────────────────
+
+export interface ResponsablePayload {
+  prenom: string;
+  nom: string;
+  telephone?: string;
+  fonction?: string;
+  email: string;
+  password?: string;
+}
+
+export interface ResponsableResult {
+  message: string;
+  id_membre: string;
+  created: boolean;
+  id_utilisateur?: number;
+  activation_url?: string;
+  temporary_password?: string;
+}
+
+// Upsert: crée le responsable s'il n'existe pas, sinon met à jour ses infos.
+export const upsertResponsable = async (
+  organisationId: string,
+  payload: ResponsablePayload
+): Promise<ResponsableResult> => {
+  const { data } = await api.post(`/organisations/${organisationId}/responsable/`, payload);
+  return data;
+};
+
+export interface MembreDetail {
+  id_membre: string;
+  nom: string;
+  prenom: string;
+  telephone: string;
+  fonction: string;
+  created_at: string;
+  updated_at: string;
+  organisation: {
+    id_organisation: string;
+    nom_officiel: string;
+    type_entite: string;
+    type_entite_display: string;
+    adresse_siege: string;
+    email_contact: string;
+    wilaya?: string;
+    secteur?: string;
+  };
+}
+
+export const fetchMembreDetail = async (idMembre: string): Promise<MembreDetail> => {
+  const { data } = await api.get(`/membres/${idMembre}/`);
+  return data;
+};
