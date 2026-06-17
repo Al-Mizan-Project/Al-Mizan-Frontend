@@ -30,7 +30,7 @@ export default function UserManagementLayout({
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--color-blue-0)]">
         {/* Header avec la variante 'users' */}
         <Header lang={lang} role={safeRole} variant="users" />
-        
+
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto">
           {children}

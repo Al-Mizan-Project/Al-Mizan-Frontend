@@ -92,8 +92,8 @@ function computeStatus(attribution: AttributionBackendItem): fileRecord['status'
 
   const updatedAt = parseIsoDate(attribution.updated_at);
   if (updatedAt) {
-    const createdAt = parseIsoDate(attribution.created_at);
-    const ageDays = createdAt ? Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+    const baseDate = attribution.validated_by ? updatedAt : parseIsoDate(attribution.created_at);
+    const ageDays = baseDate ? Math.max(0, Math.floor((Date.now() - baseDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
     return ageDays > 7 ? 'En Retard' : 'En Cours';
   }
 
@@ -102,9 +102,11 @@ function computeStatus(attribution: AttributionBackendItem): fileRecord['status'
 
 function mapToFileRecord(attribution: AttributionBackendItem): fileRecord {
   const createdAt = parseIsoDate(attribution.created_at);
+  const updatedAt = parseIsoDate(attribution.updated_at);
+  const baseDate = attribution.validated_by ? (updatedAt ?? createdAt) : createdAt;
   const deadline = parseIsoDate(attribution.deadline_validation ?? null);
   const now = new Date();
-  const ageDays = createdAt ? Math.max(0, Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+  const ageDays = baseDate ? Math.max(0, Math.floor((now.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
   const status = computeStatus(attribution);
   const delayDays = status === 'En Retard'
     ? deadline
@@ -115,8 +117,8 @@ function mapToFileRecord(attribution: AttributionBackendItem): fileRecord {
   const soumissionaireLabel = attribution.soumission && typeof attribution.soumission === 'object' && attribution.soumission.nom_operateur
     ? attribution.soumission.nom_operateur
     : (attribution.soumission && typeof attribution.soumission === 'object'
-        ? (`Soumissionaire #${(attribution.soumission as any).id_soumissionnaire ?? attribution.soumission_id}`)
-        : (attribution.soumission_id ? `Soumission #${attribution.soumission_id}` : 'Soumissionnaire inconnu'));
+      ? (`Soumissionaire ${(attribution.soumission as any).id_soumissionnaire ?? attribution.soumission_id}`)
+      : (attribution.soumission_id ? `Soumission ${attribution.soumission_id}` : 'Soumissionnaire inconnu'));
 
   return {
     id: `ID-${attribution.soumission_id ?? 'unknown'}`,
@@ -129,7 +131,7 @@ function mapToFileRecord(attribution: AttributionBackendItem): fileRecord {
     status,
     etape: attribution.validation_level === 'interne' ? ('Évaluation' as any) : ('Évaluation' as any),
     delayDays,
-    validator: attribution.validated_by ? { name: `Membre ${attribution.validated_by}`, id: `#${attribution.validated_by}` } : undefined,
+    validator: attribution.validated_by ? { name: `Membre ${attribution.validated_by}`, id: `${attribution.validated_by}` } : undefined,
   };
 }
 
@@ -249,8 +251,10 @@ function useCommissionAttributions(): UseCommissionAttributionsReturn {
 
       const onePerStateRecords = Object.values(latestByStatus).map((v) => v.rec);
       setOnePerState(onePerStateRecords);
-      setAppels(onePerStateRecords);
-      setStats(computeStats(onePerStateRecords));
+      
+      const allRecords = recordsWithMeta.map((v) => v.record);
+      setAppels(allRecords);
+      setStats(computeStats(allRecords));
     } catch (err: any) {
       setError(err?.message || 'Impossible de charger les dossiers.');
       setAppels([]);
