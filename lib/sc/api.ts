@@ -20,15 +20,41 @@ interface ReqOptions {
 }
 
 function detailFromPayload(payload: unknown, fallback: string): string {
-  if (!payload || typeof payload !== 'object') return fallback;
-  const data = payload as Record<string, unknown>;
-  const direct = data.detail || data.message || data.error || data.erreur;
-  if (typeof direct === 'string') return direct;
-  for (const value of Object.values(data)) {
-    if (Array.isArray(value) && value.length > 0) return String(value[0]);
+  const detailText = (value: unknown): string | null => {
+    if (value == null || value === '') return null;
     if (typeof value === 'string') return value;
-  }
-  return fallback;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) {
+      const parts = value.map((item) => detailText(item)).filter(Boolean);
+      return parts.length ? parts.join(', ') : null;
+    }
+    if (typeof value !== 'object') return null;
+
+    const objectValue = value as Record<string, unknown>;
+    const nestedDetails = detailText(objectValue.details);
+    if (nestedDetails) return nestedDetails;
+
+    const nestedDirect = detailText(objectValue.detail ?? objectValue.message ?? objectValue.error ?? objectValue.erreur);
+    if (nestedDirect) return nestedDirect;
+
+    for (const [key, child] of Object.entries(objectValue)) {
+      if (['code', 'status'].includes(key)) continue;
+      const text = detailText(child);
+      if (text) return `${key}: ${text}`;
+    }
+
+    return null;
+  };
+
+  if (!payload || typeof payload !== 'object') return detailText(payload) || fallback;
+  const data = payload as Record<string, unknown>;
+  return detailText(data.error)
+    || detailText(data.details)
+    || detailText(data.detail)
+    || detailText(data.message)
+    || detailText(data.erreur)
+    || detailText(data)
+    || fallback;
 }
 
 /** Low-level proxied request. Attaches auth, auto-refreshes on 401, throws on non-2xx. */
