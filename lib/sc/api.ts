@@ -121,6 +121,11 @@ export interface AppelOffre {
   titre?: string;
   description?: string;
   type_procedure?: string;
+  type_prestation?: string;
+  visibilite?: string;
+  wilaya?: string;
+  secteur?: string;
+  localisation?: string;
   montant_estime?: string | number;
   date_publication?: string | null;
   date_limite_soumission?: string | null;
@@ -141,7 +146,7 @@ export interface AppelOffre {
   updated_at?: string;
 }
 
-type AppelOffreWrite = Partial<Omit<AppelOffre, 'operateurs_invites'>> & {
+type AppelOffreWrite = Partial<Omit<AppelOffre, 'operateurs_invites' | 'commission_id' | 'validation_level' | 'statut' | 'etat_execution' | 'validated_by'>> & {
   operateurs_invites?: number[];
 };
 
@@ -182,6 +187,8 @@ export interface CommissionInterne {
   membres?: CommissionInterneMembre[];
 }
 
+export type CommissionInterneType = 'parmanante' | 'adhoc';
+
 export interface CommissionEvaluation {
   id_comission: number;
   id_service?: number | string;
@@ -200,8 +207,13 @@ export interface CommissionEvaluationMembre {
 
 export interface CommissionInterneMembre {
   id?: number;
-  id_membre: number;
-  id_commision_interne?: number;
+  id_membre: string | number;
+  id_service?: number;
+  id_utilisateur?: number | null;
+  nom?: string | null;
+  prenom?: string | null;
+  fonction?: string | null;
+  role?: string | null;
 }
 
 export interface RegistreEntry {
@@ -227,8 +239,8 @@ export interface SoumissionLite {
   statut?: string;
 }
 
-// Returned by collaborator / OE-responsable account creation. `temporary_password` is the
-// generated password to relay (only present when the backend did not send an activation link).
+// Returned by collaborator / OE-responsable account creation. An activation link is emailed to
+// the new account; no password is exposed to the Service Contractant.
 export interface CompteCreationResult {
   message?: string;
   id_membre?: string | number;
@@ -236,16 +248,14 @@ export interface CompteCreationResult {
   organisation_id?: string | number;
   operateur_id?: string | number;
   email?: string;
-  activation_url?: string | null;
-  temporary_password?: string | null;
 }
 
 export interface DemandeOE {
   id?: number | string;
-  nom_officiel?: string;
+  nom_organisation?: string;
   email_contact?: string;
   statut?: string;
-  created_at?: string;
+  cree_le?: string;
   id_service_contractant?: number;
 }
 
@@ -260,16 +270,6 @@ export interface RecoursLite {
   motif?: string;
   created_at?: string;
   date_depot?: string;
-}
-
-export interface Clarification {
-  id?: number | string;
-  id_appel_offres?: number;
-  question?: string;
-  reponse?: string | null;
-  auteur?: string;
-  statut?: string;
-  created_at?: string;
 }
 
 export interface OperateurRegistre {
@@ -309,9 +309,6 @@ export const scApi = {
   updateAppel: (id: number | string, data: AppelOffreWrite) =>
     proxy<AppelOffre>('appels', `appels-offres/${id}`, { method: 'PATCH', body: data }),
 
-  linkCommission: (id: number | string, commissionId: number | string) =>
-    proxy<AppelOffre>('appels', `appels-offres/${id}`, { method: 'PATCH', body: { commission_id: String(commissionId) } }),
-
   attachDocument: (appelId: number | string, documentId: number) =>
     proxy('appels', `appels-offres/${appelId}/documents/${documentId}`, { method: 'POST', body: {} }),
 
@@ -333,6 +330,16 @@ export const scApi = {
   listAppelDocuments: (id: number | string) =>
     safeList<{ id_document: number; nom?: string }>(() => proxy('appels', `appels-offres/${id}/documents`)),
 
+  getDocumentMeta: (id: number | string) =>
+    safeOne<{ id_document: number; nom?: string; type_document?: string; storage_url?: string }>(() => proxy('documents', `documents/${id}`)),
+
+  // Streams the document bytes through the proxy and returns an object URL for in-app preview.
+  documentBlobUrl: async (id: number | string): Promise<string> => {
+    const res = await authedFetch(`/api/proxy/documents?path=api/documents/${id}/`, { headers: { Accept: '*/*' } });
+    if (!res.ok) throw new ApiFailure(res.status, `HTTP ${res.status}`);
+    return URL.createObjectURL(await res.blob());
+  },
+
   countSoumissions: async (id: number | string): Promise<number> => {
     const list = await safeList<unknown>(() => proxy('appels', `appels-offres/${id}/soumissions`));
     return list.length;
@@ -352,10 +359,10 @@ export const scApi = {
 
   // ----- Internal validation queue -----
   listValidationQueue: (commissionId?: number) =>
-    safeList<AppelOffre>(() => proxy('appels', 'appels-offres', { query: { statut: 'non validé', commission_id: commissionId } })),
+    safeList<AppelOffre>(() => proxy('appels', 'appels-offres', { query: { statut: 'non_valide', commission_id: commissionId } })),
 
-  assignValidator: (id: number | string, membreId: string | number) =>
-    proxy('appels', `appels-offres/${id}/affecter-validateur`, { method: 'POST', body: { validated_by: membreId } }),
+  assignValidator: (id: number | string, validatorId: string | number) =>
+    proxy('appels', `appels-offres/${id}/affecter-validateur`, { method: 'POST', body: { validator_id: validatorId } }),
 
   validerMarche: (id: number | string, commentaire = '', validatedBy?: string | number) =>
     proxy('appels', `appels-offres/${id}/valider`, { method: 'POST', body: { commentaire, validated_by: validatedBy } }),
@@ -388,14 +395,8 @@ export const scApi = {
   createCollaborateur: (data: Partial<Membre> & { id_organisation: string | number; role: string; password?: string }) =>
     proxy<CompteCreationResult>('acteurs', 'membres/creer-collaborateur/', { method: 'POST', body: data }),
 
-  updateMembre: (id: string | number, data: Partial<Membre>) =>
+  updateMembre: (id: string | number, data: { nom?: string; prenom?: string; telephone?: string; fonction?: string }) =>
     proxy<Membre>('acteurs', `membres/${id}/`, { method: 'PATCH', body: data }),
-
-  deactivateMembre: (id: string | number) =>
-    proxy('acteurs', `membres/${id}/`, { method: 'DELETE' }),
-
-  assignRole: (id: string | number, role: string) =>
-    proxy<Membre>('acteurs', `membres/${id}/`, { method: 'PATCH', body: { role } }),
 
   // ----- Commissions -----
   // COPEO commissions live in evaluations_service because registre/CT/state read from that table.
@@ -447,21 +448,15 @@ export const scApi = {
     safeList<SoumissionLite>(() => proxy('soumissions', `by-commission/${commissionId}/`)),
 
   // ----- Demandes d'inscription OE (acteurs_service, scoped to the SC) -----
-  listDemandesOE: (_serviceId?: string | number) =>
-    safeList<DemandeOE>(() => proxy('acteurs', 'service-contractant/demandes/')),
+  // Only pending requests are listed; approved/refused ones drop out after a refresh.
+  listDemandesOE: (serviceId?: string | number) =>
+    safeList<DemandeOE>(() => proxy('acteurs', 'service-contractant/demandes/', { query: { statut: 'EN_ATTENTE', id_service_contractant: serviceId } })),
 
   approveDemandeOE: (id: string | number) =>
     proxy<CompteCreationResult>('acteurs', `service-contractant/demandes/${id}/approuver/`, { method: 'POST', body: {} }),
 
   refuseDemandeOE: (id: string | number, motif: string) =>
     proxy('acteurs', `service-contractant/demandes/${id}/rejeter/`, { method: 'POST', body: { motif } }),
-
-  // ----- Clarifications -----
-  listClarifications: (serviceId?: string | number) =>
-    safeList<Clarification>(() => proxy('appels', 'clarifications/', { query: { id_service_contractant: serviceId } })),
-
-  repondreClarification: (id: string | number, reponse: string) =>
-    proxy('appels', `clarifications/${id}/repondre/`, { method: 'POST', body: { reponse } }),
 
   // ----- Registre OE (for restreint / gré à gré selection) -----
   listOperateurs: (query: { secteur?: string; wilaya?: string; search?: string } = {}) =>

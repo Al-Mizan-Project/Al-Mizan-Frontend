@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -40,7 +40,7 @@ api.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token');
       if (refreshToken) {
         try {
-          const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+          const { data } = await axios.post('/api/proxy/auth?path=auth/refresh', {
             refresh: refreshToken,
           });
           localStorage.setItem('access_token', data.access);
@@ -76,8 +76,13 @@ export interface LoginResponse {
 }
 
 export const authAPI = {
+  // Use a clean axios call (not the shared `api` instance) so a stale/expired access token in
+  // localStorage is never attached to the login request — DRF rejects a bad bearer with 401 even
+  // on an AllowAny endpoint.
   login: async (email: string, password: string): Promise<LoginResponse> => {
-    const { data } = await api.post('/auth/login', { email, password });
+    const { data } = await axios.post('/api/proxy/auth?path=auth/login', { email, password }, {
+      headers: { 'Content-Type': 'application/json' },
+    });
     return data;
   },
 };

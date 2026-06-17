@@ -5,11 +5,19 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import Guard from '@/components/contractant/Guard';
 import { useSCSession } from '@/lib/sc/session';
-import { scApi, type AppelOffre, type Attribution, type Clarification, type RecoursLite, type RegistreEntry, type SoumissionLite } from '@/lib/sc/api';
+import { scApi, type AppelOffre, type Attribution, type RecoursLite, type RegistreEntry, type SoumissionLite } from '@/lib/sc/api';
 import { deriveState, actionsForState, STATE_META, aoTypeLabel, type AOAction } from '@/lib/sc/ao-states';
-import { Card, PageHeader, Spinner, Badge, EmptyState, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
+import { Card, PageHeader, Spinner, Badge, EmptyState, Modal, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
 
-type Tab = 'infos' | 'documents' | 'soumissions' | 'attribution' | 'clarifications' | 'recours';
+type Tab = 'infos' | 'documents' | 'soumissions' | 'attribution' | 'recours';
+type DocKind = 'cdc' | 'justification' | 'besoin' | 'annexe';
+interface AppelDoc { id_document: number; nom?: string; kind: DocKind; storage_url?: string; }
+const DOC_KIND_META: Record<DocKind, { fr: string; ar: string }> = {
+  cdc: { fr: 'CDC', ar: 'دفتر الشروط' },
+  justification: { fr: 'Justification', ar: 'تبرير' },
+  besoin: { fr: 'Besoin', ar: 'الحاجة' },
+  annexe: { fr: 'Annexe', ar: 'مرفق' },
+};
 
 function DetailInner() {
   const { lang, id } = useParams() as { lang: string; id: string };
@@ -22,11 +30,11 @@ function DetailInner() {
   const [ao, setAo] = useState<AppelOffre | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('infos');
-  const [docs, setDocs] = useState<{ id_document: number; nom?: string }[]>([]);
+  const [docs, setDocs] = useState<AppelDoc[]>([]);
+  const [preview, setPreview] = useState<{ url?: string; nom: string; fallback?: string } | null>(null);
   const [soumissions, setSoumissions] = useState<SoumissionLite[]>([]);
   const [registre, setRegistre] = useState<RegistreEntry[]>([]);
   const [attribution, setAttribution] = useState<Attribution | null>(null);
-  const [clarifs, setClarifs] = useState<Clarification[]>([]);
   const [recours, setRecours] = useState<RecoursLite[]>([]);
   const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
 
@@ -40,7 +48,22 @@ function DetailInner() {
 
   useEffect(() => {
     if (!ao) return;
-    if (tab === 'documents') scApi.listAppelDocuments(id).then(setDocs);
+    if (tab === 'documents') {
+      (async () => {
+        const refs: { id: number; kind: DocKind }[] = [];
+        if (ao.id_doc_cdc) refs.push({ id: ao.id_doc_cdc, kind: 'cdc' });
+        if (ao.id_doc_justification) refs.push({ id: ao.id_doc_justification, kind: 'justification' });
+        if (ao.id_doc_besoin) refs.push({ id: ao.id_doc_besoin, kind: 'besoin' });
+        const links = await scApi.listAppelDocuments(id);
+        const seen = new Set(refs.map((r) => r.id));
+        for (const link of links) if (!seen.has(link.id_document)) refs.push({ id: link.id_document, kind: 'annexe' });
+        const metas = await Promise.all(refs.map(async (r) => {
+          const meta = await scApi.getDocumentMeta(r.id);
+          return { id_document: r.id, nom: meta?.nom, kind: r.kind, storage_url: meta?.storage_url };
+        }));
+        setDocs(metas);
+      })();
+    }
     if (tab === 'soumissions') {
       scApi.listSoumissionsForAppel(id).then(setSoumissions);
       if (ao.commission_id) scApi.listRegistre(ao.commission_id).then(setRegistre);
@@ -50,7 +73,6 @@ function DetailInner() {
         setAttribution(items.find((item) => String(item.appel_id) === String(id)) || null);
       });
     }
-    if (tab === 'clarifications') scApi.listClarifications().then((all) => setClarifs(all.filter((c) => String(c.id_appel_offres) === String(id))));
     if (tab === 'recours') scApi.listRecoursForAppel(id).then(setRecours);
   }, [tab, ao, id]);
 
@@ -114,12 +136,31 @@ function DetailInner() {
     } catch (err) { toast('error', errorText(err, isArabic ? 'تعذر تسجيل الاستلام.' : 'Enregistrement de réception indisponible.')); }
   }
 
+  async function openPreview(d: AppelDoc) {
+    const fallback = isArabic
+      ? 'ملف الوثيقة غير متاح للعرض المباشر. تم عرض معلومات الوثيقة المتوفرة.'
+      : 'Le fichier de ce document n’est pas disponible en aperçu direct. Les informations disponibles sont affichées.';
+    try {
+      const url = await scApi.documentBlobUrl(d.id_document);
+      setPreview({ url, nom: d.nom || `Document #${d.id_document}` });
+    } catch (err) {
+      if (err instanceof Error && /^HTTP (404|406)$/.test(err.message)) {
+        setPreview({ nom: d.nom || `Document #${d.id_document}`, fallback });
+        return;
+      }
+      toast('error', errorText(err, isArabic ? 'تعذر عرض الوثيقة.' : "Aperçu du document indisponible."));
+    }
+  }
+  function closePreview() {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  }
+
   const tabs: { key: Tab; fr: string; ar: string }[] = [
     { key: 'infos', fr: 'Informations', ar: 'المعلومات' },
     { key: 'documents', fr: 'Documents', ar: 'الوثائق' },
     { key: 'soumissions', fr: 'Soumissions', ar: 'العروض' },
     { key: 'attribution', fr: 'Attribution', ar: 'الإسناد' },
-    { key: 'clarifications', fr: 'Clarifications', ar: 'التوضيحات' },
     { key: 'recours', fr: 'Recours', ar: 'الطعون' },
   ];
 
@@ -160,6 +201,9 @@ function DetailInner() {
             {infoRow(isArabic ? 'المرجع' : 'Référence', ao.reference)}
             {infoRow(isArabic ? 'النوع' : 'Type', aoTypeLabel(ao.type_procedure, lang))}
             {infoRow(isArabic ? 'المبلغ التقديري' : 'Montant estimé', ao.montant_estime ? `${Number(ao.montant_estime).toLocaleString('fr-DZ')} DA` : '—')}
+            {infoRow(isArabic ? 'الولاية' : 'Wilaya', ao.wilaya)}
+            {infoRow(isArabic ? 'القطاع' : 'Secteur', ao.secteur)}
+            {infoRow(isArabic ? 'الموقع' : 'Localisation', ao.localisation)}
             {infoRow(isArabic ? 'تاريخ النشر' : 'Publication', ao.date_publication)}
             {infoRow(isArabic ? 'آخر أجل للإيداع' : 'Limite de dépôt', ao.date_limite_soumission)}
             {infoRow(isArabic ? 'فتح الأظرفة' : 'Ouverture des plis', ao.date_ouverture_plis)}
@@ -171,8 +215,13 @@ function DetailInner() {
           docs.length === 0 ? <EmptyState title={isArabic ? 'لا توجد وثائق' : 'Aucun document'} /> : (
             <div className="space-y-2">
               {docs.map((d) => (
-                <div key={d.id_document} className="flex items-center justify-between px-4 py-3 rounded-xl bg-[#F4F7F4]">
-                  <span className="text-sm font-medium" style={{ color: '#1C4532' }}>📄 {d.nom || `Document #${d.id_document}`}</span>
+                <div key={`${d.kind}-${d.id_document}`} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-[#F4F7F4]">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-[#97A675]">📄</span>
+                    <span className="text-sm font-medium truncate" style={{ color: '#1C4532' }}>{d.nom || `Document #${d.id_document}`}</span>
+                    <Badge tone="info">{isArabic ? DOC_KIND_META[d.kind].ar : DOC_KIND_META[d.kind].fr}</Badge>
+                  </span>
+                  <button className={GHOST_BTN} onClick={() => openPreview(d)}>{isArabic ? 'معاينة' : 'Aperçu'}</button>
                 </div>
               ))}
             </div>
@@ -214,19 +263,6 @@ function DetailInner() {
           ) : <EmptyState title={isArabic ? 'لا يوجد إسناد للبت فيه' : 'Aucune attribution à traiter'} hint={isArabic ? 'يظهر هنا الإسناد المؤقت بعد التقييم.' : "L'attribution provisoire apparaît ici après l'évaluation."} />
         )}
 
-        {tab === 'clarifications' && (
-          clarifs.length === 0 ? <EmptyState title={isArabic ? 'لا توجد طلبات توضيح' : 'Aucune demande de clarification'} /> : (
-            <div className="space-y-3">
-              {clarifs.map((c) => (
-                <div key={c.id} className="p-4 rounded-xl bg-[#F4F7F4]">
-                  <p className="text-sm font-medium" style={{ color: '#1C4532' }}>{c.question}</p>
-                  {c.reponse && <p className="text-xs text-gray-500 mt-2">↳ {c.reponse}</p>}
-                </div>
-              ))}
-            </div>
-          )
-        )}
-
         {tab === 'recours' && (
           recours.length === 0 ? <EmptyState title={isArabic ? 'لا توجد طعون' : 'Aucun recours'} /> : (
             <div className="space-y-2">
@@ -243,6 +279,18 @@ function DetailInner() {
           )
         )}
       </Card>
+
+      <Modal open={!!preview} title={preview?.nom || ''} onClose={closePreview} wide>
+        {preview?.url && (
+          <iframe src={preview.url} title={preview.nom} className="w-full rounded-xl border border-gray-100" style={{ height: '70vh' }} />
+        )}
+        {preview?.fallback && (
+          <div className="rounded-xl bg-[#F4F7F4] p-5 text-sm text-gray-600">
+            <p className="font-semibold mb-2" style={{ color: '#1C4532' }}>{preview.nom}</p>
+            <p>{preview.fallback}</p>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

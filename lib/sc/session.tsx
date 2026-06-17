@@ -35,7 +35,8 @@ function decodeJwt(token: string): Record<string, unknown> {
 function readMemberInfo(): Record<string, any> {
   if (typeof window === 'undefined') return {};
   try {
-    return JSON.parse(window.localStorage.getItem('member_info') || '{}');
+    const raw = window.localStorage.getItem('member_info') || window.localStorage.getItem('user') || '{}';
+    return JSON.parse(raw);
   } catch {
     return {};
   }
@@ -70,7 +71,7 @@ export function SCSessionProvider({ children }: { children: ReactNode }) {
     const displayName = [prenom, nom].filter(Boolean).join(' ') || email || 'Utilisateur';
     const fallbackService = String(info.id_service || claims.service_id || org.id_organisation || '');
 
-    const membreId = String(info.id_membre || window.localStorage.getItem('id_membre') || claims.id_membre || '');
+    const membreId = String(info.id_membre || window.localStorage.getItem('id_membre') || window.localStorage.getItem('membre_id') || claims.id_membre || '');
     const base = {
       ready: true,
       role,
@@ -86,33 +87,38 @@ export function SCSessionProvider({ children }: { children: ReactNode }) {
     };
     setState(base);
 
-    // Resolve the authoritative numeric ServiceContractant.id_service and organisation details from the backend.
+    // Resolve the authoritative ServiceContractant id_service, id_membre and organisation from the
+    // backend. `my-service` works from the access token alone, so it recovers membreId/orgId even
+    // when the JWT/localStorage carry no member info.
     (async () => {
       try {
-        const [serviceRes, membreRes] = await Promise.all([
-          authedFetch('/api/proxy/contractant?path=my-service', { headers: { Accept: 'application/json' } }),
-          membreId
-            ? authedFetch(`/api/proxy/acteurs?path=membres/${membreId}/`, { headers: { Accept: 'application/json' } })
-            : Promise.resolve(null),
-        ]);
+        const serviceRes = await authedFetch('/api/proxy/contractant?path=my-service', { headers: { Accept: 'application/json' } });
+        let resolvedMembreId = membreId;
         if (serviceRes.ok) {
           const data = await serviceRes.json();
-          if (data?.id_service != null) {
-            setState((s) => ({ ...s, serviceId: String(data.id_service) }));
-          }
-        }
-        if (membreRes?.ok) {
-          const data = await membreRes.json();
-          const organisation = data?.organisation || {};
+          resolvedMembreId = membreId || String(data?.id_membre || '');
           setState((s) => ({
             ...s,
-            orgId: s.orgId || String(organisation.id_organisation || ''),
-            nom: s.nom || data?.nom || '',
-            prenom: s.prenom || data?.prenom || '',
-            displayName: s.displayName === 'Utilisateur'
-              ? [data?.prenom, data?.nom].filter(Boolean).join(' ') || s.email || 'Utilisateur'
-              : s.displayName,
+            serviceId: data?.id_service != null ? String(data.id_service) : s.serviceId,
+            membreId: s.membreId || String(data?.id_membre || ''),
+            orgId: s.orgId || String(data?.id_organisation || ''),
           }));
+        }
+        if (resolvedMembreId) {
+          const membreRes = await authedFetch(`/api/proxy/acteurs?path=membres/${resolvedMembreId}/`, { headers: { Accept: 'application/json' } });
+          if (membreRes.ok) {
+            const data = await membreRes.json();
+            const organisation = data?.organisation || {};
+            setState((s) => ({
+              ...s,
+              orgId: s.orgId || String(organisation.id_organisation || ''),
+              nom: s.nom || data?.nom || '',
+              prenom: s.prenom || data?.prenom || '',
+              displayName: s.displayName === 'Utilisateur'
+                ? [data?.prenom, data?.nom].filter(Boolean).join(' ') || s.email || 'Utilisateur'
+                : s.displayName,
+            }));
+          }
         }
       } catch {
         /* keep fallback session */

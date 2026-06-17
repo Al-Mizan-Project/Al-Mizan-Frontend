@@ -18,13 +18,13 @@ const ROLE_DESCRIPTIONS: Record<SCRole, { fr: string; ar: string; featured: stri
     featured: ['marche:create', 'cdc:create', 'cdc:submit_validation', 'question:repondre'],
   },
   EVALUATEUR: {
-    fr: "Membre COPEO chargé de l'ouverture, de la conformité, de l'évaluation et du rapport final.",
-    ar: 'عضو في لجنة COPEO مكلف بالفتح والمطابقة والتقييم والتقرير النهائي.',
+    fr: "Membre de la commission interne d'évaluation chargé de l'ouverture, de la conformité, de l'évaluation et du rapport final.",
+    ar: 'عضو في لجنة التقييم الداخلية مكلف بالفتح والمطابقة والتقييم والتقرير النهائي.',
     featured: ['registre_reception:read', 'pli:open', 'offre_technique:evaluer', 'rapport_copeo:submit_to_sc'],
   },
   MEMBRE_COMITE_TECHNIQUE: {
-    fr: 'Produit les analyses et rapports techniques transmis à la COPEO.',
-    ar: 'ينجز التحاليل والتقارير التقنية المرسلة إلى لجنة COPEO.',
+    fr: "Produit les analyses et rapports techniques transmis à la commission interne d'évaluation.",
+    ar: 'ينجز التحاليل والتقارير التقنية المرسلة إلى لجنة التقييم الداخلية.',
     featured: ['analyse_technique:create', 'note_technique:create', 'rapport_technique:submit_to_copeo', 'offre_technique:read'],
   },
   RESP_VALID_INTERN: {

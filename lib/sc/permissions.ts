@@ -151,7 +151,7 @@ export type Permission = (typeof ROLE_PERMISSIONS)[SCRole][number];
 const ROLE_LABELS: Record<SCRole, { fr: string; ar: string }> = {
   RESP_SC: { fr: 'Responsable Service Contractant', ar: 'مسؤول المصلحة المتعاقدة' },
   REDACTEUR_CDC: { fr: 'Rédacteur CDC', ar: 'محرر دفتر الشروط' },
-  EVALUATEUR: { fr: 'Évaluateur COPEO', ar: 'مقيّم COPEO' },
+  EVALUATEUR: { fr: "Évaluateur (commission d'évaluation)", ar: 'مقيّم لجنة التقييم' },
   MEMBRE_COMITE_TECHNIQUE: { fr: 'Membre Comité Technique', ar: 'عضو اللجنة التقنية' },
   RESP_VALID_INTERN: { fr: 'Responsable Validation Interne', ar: 'مسؤول التحقق الداخلي' },
   VALIDATEUR_INTERNE_MARCHE: { fr: 'Validateur Interne — Marché', ar: 'مدقق داخلي — الصفقة' },
