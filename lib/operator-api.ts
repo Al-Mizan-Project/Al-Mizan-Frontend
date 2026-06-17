@@ -103,7 +103,7 @@ export type NotificationApi = {
   read_at: string | null;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8082';
 const APPELS_BASE = process.env.NEXT_PUBLIC_APPELS_SERVICE_URL || API_BASE;
 const DOCUMENTS_BASE = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || API_BASE;
 const SOUMISSIONS_BASE = process.env.NEXT_PUBLIC_SOUMISSIONS_SERVICE_URL || API_BASE;
@@ -164,7 +164,12 @@ export async function fetchAppelsOffres(): Promise<AppelOffreApi[]> {
 }
 
 export async function fetchAppelOffreById(appelId: number): Promise<AppelOffreApi> {
-  return fetchJson<AppelOffreApi>(`${APPELS_BASE}/appels-offres/${appelId}`);
+  const response = await fetch(`${APPELS_BASE}/appels-offres/${appelId}`);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+  return response.json();
 }
 
 export async function fetchAppelDocuments(appelId: number): Promise<AppelDocumentApi[]> {

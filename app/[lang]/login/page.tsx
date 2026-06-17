@@ -40,6 +40,10 @@ const ROLE_REDIRECTS: Record<string, string> = {
   resp_cm:                      '/fr/validation/dashboard/commission',
   validateur_externe_cdc:       '/fr/validation/dashboard/validatorCDC',
   validateur_externe_marche:    '/fr/validation/dashboard/validatorMarche',
+
+  // Noms bruts Django
+  commission_externe:           '/fr/validation/dashboard/commission',
+  tutelle:                      '/fr',
 };
 
 /**

@@ -12,7 +12,8 @@ import {
   faTimesCircle,
   faExclamationTriangle,
   faChartLine,
-  faArrowLeft
+  faArrowLeft,
+  faRobot
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -100,8 +101,8 @@ export default function SoumissionDetailPage({
           id: backend.id_soumission,
           appelOffre: {
             id: backend.id_appel_offre,
-            reference: localItem?.appelOffre.reference || appel.reference,
-            titre: localItem?.appelOffre.titre || appel.titre,
+            reference: localItem?.appelOffre.reference || backend.reference_ao || appel.reference,
+            titre: localItem?.appelOffre.titre || backend.titre_ao || appel.titre,
             serviceContractant:
               localItem?.appelOffre.serviceContractant || `Service #${appel.id_service_contractant}`,
             montantEstime: localItem?.appelOffre.montantEstime || Number(appel.montant_estime || 0),
@@ -112,6 +113,7 @@ export default function SoumissionDetailPage({
           conformiteAdmin: mapConformiteStatutToUi(backend.conformite_statut || undefined),
           conformiteTechnique: localItem?.conformiteTechnique || 'en_attente',
           conformiteFinanciere: localItem?.conformiteFinanciere || 'en_attente',
+          conformiteRapport: backend.conformite_rapport,
           motifRefus: localItem?.motifRefus,
           dateEvaluation: localItem?.dateEvaluation,
           documents: localItem?.documents?.length ? localItem.documents : inferredDocuments,
@@ -198,7 +200,13 @@ export default function SoumissionDetailPage({
       documentEncrypte: 'Document chiffré',
       offreTechnique: 'Offre technique',
       offreFinanciere: 'Offre financière chiffrée',
-      documentsAdmin: 'Documents administratifs'
+      documentsAdmin: 'Documents administratifs',
+      analyseIA: 'Analyse IA de conformité',
+      statutIA: 'Statut IA',
+      documentsManquants: 'Documents manquants',
+      documentsInvalides: 'Documents invalides',
+      aucunDocManquant: 'Aucun document manquant détecté',
+      aucunDocInvalide: 'Aucun document invalide détecté'
     },
     ar: {
       back: 'رجوع',
@@ -220,13 +228,17 @@ export default function SoumissionDetailPage({
       documentEncrypte: 'وثيقة مشفرة',
       offreTechnique: 'العرض التقني',
       offreFinanciere: 'العرض المالي المشفر',
-      documentsAdmin: 'الوثائق الإدارية'
+      documentsAdmin: 'الوثائق الإدارية',
+      analyseIA: 'تحليل المطابقة بالذكاء الاصطناعي',
+      statutIA: 'حالة الذكاء الاصطناعي',
+      documentsManquants: 'الوثائق الناقصة',
+      documentsInvalides: 'الوثائق غير الصالحة',
+      aucunDocManquant: 'لم يتم اكتشاف أي وثائق ناقصة',
+      aucunDocInvalide: 'لم يتم اكتشاف أي وثائق غير صالحة'
     }
   };
 
   const t = translations[lang as 'fr' | 'ar'] || translations.fr;
-
-  const effectiveConformiteAdmin = soumission?.conformiteAdmin || 'en_attente';
 
   const formatMontant = (montant: number) => {
     return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
@@ -379,44 +391,65 @@ export default function SoumissionDetailPage({
                   </p>
                 </div>
 
-                {/* Compliance Report */}
-                <div>
-                  <h3 className="text-lg font-bold text-[#0D2527] mb-4">{t.rapportConformite}</h3>
-                  <p className="mb-4 text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                    Le contrôle IA est déclenché par le service contractant. Cette vue opérateur affiche le statut de conformité.
-                  </p>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                      <span className="font-medium text-gray-700">{t.conformiteAdmin}</span>
-                      <span className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${
-                        getConformiteStatus(effectiveConformiteAdmin).bg
-                      } ${getConformiteStatus(effectiveConformiteAdmin).color}`}>
-                        <FontAwesomeIcon icon={getConformiteStatus(effectiveConformiteAdmin).icon} />
-                        {getConformiteStatus(effectiveConformiteAdmin).label}
-                      </span>
+                {/* AI Conformity Analysis */}
+                {soumission.conformiteAdmin !== 'en_attente' && (
+                  <div className="bg-gradient-to-br from-[#F0F9F4] to-[#E8F4F5] border-2 border-[#97A675] rounded-xl p-5">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1C4532, #00738C)' }}>
+                        <FontAwesomeIcon icon={faRobot} className="text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-[#1C4532]">{t.analyseIA}</h3>
+                        <p className="text-xs text-gray-500">{t.statutIA}</p>
+                      </div>
+                      <div className="ml-auto">
+                        <span className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 ${
+                          soumission.conformiteAdmin === 'conforme'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          <FontAwesomeIcon icon={soumission.conformiteAdmin === 'conforme' ? faCheckCircle : faTimesCircle} />
+                          {soumission.conformiteAdmin === 'conforme' ? 'CONFORME' : 'NON CONFORME'}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                      <span className="font-medium text-gray-700">{t.conformiteTechnique}</span>
-                      <span className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${
-                        getConformiteStatus(soumission.conformiteTechnique).bg
-                      } ${getConformiteStatus(soumission.conformiteTechnique).color}`}>
-                        <FontAwesomeIcon icon={getConformiteStatus(soumission.conformiteTechnique).icon} />
-                        {getConformiteStatus(soumission.conformiteTechnique).label}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                      <span className="font-medium text-gray-700">{t.conformiteFinanciere}</span>
-                      <span className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${
-                        getConformiteStatus(soumission.conformiteFinanciere).bg
-                      } ${getConformiteStatus(soumission.conformiteFinanciere).color}`}>
-                        <FontAwesomeIcon icon={getConformiteStatus(soumission.conformiteFinanciere).icon} />
-                        {getConformiteStatus(soumission.conformiteFinanciere).label}
-                      </span>
-                    </div>
+                    {soumission.conformiteRapport && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="bg-white/70 rounded-lg p-3 border border-[#D6EAD4]">
+                          <p className="text-xs font-semibold text-gray-500 mb-2">{t.documentsManquants}</p>
+                          {soumission.conformiteRapport.missing_documents?.length ? (
+                            <ul className="text-xs text-gray-700 space-y-1">
+                              {soumission.conformiteRapport.missing_documents.map((d, i) => (
+                                <li key={i} className="flex items-center gap-1">
+                                  <span className="text-red-500">•</span>
+                                  {d}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-emerald-700 font-medium">{t.aucunDocManquant}</p>
+                          )}
+                        </div>
+                        <div className="bg-white/70 rounded-lg p-3 border border-[#D6EAD4]">
+                          <p className="text-xs font-semibold text-gray-500 mb-2">{t.documentsInvalides}</p>
+                          {soumission.conformiteRapport.invalid_documents?.length ? (
+                            <ul className="text-xs text-gray-700 space-y-1">
+                              {soumission.conformiteRapport.invalid_documents.map((d, i) => (
+                                <li key={i} className="flex items-center gap-1">
+                                  <span className="text-red-500">•</span>
+                                  {d}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-emerald-700 font-medium">{t.aucunDocInvalide}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
 
                 {/* Refusal Reason */}
                 {soumission.motifRefus && (

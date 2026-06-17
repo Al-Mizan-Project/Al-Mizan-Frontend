@@ -7,7 +7,7 @@ import SoumettreButton from './SoumettreButton';
 
 async function fetchAppel(id: string) {
   const res = await fetch(
-    `http://localhost:8080/appels-offres/${id}`,
+    `http://localhost:8082/appels-offres/${id}`,
     { cache: 'no-store' }
   );
   if (!res.ok) return null;

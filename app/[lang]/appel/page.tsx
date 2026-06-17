@@ -16,7 +16,7 @@ async function fetchAppels(page: number, search?: string) {
   });
 
   const res = await fetch(
-    `http://localhost:8080/appels-offres?${params}`,
+    `http://localhost:8082/appels-offres?${params}`,
     { cache: 'no-store' }
   );
 
