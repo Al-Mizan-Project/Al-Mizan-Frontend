@@ -3,6 +3,7 @@ import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useState, FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useAuth } from '@/contexts/AuthContext';
+import { AuthAPIError } from '@/lib/api';
 import {
   faEnvelope,
   faLock,
@@ -92,7 +93,7 @@ export default function LoginPage({ params }: PageProps) {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { login: authLogin, user } = useAuth();
+  const { login: authLogin } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -135,11 +136,13 @@ export default function LoginPage({ params }: PageProps) {
       const redirectTo = getRedirectPath(roleName, idRole);
       router.push(redirectTo);
       return;
-    } catch (err: any) {
-      if (err.response?.status === 401 || err.message?.includes('Invalid') || err.message?.includes('Identifiants')) {
-        setError(isArabic ? 'بيانات الدخول غير صحيحة' : 'Identifiants incorrects');
+    } catch (err: unknown) {
+      if (err instanceof AuthAPIError && err.code === 'INVALID_CREDENTIALS') {
+        setError(isArabic ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة' : 'Adresse e-mail ou mot de passe incorrect.');
+      } else if (err instanceof AuthAPIError) {
+        setError(isArabic ? 'تعذر تسجيل الدخول حاليا' : 'Connexion impossible pour le moment.');
       } else {
-        setError(err.message || (isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion'));
+        setError(isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion.');
       }
     } finally {
       setLoading(false);

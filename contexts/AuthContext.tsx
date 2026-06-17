@@ -113,8 +113,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(storedToken);
       try {
         setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Failed to parse stored user:', e);
+      } catch {
+        clearAuthSession();
+        setToken(null);
+        setUser(null);
       }
       setupAuthInterceptor(storedToken);
     }
@@ -134,14 +136,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
-    try {
-      const data: LoginResponse = await authAPI.login(email, password);
-      // ← No redirect here: LoginPage handles role-based redirection
-      setSession(data.access, data.refresh, data.user);
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
+    const data: LoginResponse = await authAPI.login(email, password);
+    // ← No redirect here: LoginPage handles role-based redirection
+    setSession(data.access, data.refresh, data.user);
   };
 
   const logout = () => {

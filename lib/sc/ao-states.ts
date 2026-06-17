@@ -5,41 +5,26 @@
 
 import type { Permission } from './permissions';
 
+// Minimal, generalized lifecycle. The date-driven solicitation sub-phases and the
+// attribution/recours steps are folded into single states; failed/cancelled outcomes
+// fold into CLOTURE. The server stays the source of truth for `statut`.
 export type AOState =
-  | 'BROUILLON'
   | 'EN_VALIDATION'
   | 'REFUSE'
   | 'VALIDE'
   | 'PUBLIE'
-  | 'OUVERT'
-  | 'CLOTURE_DEPOT'
-  | 'EN_OUVERTURE'
   | 'EN_EVALUATION'
-  | 'ATTRIBUTION_PROVISOIRE'
-  | 'RECOURS_EN_COURS'
-  | 'ATTRIBUTION_DEFINITIVE'
-  | 'INFRUCTUEUX'
-  | 'ANNULE'
   | 'CLOTURE';
 
 type Meta = { fr: string; ar: string; tone: 'neutral' | 'info' | 'warning' | 'success' | 'danger' };
 
 export const STATE_META: Record<AOState, Meta> = {
-  BROUILLON:              { fr: 'Brouillon',               ar: 'مسودة',              tone: 'neutral' },
-  EN_VALIDATION:          { fr: 'En validation',           ar: 'قيد التحقق',         tone: 'info' },
-  REFUSE:                 { fr: 'Refusé',                  ar: 'مرفوض',              tone: 'danger' },
-  VALIDE:                 { fr: 'Validé',                  ar: 'مُصادق عليه',        tone: 'success' },
-  PUBLIE:                 { fr: 'Publié',                  ar: 'منشور',              tone: 'info' },
-  OUVERT:                 { fr: 'Ouvert au dépôt',         ar: 'مفتوح للإيداع',      tone: 'success' },
-  CLOTURE_DEPOT:          { fr: 'Dépôt clôturé',           ar: 'أُغلق الإيداع',      tone: 'warning' },
-  EN_OUVERTURE:           { fr: 'Ouverture des plis',      ar: 'فتح الأظرفة',        tone: 'warning' },
-  EN_EVALUATION:          { fr: 'En évaluation',           ar: 'قيد التقييم',        tone: 'warning' },
-  ATTRIBUTION_PROVISOIRE: { fr: 'Attribution provisoire',  ar: 'إسناد مؤقت',         tone: 'info' },
-  RECOURS_EN_COURS:       { fr: 'Recours en cours',        ar: 'طعن قيد المعالجة',   tone: 'warning' },
-  ATTRIBUTION_DEFINITIVE: { fr: 'Attribution définitive',  ar: 'إسناد نهائي',        tone: 'success' },
-  INFRUCTUEUX:            { fr: 'Infructueux',             ar: 'غير مثمر',           tone: 'danger' },
-  ANNULE:                 { fr: 'Annulé',                  ar: 'ملغى',               tone: 'danger' },
-  CLOTURE:                { fr: 'Clôturé',                 ar: 'مُغلق',              tone: 'neutral' },
+  EN_VALIDATION: { fr: 'En validation', ar: 'قيد التحقق',  tone: 'info' },
+  REFUSE:        { fr: 'Refusé',        ar: 'مرفوض',       tone: 'danger' },
+  VALIDE:        { fr: 'Validé',        ar: 'مُصادق عليه', tone: 'success' },
+  PUBLIE:        { fr: 'Publié',        ar: 'منشور',       tone: 'info' },
+  EN_EVALUATION: { fr: 'En évaluation', ar: 'قيد التقييم', tone: 'warning' },
+  CLOTURE:       { fr: 'Clôturé',       ar: 'مُغلق',       tone: 'neutral' },
 };
 
 // The 58 Algerian wilayas, in official order — used for the AO location dropdown.
@@ -119,34 +104,35 @@ function parse(d?: string | null): number | null {
 export function deriveState(ao: AOLike, now: number = Date.now()): AOState {
   const s = (ao.statut || '').toLowerCase().replace(/\s+/g, '_');
 
-  if (ao.recours_en_cours) return 'RECOURS_EN_COURS';
-  if (ao.attribution_statut === 'definitive') return 'ATTRIBUTION_DEFINITIVE';
-  if (ao.attribution_statut === 'provisoire') return 'ATTRIBUTION_PROVISOIRE';
+  // Evaluation, provisional/definitive attribution and recours are one tracked phase.
+  if (ao.recours_en_cours) return 'EN_EVALUATION';
+  if (ao.attribution_statut === 'definitive' || ao.attribution_statut === 'provisoire') return 'EN_EVALUATION';
 
-  if (s === 'brouillon') return 'BROUILLON';
-  if (s === 'annule' || s === 'annulé') return 'ANNULE';
-  if (s === 'infructueux') return 'INFRUCTUEUX';
+  if (s === 'annule' || s === 'annulé' || s === 'infructueux'
+      || s === 'ferme' || s === 'fermé' || s === 'cloture' || s === 'clôturé') return 'CLOTURE';
   if (s === 'refuse' || s === 'refusé') return 'REFUSE';
-  if (s === 'ferme' || s === 'fermé' || s === 'cloture' || s === 'clôturé') return 'CLOTURE';
-  if (s === 'non_validé' || s === 'non_valide' || s === 'en_validation') return 'EN_VALIDATION';
+  // No standalone draft state anymore: a draft is simply pending validation.
+  if (s === 'brouillon' || s === 'non_validé' || s === 'non_valide' || s === 'en_validation') return 'EN_VALIDATION';
 
   if (s === 'validé' || s === 'valide' || s === 'publié' || s === 'publie' || s === 'ouvert' || s === 'verifié' || s === 'verifie') {
     const pub = parse(ao.date_publication);
     const lim = parse(ao.date_limite_soumission);
     const plis = parse(ao.date_ouverture_plis);
+    // Validated but not yet published (no publication reached) → still awaiting publication.
     if (pub && now < pub) return 'VALIDE';
-    if (!lim) return s.startsWith('pub') ? 'PUBLIE' : 'VALIDE';
-    if (now < lim) return 'OUVERT';
-    if (plis && now < plis) return 'CLOTURE_DEPOT';
-    return 'EN_OUVERTURE';
+    if (!lim) return s.startsWith('pub') || s === 'ouvert' ? 'PUBLIE' : 'VALIDE';
+    // Open for deposit, then deposit closed awaiting opening — all one "Publié" phase.
+    if (now < lim) return 'PUBLIE';
+    if (plis && now < plis) return 'PUBLIE';
+    // Plis opening time reached → evaluation/attribution phase.
+    return 'EN_EVALUATION';
   }
 
   return 'EN_VALIDATION';
 }
 
 export interface AOAction {
-  id: 'continuer' | 'supprimer' | 'soumettre' | 'modifier' | 'publier' | 'cloturer_depot'
-    | 'ouvrir_plis' | 'attribuer' | 'consulter_recours';
+  id: 'modifier' | 'publier' | 'attribuer' | 'consulter_recours';
   fr: string;
   ar: string;
   permission: Permission;
@@ -154,33 +140,19 @@ export interface AOAction {
 }
 
 const A: Record<AOAction['id'], AOAction> = {
-  continuer:        { id: 'continuer',        fr: "Continuer l'édition",        ar: 'متابعة التحرير',     permission: 'marche:update' },
-  supprimer:        { id: 'supprimer',        fr: 'Supprimer le brouillon',     ar: 'حذف المسودة',        permission: 'marche:update', tone: 'danger' },
-  soumettre:        { id: 'soumettre',        fr: 'Soumettre pour validation',  ar: 'إرسال للتحقق',       permission: 'cdc:submit_validation', tone: 'primary' },
   modifier:         { id: 'modifier',         fr: 'Modifier et resoumettre',    ar: 'تعديل وإعادة الإرسال', permission: 'marche:update' },
   publier:          { id: 'publier',          fr: "Publier l'appel d'offres",   ar: 'نشر المناقصة',       permission: 'marche:publish', tone: 'primary' },
-  cloturer_depot:   { id: 'cloturer_depot',   fr: 'Clôturer le dépôt',          ar: 'إغلاق الإيداع',      permission: 'marche:update' },
-  ouvrir_plis:      { id: 'ouvrir_plis',      fr: "Déclencher l'ouverture des plis", ar: 'بدء فتح الأظرفة', permission: 'marche:update' },
   attribuer:        { id: 'attribuer',        fr: "Statuer sur l'attribution",  ar: 'البت في الإسناد',    permission: 'marche:attribuer', tone: 'primary' },
   consulter_recours:{ id: 'consulter_recours',fr: 'Consulter les recours',      ar: 'الاطلاع على الطعون', permission: 'recours:read' },
 };
 
 const STATE_ACTIONS: Record<AOState, AOAction['id'][]> = {
-  BROUILLON:              ['continuer', 'soumettre', 'supprimer'],
-  EN_VALIDATION:          [],
-  REFUSE:                 ['modifier'],
-  VALIDE:                 ['publier'],
-  PUBLIE:                 [],
-  OUVERT:                 ['cloturer_depot'],
-  CLOTURE_DEPOT:          ['ouvrir_plis'],
-  EN_OUVERTURE:           [],
-  EN_EVALUATION:          [],
-  ATTRIBUTION_PROVISOIRE: ['attribuer', 'consulter_recours'],
-  RECOURS_EN_COURS:       ['consulter_recours'],
-  ATTRIBUTION_DEFINITIVE: [],
-  INFRUCTUEUX:            [],
-  ANNULE:                 [],
-  CLOTURE:                [],
+  EN_VALIDATION: [],
+  REFUSE:        ['modifier'],
+  VALIDE:        ['publier'],
+  PUBLIE:        [],
+  EN_EVALUATION: ['attribuer', 'consulter_recours'],
+  CLOTURE:       [],
 };
 
 /** Actions allowed in a state and permitted for the user (`can`). */

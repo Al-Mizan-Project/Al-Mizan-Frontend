@@ -27,7 +27,6 @@ const STATUT_STYLE: Record<SystemUser['statut'], string> = {
   'En attente': 'text-amber-600',
   'Bloqué': 'text-red-600',
 };
-const ROWS_PER_PAGE = 10;
 
 type SortDir = 'asc' | 'desc' | null;
 

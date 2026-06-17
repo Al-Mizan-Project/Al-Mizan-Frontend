@@ -124,9 +124,9 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
   }
 
   // ── Upload de tous les docs en attente de l'étape docs ───────────────────
-  async function flushPendingUploads(): Promise<boolean> {
+  async function flushPendingUploads(): Promise<DocItem[] | null> {
     const pending = docs.filter((d) => d.file);
-    if (pending.length === 0) return true;
+    if (pending.length === 0) return docs;
 
     // Marquer uploading
     setDocs((prev) => prev.map((d) => d.file ? { ...d, uploading: true } : d));
@@ -135,12 +135,13 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
       const results = await Promise.all(
         docs.map((d) => d.file ? uploadOne(d) : Promise.resolve(d))
       );
-      setDocs(results.map((d) => ({ ...d, uploading: false })));
-      return true;
+      const uploaded = results.map((d) => ({ ...d, uploading: false }));
+      setDocs(uploaded);
+      return uploaded;
     } catch (err) {
       setDocs((prev) => prev.map((d) => ({ ...d, uploading: false })));
       toast('error', errorText(err, isArabic ? 'تعذر رفع الوثائق.' : 'Échec du téléversement des documents.'));
-      return false;
+      return null;
     }
   }
 
@@ -172,7 +173,7 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     if (stepKey === 'oe') {
       if (type === 'restreint'   && selectedOEs.length < 3)  return isArabic ? 'يجب اختيار 3 متعاملين على الأقل.' : 'Sélectionnez au moins 3 opérateurs.';
       if (type === 'gre_a_gre'   && selectedOEs.length !== 1) return isArabic ? 'اختر متعاملا واحدا فقط.' : 'Sélectionnez exactement un opérateur.';
-      if (type === 'consultation' && selectedOEs.length < 1)  return isArabic ? 'اختر متعاملا واحدا على الأقل.' : 'Sélectionnez au moins un opérateur.';
+      if (type === 'consultation' && selectedOEs.length !== 1) return isArabic ? 'اختر متعاملا واحدا فقط.' : 'Sélectionnez exactement un opérateur.';
       if ((type === 'restreint' || type === 'gre_a_gre') && !hasJustification)
         return isArabic ? 'وثيقة تبرير الاختيار إلزامية.' : 'Le document de justification est obligatoire.';
       if (type === 'consultation' && !hasBesoin)
@@ -195,19 +196,19 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     // ── Étape docs : uploader maintenant, au clic Suivant ──────────────────
     if (currentKey === 'docs') {
       setSaving(true);
-      const ok = await flushPendingUploads();
+      const uploaded = await flushPendingUploads();
       setSaving(false);
-      if (!ok) return;
+      if (!uploaded) return;
     }
 
     if (currentKey === 'details' && draftId) await persist();
     setStep((s) => Math.min(s + 1, steps.length - 1));
   }
 
-  function buildPayload() {
-    const cdc          = docs.find((d) => d.kind === 'cdc'           && d.id_document);
-    const justification = docs.find((d) => d.kind === 'justification' && d.id_document);
-    const besoin        = docs.find((d) => d.kind === 'besoin'        && d.id_document);
+  function buildPayload(sourceDocs: DocItem[] = docs) {
+    const cdc          = sourceDocs.find((d) => d.kind === 'cdc'           && d.id_document);
+    const justification = sourceDocs.find((d) => d.kind === 'justification' && d.id_document);
+    const besoin        = sourceDocs.find((d) => d.kind === 'besoin'        && d.id_document);
     const inviteIds     = selectedOEs.map(Number).filter((id) => Number.isFinite(id) && id > 0);
     return {
       id_service_contractant: serviceId ? Number(serviceId) : undefined,
@@ -227,8 +228,8 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
       id_doc_cdc: cdc?.id_document,
       id_doc_justification: justification?.id_document,
       id_doc_besoin: besoin?.id_document,
-      operateurs_invites: type === 'restreint' || type === 'consultation' ? inviteIds : undefined,
-      id_operateur_choisi: type === 'gre_a_gre' ? inviteIds[0] : undefined,
+      operateurs_invites: type === 'restreint' ? inviteIds : undefined,
+      id_operateur_choisi: type === 'gre_a_gre' || type === 'consultation' ? inviteIds[0] : undefined,
     };
   }
 
@@ -248,11 +249,17 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     const err = validateStep(steps[step].key);
     if (err) { toast('warning', err); return; }
     setSaving(true);
+    const uploadedDocs = await flushPendingUploads();
+    if (!uploadedDocs) {
+      setSaving(false);
+      return;
+    }
     let saved;
     try {
+      const payload = buildPayload(uploadedDocs);
       saved = draftId
-        ? await scApi.updateAppel(draftId, buildPayload())
-        : await scApi.createAppel(buildPayload());
+        ? await scApi.updateAppel(draftId, payload)
+        : await scApi.createAppel(payload);
     } catch (err) {
       toast('error', errorText(err, isArabic ? 'تعذر حفظ المناقصة على الخادم. تحقق من الوثائق والمتعاملين.' : "Impossible d'enregistrer l'appel d'offres. Vérifiez les documents et les opérateurs."));
       setSaving(false);
@@ -268,7 +275,7 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
         ));
       }
       setDraftId(id);
-      const extraDocIds = docs
+      const extraDocIds = uploadedDocs
         .filter((d) => d.kind === 'annexe' && d.id_document)
         .map((d) => d.id_document as number);
       try {
@@ -628,7 +635,7 @@ function DetailsStep({
 
 // ─── Step 3: OE selection ─────────────────────────────────────────────────────
 function OEStep({ isArabic, type, operateurs, selected, setSelected, search, setSearch, docRef, docs, setDocs }: any) {
-  const single = type === 'gre_a_gre';
+  const single = type === 'gre_a_gre' || type === 'consultation';
   const toggle = (id: string | number) => {
     if (single) { setSelected([id]); return; }
     setSelected((cur: (string | number)[]) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);

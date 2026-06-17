@@ -83,7 +83,7 @@ function DetailInner() {
   const actions = actionsForState(state, can);
 
   async function run(a: AOAction) {
-    if (a.id === 'continuer' || a.id === 'modifier') { router.push(`${base}/marches/${id}/modifier`); return; }
+    if (a.id === 'modifier') { router.push(`${base}/marches/${id}/modifier`); return; }
     if (a.id === 'consulter_recours') { setTab('recours'); return; }
     if (a.id === 'attribuer') { setTab('attribution'); return; }
     const ok = await confirm({
@@ -93,11 +93,7 @@ function DetailInner() {
     });
     if (!ok) return;
     try {
-      if (a.id === 'supprimer') { await scApi.deleteDraft(id); toast('success', isArabic ? 'تم الحذف.' : 'Brouillon supprimé.'); router.push(`${base}/marches`); return; }
-      if (a.id === 'soumettre') await scApi.submitForValidation(id);
       if (a.id === 'publier') await scApi.publishAppel(id);
-      if (a.id === 'cloturer_depot') await scApi.clotureDepot(id);
-      if (a.id === 'ouvrir_plis') await scApi.ouvrirPlis(id);
       toast('success', isArabic ? 'تم تنفيذ الإجراء.' : 'Action effectuée.');
       load();
     } catch (err) {
@@ -252,7 +248,7 @@ function DetailInner() {
         )}
 
         {tab === 'attribution' && (
-          attribution && state === 'ATTRIBUTION_PROVISOIRE' && can('marche:attribuer') ? (
+          attribution && state === 'EN_EVALUATION' && can('marche:attribuer') ? (
             <div>
               <p className="text-sm text-gray-600 mb-4">{isArabic ? 'البت في رأي لجنة التقييم (إسناد مؤقت).' : "Statuez sur l'avis de la commission d'évaluation (attribution provisoire)."}</p>
               <p className="text-xs text-gray-400 mb-4">Attribution #{attribution.id} · Soumission #{attribution.soumission_id}</p>
