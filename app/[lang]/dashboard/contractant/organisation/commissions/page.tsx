@@ -61,6 +61,7 @@ function CommissionsInner() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<FormState | null>(null);
   const [panel, setPanel] = useState<MemberPanel | null>(null);
+  const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
 
   const coPeoCandidates = useMemo(
     () => membres.filter((m) => {
@@ -123,8 +124,8 @@ function CommissionsInner() {
       toast('success', isArabic ? 'تم إنشاء اللجنة.' : 'Commission créée.');
       setForm(null);
       load();
-    } catch {
-      toast('error', isArabic ? 'تعذر إنشاء اللجنة.' : 'Création de la commission indisponible.');
+    } catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر إنشاء اللجنة.' : 'Création de la commission indisponible.'));
     }
   }
 
@@ -139,9 +140,7 @@ function CommissionsInner() {
       await scApi.deleteCommissionEvaluation(commission.id_comission);
       toast('success', isArabic ? 'تم الحذف.' : 'Commission supprimée.');
       load();
-    } catch {
-      toast('error', isArabic ? 'تعذر الحذف.' : 'Suppression indisponible.');
-    }
+    } catch (err) { toast('error', errorText(err, isArabic ? 'تعذر الحذف.' : 'Suppression indisponible.')); }
   }
 
   async function toggleMember(commission: CommissionEvaluation, utilisateurId: number, checked: boolean, lbl: Label = 'membre') {
@@ -150,9 +149,7 @@ function CommissionsInner() {
       else await scApi.removeCommissionEvaluationMembre(commission.id_comission, utilisateurId);
       toast('success', isArabic ? 'تم تحديث الأعضاء.' : 'Membres mis à jour.');
       load();
-    } catch {
-      toast('error', isArabic ? 'تعذر تحديث الأعضاء.' : 'Mise à jour indisponible.');
-    }
+    } catch (err) { toast('error', errorText(err, isArabic ? 'تعذر تحديث الأعضاء.' : 'Mise à jour indisponible.')); }
   }
 
   async function toggleCT(commission: CommissionEvaluation, utilisateurId: number, checked: boolean) {
@@ -161,9 +158,7 @@ function CommissionsInner() {
       else await scApi.removeCT(commission.id_comission, utilisateurId);
       toast('success', isArabic ? 'تم تحديث اللجنة التقنية.' : 'Comité technique mis à jour.');
       load();
-    } catch {
-      toast('error', isArabic ? 'تعذر تحديث اللجنة التقنية.' : 'Mise à jour CT indisponible.');
-    }
+    } catch (err) { toast('error', errorText(err, isArabic ? 'تعذر تحديث اللجنة التقنية.' : 'Mise à jour CT indisponible.')); }
   }
 
   if (loading) return <Spinner />;
@@ -349,5 +344,5 @@ function Chooser({
 }
 
 export default function CommissionsPage() {
-  return <Guard anyOf={['membre_civ:manage', 'role:assign', 'marche:create']}><CommissionsInner /></Guard>;
+  return <Guard anyOf={['role:assign']}><CommissionsInner /></Guard>;
 }

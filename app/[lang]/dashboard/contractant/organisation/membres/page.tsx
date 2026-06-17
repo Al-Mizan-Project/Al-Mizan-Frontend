@@ -8,7 +8,9 @@ import { scApi, type Membre } from '@/lib/sc/api';
 import { ALL_SC_ROLES, roleLabel, type SCRole } from '@/lib/sc/permissions';
 import { Card, PageHeader, Spinner, EmptyState, Badge, Modal, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
 
-const EMPTY = { nom: '', prenom: '', email: '', telephone: '', fonction: '', role: 'REDACTEUR_CDC' as SCRole };
+const EMPTY = { nom: '', prenom: '', email: '', telephone: '', fonction: '', role: 'REDACTEUR_CDC' as SCRole, password: '' };
+
+type Credentials = { email: string; password: string | null };
 
 function MembresInner() {
   const { lang } = useParams() as { lang: string };
@@ -19,7 +21,9 @@ function MembresInner() {
   const [membres, setMembres] = useState<Membre[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<typeof EMPTY | null>(null);
+  const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [saving, setSaving] = useState(false);
+  const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
 
   async function load() {
     if (orgId) setMembres(await scApi.listMembres(orgId));
@@ -29,13 +33,15 @@ function MembresInner() {
 
   async function create() {
     if (!form?.nom || !form.prenom || !form.email) { toast('warning', isArabic ? 'الحقول الإلزامية ناقصة.' : 'Champs obligatoires manquants.'); return; }
+    if (form.password && form.password.length < 12) { toast('warning', isArabic ? 'كلمة المرور يجب أن تحتوي على 12 حرفا على الأقل.' : 'Le mot de passe doit contenir au moins 12 caractères.'); return; }
     setSaving(true);
     try {
-      await scApi.createCollaborateur({ ...form, id_organisation: orgId });
-      toast('success', isArabic ? 'تم إنشاء العضو. أُرسل رابط التفعيل بالبريد.' : "Membre créé — un lien d'activation a été envoyé par email.");
+      const result = await scApi.createCollaborateur({ ...form, password: form.password || undefined, id_organisation: orgId });
+      setCredentials({ email: result.email || form.email, password: result.temporary_password || form.password || null });
+      toast('success', isArabic ? 'تم إنشاء العضو. لا يتم إرسال رابط تفعيل.' : "Membre créé — aucun lien d'activation n'est envoyé.");
       setForm(null); load();
-    } catch {
-      toast('error', isArabic ? 'تعذر إنشاء العضو.' : 'Création indisponible côté serveur.');
+    } catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر إنشاء العضو.' : 'Création indisponible côté serveur.'));
     } finally { setSaving(false); }
   }
 
@@ -43,12 +49,12 @@ function MembresInner() {
     const ok = await confirm({ title: isArabic ? 'تعطيل العضو' : 'Désactiver le membre', message: `${m.prenom} ${m.nom}`, danger: true });
     if (!ok) return;
     try { await scApi.deactivateMembre(m.id_membre); toast('success', isArabic ? 'تم التعطيل.' : 'Membre désactivé.'); load(); }
-    catch { toast('error', isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.'); }
+    catch (err) { toast('error', errorText(err, isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.')); }
   }
 
   async function changeRole(m: Membre, role: string) {
     try { await scApi.assignRole(m.id_membre, role); toast('success', isArabic ? 'تم تحديث الدور.' : 'Rôle mis à jour.'); load(); }
-    catch { toast('error', isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.'); }
+    catch (err) { toast('error', errorText(err, isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.')); }
   }
 
   if (loading) return <Spinner />;
@@ -114,7 +120,28 @@ function MembresInner() {
                 {ALL_SC_ROLES.map((r) => <option key={r} value={r}>{roleLabel(r, lang)}</option>)}
               </select>
             </div>
-            <p className="sm:col-span-2 text-xs text-gray-400">{isArabic ? 'سيتلقى العضو رابط تفعيل بالبريد لتعيين كلمة المرور.' : "Le membre recevra un lien d'activation par email pour définir son mot de passe."}</p>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold text-gray-500">{isArabic ? 'كلمة المرور الأولية' : 'Mot de passe initial'}</label>
+              <input type="password" className={fcls} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={isArabic ? 'اتركه فارغا لتوليد كلمة مرور' : 'Laisser vide pour générer un mot de passe'} />
+              <p className="mt-1 text-xs text-gray-400">{isArabic ? 'لن يتم إرسال رابط تفعيل. أرسل كلمة المرور للعضو بنفسك.' : "Aucun lien d'activation ne sera envoyé. Communiquez ce mot de passe au membre."}</p>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!credentials}
+        title={isArabic ? 'بيانات الدخول — تظهر مرة واحدة' : 'Identifiants — affichage unique'}
+        onClose={() => setCredentials(null)}
+        footer={<button className={PRIMARY_BTN} style={PRIMARY_BTN_STYLE} onClick={() => setCredentials(null)}>{isArabic ? 'فهمت' : 'J’ai noté'}</button>}
+      >
+        {credentials && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">{isArabic ? 'انسخ هذه البيانات الآن. لن تظهر مرة أخرى.' : "Copiez ces informations maintenant. Elles ne seront plus affichées."}</p>
+            <div className="rounded-2xl bg-[#F4F7F4] p-4 space-y-2 text-sm">
+              <p><span className="font-semibold text-gray-500">Email</span><br /><span style={{ color: '#1C4532' }}>{credentials.email}</span></p>
+              <p><span className="font-semibold text-gray-500">{isArabic ? 'كلمة المرور' : 'Mot de passe'}</span><br /><span className="font-mono" style={{ color: '#1C4532' }}>{credentials.password || '—'}</span></p>
+            </div>
           </div>
         )}
       </Modal>

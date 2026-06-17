@@ -11,13 +11,14 @@ import { Card, PageHeader, Spinner, EmptyState, Modal, useUI, PRIMARY_BTN, PRIMA
 function ValidationsInner() {
   const { lang } = useParams() as { lang: string };
   const isArabic = lang === 'ar';
-  const { ready, orgId, can } = useSCSession();
+  const { ready, orgId, membreId, can } = useSCSession();
   const { toast, confirm } = useUI();
 
   const [queue, setQueue] = useState<AppelOffre[]>([]);
   const [membres, setMembres] = useState<Membre[]>([]);
   const [loading, setLoading] = useState(true);
   const [reject, setReject] = useState<{ ao: AppelOffre; text: string } | null>(null);
+  const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
 
   const canDecide = can('marche:valider_intern') || can('cdc:valider_intern');
   const canAssign = can('dossier:assigner');
@@ -31,18 +32,21 @@ function ValidationsInner() {
   async function assign(ao: AppelOffre, membreId: string) {
     if (!membreId) return;
     try { await scApi.assignValidator(ao.id_appel_offres, membreId); toast('success', isArabic ? 'تم الإسناد.' : 'Validateur affecté.'); load(); }
-    catch { toast('error', isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.'); }
+    catch (err) { toast('error', errorText(err, isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.')); }
   }
   async function valider(ao: AppelOffre) {
     const ok = await confirm({ title: isArabic ? 'المصادقة' : 'Valider', message: ao.titre || ao.reference || '' });
     if (!ok) return;
-    try { await scApi.validerMarche(ao.id_appel_offres); toast('success', isArabic ? 'تمت المصادقة.' : 'Validé.'); load(); }
-    catch { toast('error', isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.'); }
+    try { await scApi.validerMarche(ao.id_appel_offres, '', membreId); toast('success', isArabic ? 'تمت المصادقة.' : 'Validé.'); load(); }
+    catch (err) { toast('error', errorText(err, isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.')); }
   }
   async function rejeter() {
     if (!reject) return;
-    try { await scApi.rejeterMarche(reject.ao.id_appel_offres, reject.text); toast('success', isArabic ? 'تم الرفض.' : 'Refusé.'); setReject(null); load(); }
-    catch { toast('error', isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.'); setReject(null); }
+    try { await scApi.rejeterMarche(reject.ao.id_appel_offres, reject.text, membreId); toast('success', isArabic ? 'تم الرفض.' : 'Refusé.'); setReject(null); load(); }
+    catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.'));
+      setReject(null);
+    }
   }
 
   if (loading) return <Spinner />;

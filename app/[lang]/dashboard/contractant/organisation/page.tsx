@@ -37,7 +37,7 @@ export default function OrganisationPage() {
       <PageHeader title={isArabic ? 'مؤسستي' : 'Mon organisation'} breadcrumb={isArabic ? 'المصلحة المتعاقدة' : 'Service Contractant'} />
       <Card className="p-5 max-w-2xl">
         {!org ? (
-          <EmptyState title={isArabic ? 'تعذر تحميل بيانات المؤسسة' : "Informations indisponibles"} hint={isArabic ? 'ستُحمّل من الخادم.' : 'Proviendront du backend.'} />
+          <EmptyState title={isArabic ? 'تعذر تحميل بيانات المؤسسة' : 'Informations indisponibles'} hint={isArabic ? 'ستُحمّل من الخادم.' : 'Proviendront du backend.'} />
         ) : (
           <div>
             {rows.map(([k, v]) => (

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { scApi, type CommissionEvaluation, type OperateurRegistre } from '@/lib/sc/api';
 import { useSCSession } from '@/lib/sc/session';
-import { AO_TYPE_META, aoTypeLabel, TYPES_SANS_PLANNING, TYPES_SANS_VALIDATION, type AOType } from '@/lib/sc/ao-states';
+import { AO_TYPE_META, aoTypeLabel, montantFitsType, typesForMontant, TYPES_SANS_PLANNING, TYPES_SANS_VALIDATION, type AOType } from '@/lib/sc/ao-states';
 import { Card, PageHeader, Spinner, EmptyState, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
 
 interface DocItem { id_document?: number; nom: string; kind: 'cdc' | 'justification' | 'besoin' | 'annexe'; uploading?: boolean }
@@ -49,12 +49,22 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
   const [oeSearch, setOeSearch] = useState('');
   const [loadingExisting, setLoadingExisting] = useState(!!appelId);
   const [saving, setSaving] = useState(false);
+  const [showMontantTypeError, setShowMontantTypeError] = useState(false);
   const cdcInput = useRef<HTMLInputElement>(null);
   const docInput = useRef<HTMLInputElement>(null);
 
   const type = details.type_procedure;
   const steps = useMemo(() => stepsFor(type), [type]);
   const noPlanning = type && TYPES_SANS_PLANNING.includes(type);
+
+  const hasMontantTypeMismatch = () => {
+    const montant = Number(details.montant_estime);
+    return !!details.type_procedure && Number.isFinite(montant) && montant > 0 && !montantFitsType(details.type_procedure as AOType, montant);
+  };
+
+  useEffect(() => {
+    setShowMontantTypeError(false);
+  }, [details.montant_estime, details.type_procedure]);
 
   // Load an existing draft (edit mode)
   useEffect(() => {
@@ -94,15 +104,17 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     }
   }, [type, oeSearch]);
 
+  const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
+
   async function uploadOne(file: File, kind: DocItem['kind'], name: string) {
     setDocs((d) => [...d, { nom: name, kind, uploading: true }]);
     try {
       const relatedType = kind === 'cdc' ? 'appel_offre_cdc' : kind === 'besoin' ? 'appel_offre_besoin' : kind === 'justification' ? 'appel_offre_justification' : 'appel_offre_doc';
       const res = await scApi.uploadDocument(file, relatedType);
       setDocs((d) => d.map((x) => (x.nom === name && x.uploading ? { ...x, id_document: res.id_document, uploading: false } : x)));
-    } catch {
+    } catch (err) {
       setDocs((d) => d.map((x) => (x.nom === name && x.uploading ? { ...x, uploading: false } : x)));
-      toast('error', isArabic ? 'تعذر رفع الوثيقة على الخادم.' : 'Téléversement serveur indisponible.');
+      toast('error', errorText(err, isArabic ? 'تعذر رفع الوثيقة على الخادم.' : 'Téléversement serveur indisponible.'));
     }
   }
 
@@ -116,6 +128,9 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     if (stepKey === 'details') {
       if (!details.reference || !details.titre || !details.montant_estime || !details.type_procedure)
         return isArabic ? 'يرجى ملء الحقول الإلزامية.' : 'Veuillez remplir les champs obligatoires.';
+      const montant = Number(details.montant_estime);
+      if (Number.isFinite(montant) && montant > 0 && !montantFitsType(details.type_procedure as AOType, montant))
+        return isArabic ? 'المبلغ غير مناسب لهذا النوع.' : 'Montant incompatible.';
       if (!noPlanning) {
         if (!details.date_publication || !details.date_limite_soumission || !details.date_ouverture_plis)
           return isArabic ? 'التواريخ إلزامية لهذا النوع.' : 'Les dates sont obligatoires pour ce type.';
@@ -139,9 +154,15 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
   }
 
   async function next() {
-    const err = validateStep(steps[step].key);
-    if (err) { toast('warning', err); return; }
-    if (steps[step].key === 'details' && draftId) await persist();
+    const currentKey = steps[step].key;
+    const err = validateStep(currentKey);
+    if (err) {
+      if (currentKey === 'details' && hasMontantTypeMismatch()) setShowMontantTypeError(true);
+      toast('warning', err);
+      return;
+    }
+    setShowMontantTypeError(false);
+    if (currentKey === 'details' && draftId) await persist();
     setStep((s) => Math.min(s + 1, steps.length - 1));
   }
 
@@ -176,8 +197,8 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     setSaving(true);
     try {
       await scApi.updateAppel(draftId, buildPayload());
-    } catch {
-      toast('error', isArabic ? 'تعذر حفظ التعديلات.' : 'Enregistrement serveur indisponible.');
+    } catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر حفظ التعديلات.' : 'Enregistrement serveur indisponible.'));
     } finally {
       setSaving(false);
     }
@@ -187,23 +208,39 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     const err = validateStep(steps[step].key);
     if (err) { toast('warning', err); return; }
     setSaving(true);
+    let saved;
     try {
-      const saved = draftId
+      saved = draftId
         ? await scApi.updateAppel(draftId, buildPayload())
         : await scApi.createAppel(buildPayload());
+    } catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر حفظ المناقصة على الخادم. تحقق من الوثائق واللجنة والمتعاملين.' : "Impossible d'enregistrer l'appel d'offres. Vérifiez les documents, la commission et les opérateurs."));
+      setSaving(false);
+      return;
+    }
+
+    try {
       const id = saved.id_appel_offres;
       setDraftId(id);
       const extraDocIds = docs
         .filter((d) => d.kind === 'annexe' && d.id_document)
         .map((d) => d.id_document as number);
-      await Promise.all(extraDocIds.map((docId) => scApi.attachDocument(id, docId)));
+      try {
+        await Promise.all(extraDocIds.map((docId) => scApi.attachDocument(id, docId)));
+      } catch (err) {
+        throw new Error(errorText(err, isArabic ? 'تعذر ربط الوثائق.' : "Impossible d'associer les documents."));
+      }
       if (type && !TYPES_SANS_VALIDATION.includes(type)) {
-        await scApi.submitForValidation(id);
+        try {
+          await scApi.submitForValidation(id);
+        } catch (err) {
+          throw new Error(errorText(err, isArabic ? 'تعذر إرسال المناقصة للمصادقة.' : "Impossible d'envoyer l'appel d'offres en validation."));
+        }
       }
       toast('success', isArabic ? 'تم إرسال المناقصة بنجاح.' : "Appel d'offres soumis avec succès.");
       router.push(`${base}/marches/${id}`);
-    } catch {
-      toast('error', isArabic ? 'تعذر حفظ المناقصة على الخادم. تحقق من الوثائق واللجنة والمتعاملين.' : "Impossible d'enregistrer l'appel d'offres. Vérifiez les documents, la commission et les opérateurs.");
+    } catch (err) {
+      toast('error', errorText(err, isArabic ? 'تم حفظ المناقصة لكن تعذرت خطوة الإنهاء.' : "L'appel d'offres est enregistré, mais une étape de finalisation a échoué."));
       setSaving(false);
     }
   }
@@ -254,6 +291,7 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
             commissions={commissions}
             selectedCommissionId={selectedCommissionId}
             setSelectedCommissionId={setSelectedCommissionId}
+            showMontantTypeError={showMontantTypeError}
           />
         )}
 
@@ -364,23 +402,47 @@ function DetailsStep({
   commissions,
   selectedCommissionId,
   setSelectedCommissionId,
+  showMontantTypeError,
 }: any) {
   const set = (k: keyof Details, v: string) => setDetails((d: Details) => ({ ...d, [k]: v }));
   const field = 'w-full mt-1 px-4 py-2.5 rounded-xl text-sm bg-[#F4F7F4] border border-transparent focus:border-[#97A675] focus:outline-none';
   const lbl = 'text-xs font-semibold text-gray-500';
+
+  const montant = details.montant_estime ? Number(details.montant_estime) : null;
+  const hasMontant = montant != null && Number.isFinite(montant) && montant > 0;
+  const selectedType = details.type_procedure as AOType | '';
+  const available = typesForMontant(hasMontant ? montant : null);
+  const typeOptions = selectedType && !available.includes(selectedType) ? [...available, selectedType] : available;
+  const montantInvalid = showMontantTypeError && !!selectedType && hasMontant && !montantFitsType(selectedType, montant as number);
+
+  useEffect(() => {
+    if (!hasMontant || selectedType) return;
+    if (available.length === 1) set('type_procedure', available[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [montant]);
+
   return (
     <div>
       <h3 className="text-lg font-bold mb-5" style={{ color: '#1C4532' }}>{isArabic ? 'التفاصيل والنوع' : 'Détails & type'}</h3>
       <div className="grid sm:grid-cols-2 gap-4">
         <div><label className={lbl}>{isArabic ? 'المرجع' : 'Référence'} *</label><input className={field} value={details.reference} onChange={(e) => set('reference', e.target.value)} /></div>
-        <div><label className={lbl}>{isArabic ? 'المبلغ التقديري (DA)' : 'Montant estimé (DA)'} *</label><input type="number" className={field} value={details.montant_estime} onChange={(e) => set('montant_estime', e.target.value)} /></div>
+        <div>
+          <label className={lbl}>{isArabic ? 'المبلغ التقديري (DA)' : 'Montant estimé (DA)'} *</label>
+          <input type="number" value={details.montant_estime} onChange={(e) => set('montant_estime', e.target.value)}
+            className={`w-full mt-1 px-4 py-2.5 rounded-xl text-sm border focus:outline-none ${montantInvalid ? 'bg-red-50 border-red-400 text-red-600 focus:border-red-500' : 'bg-[#F4F7F4] border-transparent focus:border-[#97A675]'}`} />
+          {montantInvalid && selectedType && (
+            <p className="text-xs text-red-500 mt-1">
+              {isArabic ? 'المبلغ غير مناسب لهذا النوع.' : 'Montant incompatible.'}
+            </p>
+          )}
+        </div>
         <div className="sm:col-span-2"><label className={lbl}>{isArabic ? 'العنوان' : 'Titre'} *</label><input className={field} value={details.titre} onChange={(e) => set('titre', e.target.value)} /></div>
         <div className="sm:col-span-2"><label className={lbl}>{isArabic ? 'الوصف' : 'Description'}</label><textarea rows={3} className={field} value={details.description} onChange={(e) => set('description', e.target.value)} /></div>
         <div className="sm:col-span-2">
           <label className={lbl}>{isArabic ? 'نوع الإجراء' : 'Type de procédure'} *</label>
-          <select className={field} value={details.type_procedure} onChange={(e) => set('type_procedure', e.target.value)}>
-            <option value="">{isArabic ? '— اختر —' : '— Choisir —'}</option>
-            {(Object.keys(AO_TYPE_META) as AOType[]).map((t) => <option key={t} value={t}>{isArabic ? AO_TYPE_META[t].ar : AO_TYPE_META[t].fr}</option>)}
+          <select className={field} value={details.type_procedure} onChange={(e) => set('type_procedure', e.target.value)} disabled={!hasMontant}>
+            <option value="">{hasMontant ? (isArabic ? '— اختر —' : '— Choisir —') : (isArabic ? 'المبلغ أولا' : "Montant d'abord")}</option>
+            {typeOptions.map((t) => <option key={t} value={t}>{isArabic ? AO_TYPE_META[t].ar : AO_TYPE_META[t].fr}</option>)}
           </select>
         </div>
       </div>

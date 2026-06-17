@@ -60,17 +60,24 @@ export default function ContractantSidebar({ open, onClose }: { open: boolean; o
           {items.map((item) => {
             const active = isActive(item.segment);
             const href = item.segment ? `${base}/${item.segment}` : base;
+            const child = !!item.parentKey;
             return (
               <Link
                 key={item.key}
                 href={href}
                 onClick={onClose}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
+                className={`w-full flex items-center gap-3 py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
                   active ? 'text-white shadow-md' : 'text-gray-600 hover:bg-[#D6EAD4] hover:text-[#1C4532]'
-                }`}
+                } ${child ? (isArabic ? 'pr-8 pl-4' : 'pl-8 pr-4') : 'px-4'}`}
                 style={active ? { background: 'linear-gradient(135deg, #1C4532, #00738C)' } : {}}
               >
-                <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${active ? 'bg-white/20' : 'bg-[#F4F7F4] group-hover:bg-[#D6EAD4]'}`}>
+                {child && (
+                  <span
+                    className={`h-7 w-px flex-shrink-0 ${active ? 'bg-white/40' : 'bg-[#D6EAD4]'}`}
+                    aria-hidden="true"
+                  />
+                )}
+                <span className={`${child ? 'w-7 h-7' : 'w-8 h-8'} rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${active ? 'bg-white/20' : 'bg-[#F4F7F4] group-hover:bg-[#D6EAD4]'}`}>
                   {item.icon}
                 </span>
                 <span className="leading-tight">{isArabic ? item.ar : item.fr}</span>

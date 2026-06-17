@@ -16,6 +16,7 @@ function ClarificationsInner() {
   const [items, setItems] = useState<Clarification[]>([]);
   const [loading, setLoading] = useState(true);
   const [answer, setAnswer] = useState<{ c: Clarification; text: string } | null>(null);
+  const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
 
   async function load() {
     setItems(await scApi.listClarifications(serviceId || undefined));
@@ -26,7 +27,10 @@ function ClarificationsInner() {
   async function reply() {
     if (!answer || answer.c.id == null) return;
     try { await scApi.repondreClarification(answer.c.id, answer.text); toast('success', isArabic ? 'تم إرسال الرد.' : 'Réponse envoyée.'); setAnswer(null); load(); }
-    catch { toast('error', isArabic ? 'تعذر الإرسال.' : 'Envoi indisponible.'); setAnswer(null); }
+    catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر الإرسال.' : 'Envoi indisponible.'));
+      setAnswer(null);
+    }
   }
 
   if (loading) return <Spinner />;

@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import Guard from '@/components/contractant/Guard';
 import { useSCSession } from '@/lib/sc/session';
-import { scApi, type AppelOffre, type Attribution, type Clarification, type RegistreEntry, type SoumissionLite } from '@/lib/sc/api';
+import { scApi, type AppelOffre, type Attribution, type Clarification, type RecoursLite, type RegistreEntry, type SoumissionLite } from '@/lib/sc/api';
 import { deriveState, actionsForState, STATE_META, aoTypeLabel, type AOAction } from '@/lib/sc/ao-states';
-import { Card, PageHeader, Spinner, Badge, EmptyState, Modal, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
+import { Card, PageHeader, Spinner, Badge, EmptyState, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
 
 type Tab = 'infos' | 'documents' | 'soumissions' | 'attribution' | 'clarifications' | 'recours';
 
@@ -27,8 +27,8 @@ function DetailInner() {
   const [registre, setRegistre] = useState<RegistreEntry[]>([]);
   const [attribution, setAttribution] = useState<Attribution | null>(null);
   const [clarifs, setClarifs] = useState<Clarification[]>([]);
-  const [recours, setRecours] = useState<{ id: number | string; statut?: string; motif?: string }[]>([]);
-  const [reason, setReason] = useState<{ open: boolean; action: AOAction['id'] | null; text: string }>({ open: false, action: null, text: '' });
+  const [recours, setRecours] = useState<RecoursLite[]>([]);
+  const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
 
   const load = useCallback(async () => {
     const a = await scApi.getAppel(id);
@@ -51,7 +51,7 @@ function DetailInner() {
       });
     }
     if (tab === 'clarifications') scApi.listClarifications().then((all) => setClarifs(all.filter((c) => String(c.id_appel_offres) === String(id))));
-    if (tab === 'recours') scApi.listRecours(id).then(setRecours);
+    if (tab === 'recours') scApi.listRecoursForAppel(id).then(setRecours);
   }, [tab, ao, id]);
 
   if (loading) return <Spinner />;
@@ -64,8 +64,6 @@ function DetailInner() {
     if (a.id === 'continuer' || a.id === 'modifier') { router.push(`${base}/marches/${id}/modifier`); return; }
     if (a.id === 'consulter_recours') { setTab('recours'); return; }
     if (a.id === 'attribuer') { setTab('attribution'); return; }
-    if (a.id === 'annuler') { setReason({ open: true, action: 'annuler', text: '' }); return; }
-
     const ok = await confirm({
       title: isArabic ? 'تأكيد' : 'Confirmation',
       message: `${isArabic ? a.ar : a.fr} ?`,
@@ -80,19 +78,8 @@ function DetailInner() {
       if (a.id === 'ouvrir_plis') await scApi.ouvrirPlis(id);
       toast('success', isArabic ? 'تم تنفيذ الإجراء.' : 'Action effectuée.');
       load();
-    } catch {
-      toast('error', isArabic ? 'تعذر تنفيذ الإجراء على الخادم.' : "Action indisponible côté serveur.");
-    }
-  }
-
-  async function submitReason() {
-    try {
-      if (reason.action === 'annuler') { await scApi.annulerAppel(id, reason.text); toast('success', isArabic ? 'تم الإلغاء.' : 'Appel annulé.'); }
-      setReason({ open: false, action: null, text: '' });
-      load();
-    } catch {
-      toast('error', isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.');
-      setReason({ open: false, action: null, text: '' });
+    } catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر تنفيذ الإجراء على الخادم.' : "Action indisponible côté serveur."));
     }
   }
 
@@ -101,7 +88,7 @@ function DetailInner() {
     const ok = await confirm({ title: isArabic ? 'البت في الإسناد' : "Statuer sur l'attribution", message: isArabic ? 'قبول الإسناد المؤقت؟' : "Accepter l'attribution provisoire ?" });
     if (!ok) return;
     try { await scApi.validerAttribution(attribution.id); toast('success', isArabic ? 'تم.' : 'Décision enregistrée.'); load(); }
-    catch { toast('error', isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.'); }
+    catch (err) { toast('error', errorText(err, isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.')); }
   }
 
   async function validerReception(s: SoumissionLite) {
@@ -124,9 +111,7 @@ function DetailInner() {
       });
       toast('success', isArabic ? 'تم تسجيل الاستلام.' : 'Réception enregistrée.');
       setRegistre(await scApi.listRegistre(currentAo.commission_id));
-    } catch {
-      toast('error', isArabic ? 'تعذر تسجيل الاستلام.' : 'Enregistrement de réception indisponible.');
-    }
+    } catch (err) { toast('error', errorText(err, isArabic ? 'تعذر تسجيل الاستلام.' : 'Enregistrement de réception indisponible.')); }
   }
 
   const tabs: { key: Tab; fr: string; ar: string }[] = [
@@ -245,30 +230,19 @@ function DetailInner() {
         {tab === 'recours' && (
           recours.length === 0 ? <EmptyState title={isArabic ? 'لا توجد طعون' : 'Aucun recours'} /> : (
             <div className="space-y-2">
-              {recours.map((r) => (
-                <div key={r.id} className="flex items-center justify-between px-4 py-3 rounded-xl bg-[#F4F7F4]">
-                  <span className="text-sm" style={{ color: '#1C4532' }}>{r.motif || `Recours #${r.id}`}</span>
-                  <Badge tone="warning">{r.statut || '—'}</Badge>
-                </div>
-              ))}
+              {recours.map((r, idx) => {
+                const recoursId = r.id ?? r.id_recours ?? idx;
+                return (
+                  <div key={`${recoursId}-${r.date_depot || r.created_at || 'row'}-${idx}`} className="flex items-center justify-between px-4 py-3 rounded-xl bg-[#F4F7F4]">
+                    <span className="text-sm" style={{ color: '#1C4532' }}>{r.motif || `Recours #${recoursId}`}</span>
+                    <Badge tone="warning">{r.statut || '—'}</Badge>
+                  </div>
+                );
+              })}
             </div>
           )
         )}
       </Card>
-
-      <Modal
-        open={reason.open}
-        title={reason.action === 'annuler' ? (isArabic ? 'سبب الإلغاء' : "Motif d'annulation") : (isArabic ? 'سبب الرفض' : 'Motif de rejet')}
-        onClose={() => setReason({ open: false, action: null, text: '' })}
-        footer={
-          <>
-            <button className={GHOST_BTN} onClick={() => setReason({ open: false, action: null, text: '' })}>{isArabic ? 'إلغاء' : 'Annuler'}</button>
-            <button className={PRIMARY_BTN} style={PRIMARY_BTN_STYLE} onClick={submitReason} disabled={!reason.text.trim()}>{isArabic ? 'تأكيد' : 'Confirmer'}</button>
-          </>
-        }
-      >
-        <textarea rows={4} value={reason.text} onChange={(e) => setReason((r) => ({ ...r, text: e.target.value }))} placeholder={isArabic ? 'اكتب التبرير…' : 'Saisissez la justification…'} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#F4F7F4] border border-transparent focus:border-[#97A675] focus:outline-none" />
-      </Modal>
     </div>
   );
 }

@@ -19,6 +19,18 @@ interface ReqOptions {
   form?: FormData;
 }
 
+function detailFromPayload(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== 'object') return fallback;
+  const data = payload as Record<string, unknown>;
+  const direct = data.detail || data.message || data.error || data.erreur;
+  if (typeof direct === 'string') return direct;
+  for (const value of Object.values(data)) {
+    if (Array.isArray(value) && value.length > 0) return String(value[0]);
+    if (typeof value === 'string') return value;
+  }
+  return fallback;
+}
+
 /** Low-level proxied request. Attaches auth, auto-refreshes on 401, throws on non-2xx. */
 export async function proxy<T>(service: ProxyService, path: string, opts: ReqOptions = {}): Promise<T> {
   const params = new URLSearchParams({ path });
@@ -46,14 +58,20 @@ export async function proxy<T>(service: ProxyService, path: string, opts: ReqOpt
     let detail = `HTTP ${res.status}`;
     try {
       const data = await res.json();
-      detail = data?.detail || data?.message || data?.error || detail;
+      detail = detailFromPayload(data, detail);
     } catch {
       /* keep default */
     }
     throw new ApiFailure(res.status, detail);
   }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  const text = await res.text();
+  if (!text.trim()) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as T;
+  }
 }
 
 export class ApiFailure extends Error {
@@ -87,6 +105,10 @@ async function safeOne<T>(fn: () => Promise<T>): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+function sameId(a: unknown, b: unknown): boolean {
+  return a !== undefined && a !== null && b !== undefined && b !== null && String(a) === String(b);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,10 +184,11 @@ export interface CommissionInterne {
 
 export interface CommissionEvaluation {
   id_comission: number;
-  id_service?: number;
+  id_service?: number | string;
   nom_comission?: string;
   categorie?: string;
   membres?: CommissionEvaluationMembre[];
+  ct?: { id_utilisateur: number }[];
 }
 
 export interface CommissionEvaluationMembre {
@@ -182,8 +205,8 @@ export interface CommissionInterneMembre {
 }
 
 export interface RegistreEntry {
-  id?: number;
-  id_comission?: number;
+  id?: number | string;
+  id_comission?: number | string;
   id_soumission: number;
   numero_ordre: number;
   nom_oe: string;
@@ -193,12 +216,28 @@ export interface RegistreEntry {
 }
 
 export interface SoumissionLite {
+  id?: number | string;
   id_soumission: number;
   id_appel_offre?: number;
+  id_appel_offres?: number;
+  appel_id?: number;
   id_soumissionnaire?: number;
   date_soumission?: string;
   montant_financier?: string | number | null;
   statut?: string;
+}
+
+// Returned by collaborator / OE-responsable account creation. `temporary_password` is the
+// generated password to relay (only present when the backend did not send an activation link).
+export interface CompteCreationResult {
+  message?: string;
+  id_membre?: string | number;
+  id_utilisateur?: string | number;
+  organisation_id?: string | number;
+  operateur_id?: string | number;
+  email?: string;
+  activation_url?: string | null;
+  temporary_password?: string | null;
 }
 
 export interface DemandeOE {
@@ -208,6 +247,19 @@ export interface DemandeOE {
   statut?: string;
   created_at?: string;
   id_service_contractant?: number;
+}
+
+export interface RecoursLite {
+  id?: number | string;
+  id_recours?: number | string;
+  id_appel_offre?: number | string;
+  id_appel_offres?: number | string;
+  appel_id?: number | string;
+  id_soumission?: number | string;
+  statut?: string;
+  motif?: string;
+  created_at?: string;
+  date_depot?: string;
 }
 
 export interface Clarification {
@@ -261,7 +313,7 @@ export const scApi = {
     proxy<AppelOffre>('appels', `appels-offres/${id}`, { method: 'PATCH', body: { commission_id: String(commissionId) } }),
 
   attachDocument: (appelId: number | string, documentId: number) =>
-    proxy('appels', `appels-offres/${appelId}/documents`, { method: 'POST', body: { id_document: documentId } }),
+    proxy('appels', `appels-offres/${appelId}/documents/${documentId}`, { method: 'POST', body: {} }),
 
   submitForValidation: (id: number | string) =>
     proxy('appels', `appels-offres/${id}/soumettre-validation`, { method: 'POST', body: {} }),
@@ -274,9 +326,6 @@ export const scApi = {
 
   ouvrirPlis: (id: number | string) =>
     proxy('appels', `appels-offres/${id}/ouvrir-plis`, { method: 'POST', body: {} }),
-
-  annulerAppel: (id: number | string, motif: string) =>
-    proxy('appels', `appels-offres/${id}/annuler`, { method: 'POST', body: { motif } }),
 
   deleteDraft: (id: number | string) =>
     proxy('appels', `appels-offres/${id}`, { method: 'DELETE' }),
@@ -308,11 +357,11 @@ export const scApi = {
   assignValidator: (id: number | string, membreId: string | number) =>
     proxy('appels', `appels-offres/${id}/affecter-validateur`, { method: 'POST', body: { validated_by: membreId } }),
 
-  validerMarche: (id: number | string, commentaire = '') =>
-    proxy('appels', `appels-offres/${id}/valider`, { method: 'POST', body: { commentaire } }),
+  validerMarche: (id: number | string, commentaire = '', validatedBy?: string | number) =>
+    proxy('appels', `appels-offres/${id}/valider`, { method: 'POST', body: { commentaire, validated_by: validatedBy } }),
 
-  rejeterMarche: (id: number | string, motif: string) =>
-    proxy('appels', `appels-offres/${id}/refuser`, { method: 'POST', body: { motif } }),
+  rejeterMarche: (id: number | string, motif: string, validatedBy?: string | number) =>
+    proxy('appels', `appels-offres/${id}/refuser`, { method: 'POST', body: { motif, validated_by: validatedBy } }),
 
   // ----- Attribution (contrats_service: attributions-provisoires) -----
   listAttributionsProvisoires: (commissionId?: number) =>
@@ -336,8 +385,8 @@ export const scApi = {
   listMembres: (orgId: string | number) =>
     safeList<Membre>(() => proxy('acteurs', `organisations/${orgId}/membres/`)),
 
-  createCollaborateur: (data: Partial<Membre> & { id_organisation: string | number; role: string }) =>
-    proxy<Membre>('acteurs', 'membres/creer-collaborateur/', { method: 'POST', body: data }),
+  createCollaborateur: (data: Partial<Membre> & { id_organisation: string | number; role: string; password?: string }) =>
+    proxy<CompteCreationResult>('acteurs', 'membres/creer-collaborateur/', { method: 'POST', body: data }),
 
   updateMembre: (id: string | number, data: Partial<Membre>) =>
     proxy<Membre>('acteurs', `membres/${id}/`, { method: 'PATCH', body: data }),
@@ -402,10 +451,10 @@ export const scApi = {
     safeList<DemandeOE>(() => proxy('acteurs', 'service-contractant/demandes/')),
 
   approveDemandeOE: (id: string | number) =>
-    proxy('acteurs', `service-contractant/demandes/${id}/approuver/`, { method: 'POST', body: {} }),
+    proxy<CompteCreationResult>('acteurs', `service-contractant/demandes/${id}/approuver/`, { method: 'POST', body: {} }),
 
   refuseDemandeOE: (id: string | number, motif: string) =>
-    proxy('acteurs', `service-contractant/demandes/${id}/rejeter/`, { method: 'POST', body: { motif_rejet: motif } }),
+    proxy('acteurs', `service-contractant/demandes/${id}/rejeter/`, { method: 'POST', body: { motif } }),
 
   // ----- Clarifications -----
   listClarifications: (serviceId?: string | number) =>
@@ -419,8 +468,31 @@ export const scApi = {
     safeList<OperateurRegistre>(() => proxy('acteurs', 'admin/organisations/operateurs/', { query })),
 
   // ----- Recours (read + respond only; lifecycle owned by the recours team) -----
-  listRecours: (appelId?: number | string) =>
-    safeList<{ id: number | string; statut?: string; motif?: string; created_at?: string }>(
+  listRecours: async (appelId?: number | string) => {
+    const items = await safeList<RecoursLite>(
       () => proxy('recours', 'api/recours/', { query: { id_appel_offre: appelId } }),
-    ),
+    );
+    return items.map((item) => ({ ...item, id: item.id ?? item.id_recours }));
+  },
+  listRecoursForAppel: async (appelId: number | string) => {
+    const [items, soumissions] = await Promise.all([
+      safeList<RecoursLite>(() => proxy('recours', 'api/recours/', { query: { id_appel_offre: appelId } })),
+      safeList<SoumissionLite>(() => proxy('appels', `appels-offres/${appelId}/soumissions`)),
+    ]);
+    const soumissionIds = new Set(
+      soumissions
+        .map((soumission) => soumission.id_soumission ?? soumission.id)
+        .filter((value) => value !== undefined && value !== null)
+        .map(String),
+    );
+
+    return items
+      .filter((item) => {
+        const directAppelId = item.id_appel_offre ?? item.id_appel_offres ?? item.appel_id;
+        if (directAppelId !== undefined && directAppelId !== null) return sameId(directAppelId, appelId);
+        if (item.id_soumission !== undefined && item.id_soumission !== null) return soumissionIds.has(String(item.id_soumission));
+        return false;
+      })
+      .map((item) => ({ ...item, id: item.id ?? item.id_recours }));
+  },
 };
