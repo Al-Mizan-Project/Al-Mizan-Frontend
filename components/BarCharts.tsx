@@ -7,49 +7,17 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   Cell,
 } from 'recharts';
+import { useSoumissions } from '@/lib/soumissions-context';
+import type { Dossier } from '@/lib/dossiers-data';
 
-const retardData = [
-  { name: '>7 jours', value: 8 },
-  { name: '3–7 jours', value: 14 },
-  { name: "Aujourd'hui", value: 1 },
-];
-
-const employeesData = [
-  {
-    name: 'A. Benali',
-    enCours: 12,
-    enRetard: 3,
-    pret: 7,
-  },
-  {
-    name: 'S. Hadj',
-    enCours: 9,
-    enRetard: 5,
-    pret: 11,
-  },
-  {
-    name: 'K. Meziane',
-    enCours: 15,
-    enRetard: 1,
-    pret: 9,
-  },
-  {
-    name: 'L. Ouali',
-    enCours: 7,
-    enRetard: 4,
-    pret: 6,
-  },
-  {
-    name: 'M. Tebbal',
-    enCours: 11,
-    enRetard: 2,
-    pret: 13,
-  },
-];
+interface EvaluateurRaw {
+  id_utilisateur: number;
+  email: string;
+  id_role: number;
+}
 
 const CustomTooltipRetard = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -81,6 +49,51 @@ const CustomTooltipEmployees = ({ active, payload, label }: any) => {
 };
 
 export default function BarCharts() {
+  const { dossiers, evaluateurs, loading } = useSoumissions();
+
+  // --- Chart 1: retard par durée ---
+  const today = new Date();
+  const retardDossiers = dossiers.filter((d: Dossier) => d.status === 'En retard');
+
+  let sup7 = 0, trois7 = 0, aujourdhui = 0;
+  for (const d of retardDossiers) {
+    const soumis = new Date(d.dateSoumission);
+    const delaiDays = parseInt(d.delaiEvaluation) || 30;
+    const echeance = new Date(soumis);
+    echeance.setDate(echeance.getDate() + delaiDays);
+    const diffDays = Math.floor((today.getTime() - echeance.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays >= 7) sup7++;
+    else if (diffDays >= 3) trois7++;
+    else aujourdhui++;
+  }
+
+  const retardData = [
+    { name: '>7 jours', value: sup7 },
+    { name: '3–7 jours', value: trois7 },
+    { name: "Aujourd'hui", value: aujourdhui },
+  ];
+
+  // --- Chart 2: par évaluateur ---
+  const evalData = (evaluateurs as EvaluateurRaw[]).slice(0, 6).map((ev: EvaluateurRaw) => ({
+    name: ev.email.split('@')[0],
+    enCours: 0,
+    enRetard: 0,
+    pret: 0,
+  }));
+
+  const showEvalFallback = evalData.length === 0;
+
+  const fallbackData = [
+    { name: 'En attente', enCours: dossiers.filter((d: Dossier) => d.status === 'En attente').length, enRetard: 0, pret: 0 },
+    { name: 'En cours',   enCours: dossiers.filter((d: Dossier) => d.status === 'En cours').length,   enRetard: 0, pret: 0 },
+    { name: 'En retard',  enCours: 0, enRetard: dossiers.filter((d: Dossier) => d.status === 'En retard').length, pret: 0 },
+    { name: 'Prêt',       enCours: 0, enRetard: 0, pret: dossiers.filter((d: Dossier) => d.status === 'Prêt').length },
+  ];
+
+  const employeesData = showEvalFallback ? fallbackData : evalData;
+  const totalRetard = retardDossiers.length;
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
       {/* Chart 1 - Retard par durée */}
@@ -96,7 +109,7 @@ export default function BarCharts() {
             className="text-xs font-semibold px-3 py-1 rounded-full"
             style={{ background: '#D6EAD4', color: '#1C4532' }}
           >
-            23 total
+            {loading ? '…' : `${totalRetard} total`}
           </span>
         </div>
 
@@ -109,14 +122,10 @@ export default function BarCharts() {
               axisLine={false}
               tickLine={false}
             />
-            <YAxis
-              tick={{ fontSize: 11, fill: '#9CA3AF' }}
-              axisLine={false}
-              tickLine={false}
-            />
+            <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
             <Tooltip content={<CustomTooltipRetard />} cursor={{ fill: 'rgba(151,166,117,0.08)' }} />
             <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-              {retardData.map((entry, index) => (
+              {retardData.map((_, index) => (
                 <Cell
                   key={index}
                   fill={index === 0 ? '#1C4532' : index === 1 ? '#97A675' : '#81B0B2'}
@@ -126,7 +135,6 @@ export default function BarCharts() {
           </BarChart>
         </ResponsiveContainer>
 
-        {/* Legend */}
         <div className="flex items-center gap-4 mt-4 justify-center">
           {[
             { color: '#1C4532', label: '>7 jours' },
@@ -141,12 +149,12 @@ export default function BarCharts() {
         </div>
       </div>
 
-      {/* Chart 2 - Par employés */}
+      {/* Chart 2 - Par évaluateurs */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <div className="flex items-start justify-between mb-6">
           <div>
             <h3 className="text-base font-black" style={{ color: '#1C4532' }}>
-              Dossiers affectés par employés
+              {showEvalFallback ? 'Répartition globale des dossiers' : 'Dossiers affectés par évaluateur'}
             </h3>
             <p className="text-xs text-gray-400 mt-0.5">Répartition par statut</p>
           </div>
@@ -154,7 +162,7 @@ export default function BarCharts() {
             className="text-xs font-semibold px-3 py-1 rounded-full"
             style={{ background: '#D6EAD4', color: '#1C4532' }}
           >
-            5 évaluateurs
+            {loading ? '…' : showEvalFallback ? `${dossiers.length} dossiers` : `${evaluateurs.length} évaluateurs`}
           </span>
         </div>
 
@@ -167,11 +175,7 @@ export default function BarCharts() {
               axisLine={false}
               tickLine={false}
             />
-            <YAxis
-              tick={{ fontSize: 11, fill: '#9CA3AF' }}
-              axisLine={false}
-              tickLine={false}
-            />
+            <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
             <Tooltip content={<CustomTooltipEmployees />} cursor={{ fill: 'rgba(151,166,117,0.06)' }} />
             <Bar dataKey="enCours" name="En cours d'évaluation" fill="#97A675" radius={[5, 5, 0, 0]} />
             <Bar dataKey="enRetard" name="En retard" fill="#81B0B2" radius={[5, 5, 0, 0]} />
@@ -179,7 +183,6 @@ export default function BarCharts() {
           </BarChart>
         </ResponsiveContainer>
 
-        {/* Legend */}
         <div className="flex items-center gap-4 mt-4 justify-center flex-wrap">
           {[
             { color: '#97A675', label: "En cours d'évaluation" },

@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faSearch,
-  faFilter,
   faCalendar,
   faMoneyBillWave,
   faEye,
@@ -12,7 +11,8 @@ import {
   faTimesCircle,
   faClock,
   faExclamationTriangle,
-  faFileSignature
+  faFileSignature,
+  faGavel,
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import { loadStoredSubmissions } from '@/lib/operator-submissions-store';
@@ -52,19 +52,12 @@ export default function MesSoumissionsPage({
 
   useEffect(() => {
     let isMounted = true;
-
     const loadLang = async () => {
       const resolvedParams = await params;
-      if (isMounted) {
-        setLang(resolvedParams.lang);
-      }
+      if (isMounted) setLang(resolvedParams.lang);
     };
-
     loadLang();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [params]);
 
   const isArabic = lang === 'ar';
@@ -86,7 +79,6 @@ export default function MesSoumissionsPage({
 
   useEffect(() => {
     let isMounted = true;
-
     const loadData = async () => {
       setLoading(true);
       setLoadError('');
@@ -115,9 +107,13 @@ export default function MesSoumissionsPage({
           const local = localMap.get(item.id_soumission);
           return {
             id: item.id_soumission,
-            appelOffreReference: local?.appelOffre.reference || appel?.reference || `AO #${item.id_appel_offre}`,
-            appelOffreTitre: local?.appelOffre.titre || appel?.titre || `Appel d'offres #${item.id_appel_offre}`,
-            serviceContractant: local?.appelOffre.serviceContractant || (appel ? `Service #${appel.id_service_contractant}` : 'N/A'),
+            appelOffreReference:
+              local?.appelOffre.reference || appel?.reference || `AO #${item.id_appel_offre}`,
+            appelOffreTitre:
+              local?.appelOffre.titre || appel?.titre || `Appel d'offres #${item.id_appel_offre}`,
+            serviceContractant:
+              local?.appelOffre.serviceContractant ||
+              (appel ? `Service #${appel.id_service_contractant}` : 'N/A'),
             dateSoumission: item.date_soumission,
             montantSoumis: Number(item.montant_financier || 0),
             statut: mapBackendStatusToUi(item.statut),
@@ -133,23 +129,19 @@ export default function MesSoumissionsPage({
         setSoumissions(mapped);
       } catch (error) {
         if (!isMounted) return;
-        const message = error instanceof Error ? error.message : 'Impossible de charger les soumissions.';
+        const message =
+          error instanceof Error ? error.message : 'Impossible de charger les soumissions.';
         setLoadError(message);
       } finally {
         if (isMounted) setLoading(false);
       }
     };
-
     loadData();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [operatorId]);
 
-  const formatMontant = (montant: number) => {
-    return new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
-  };
+  const formatMontant = (montant: number) =>
+    new Intl.NumberFormat('fr-DZ').format(montant) + ' DA';
 
   const getStatutConfig = (statut: string) => {
     const configs: Record<string, { color: string; bg: string; icon: any; label: string }> = {
@@ -157,32 +149,32 @@ export default function MesSoumissionsPage({
         color: 'text-blue-700',
         bg: 'bg-blue-100',
         icon: faFileSignature,
-        label: isArabic ? 'Soumise' : 'Soumise'
+        label: isArabic ? 'مقدمة' : 'Soumise',
       },
       en_evaluation: {
         color: 'text-yellow-700',
         bg: 'bg-yellow-100',
         icon: faClock,
-        label: isArabic ? 'في التقييم' : 'En évaluation'
+        label: isArabic ? 'في التقييم' : 'En évaluation',
       },
       conforme: {
         color: 'text-green-700',
         bg: 'bg-green-100',
         icon: faCheckCircle,
-        label: isArabic ? 'مقبولة' : 'Conforme'
+        label: isArabic ? 'مقبولة' : 'Conforme',
       },
       refusee: {
         color: 'text-red-700',
         bg: 'bg-red-100',
         icon: faTimesCircle,
-        label: isArabic ? 'مرفوضة' : 'Refusée'
+        label: isArabic ? 'مرفوضة' : 'Refusée',
       },
       attribuee: {
         color: 'text-green-700',
         bg: 'bg-green-200',
         icon: faCheckCircle,
-        label: isArabic ? 'مسنودة' : 'Attribuée'
-      }
+        label: isArabic ? 'مسنودة' : 'Attribuée',
+      },
     };
     return configs[statut] || configs.soumise;
   };
@@ -196,17 +188,14 @@ export default function MesSoumissionsPage({
   const translations = {
     fr: {
       title: 'Mes Soumissions',
-      subtitle: 'Suivez l\'état d\'avancement de vos offres',
+      subtitle: "Suivez l'état d'avancement de vos offres",
       search: 'Rechercher...',
       filterStatut: 'Filtrer par statut',
       all: 'Tous',
-      reference: 'Référence',
-      titre: 'Titre',
       dateSoumission: 'Date de soumission',
       montant: 'Montant soumis',
-      statut: 'Statut',
-      evaluation: 'Évaluation',
       details: 'Voir les détails',
+      deposerRecours: 'Déposer un recours',
       totalSoumissions: 'Total soumissions',
       enCours: 'En cours',
       acceptees: 'Acceptées',
@@ -214,7 +203,6 @@ export default function MesSoumissionsPage({
       aucuneSoumission: 'Aucune soumission trouvée',
       conformiteAdmin: 'Administrative',
       conformiteTechnique: 'Technique',
-      conformiteFinanciere: 'Financière'
     },
     ar: {
       title: 'طلباتي',
@@ -222,13 +210,10 @@ export default function MesSoumissionsPage({
       search: 'بحث...',
       filterStatut: 'تصفية حسب الحالة',
       all: 'الكل',
-      reference: 'المرجع',
-      titre: 'العنوان',
       dateSoumission: 'تاريخ التقديم',
       montant: 'المبلغ المقدم',
-      statut: 'الحالة',
-      evaluation: 'التقييم',
       details: 'عرض التفاصيل',
+      deposerRecours: 'تقديم طعن',
       totalSoumissions: 'إجمالي الطلبات',
       enCours: 'قيد المعالجة',
       acceptees: 'المقبولة',
@@ -236,24 +221,24 @@ export default function MesSoumissionsPage({
       aucuneSoumission: 'لا توجد طلبات',
       conformiteAdmin: 'إدارية',
       conformiteTechnique: 'تقنية',
-      conformiteFinanciere: 'مالية'
-    }
+    },
   };
 
   const t = translations[lang as 'fr' | 'ar'] || translations.fr;
 
-  const filteredSoumissions = soumissions.filter(s => {
-    const matchSearch = s.appelOffreTitre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       s.appelOffreReference.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredSoumissions = soumissions.filter((s) => {
+    const matchSearch =
+      s.appelOffreTitre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.appelOffreReference.toLowerCase().includes(searchTerm.toLowerCase());
     const matchStatut = filterStatut === 'all' || s.statut === filterStatut;
     return matchSearch && matchStatut;
   });
 
   const stats = {
     total: soumissions.length,
-    enCours: soumissions.filter(s => ['soumise', 'en_evaluation'].includes(s.statut)).length,
-    acceptees: soumissions.filter(s => ['conforme', 'attribuee'].includes(s.statut)).length,
-    refusees: soumissions.filter(s => s.statut === 'refusee').length
+    enCours: soumissions.filter((s) => ['soumise', 'en_evaluation'].includes(s.statut)).length,
+    acceptees: soumissions.filter((s) => ['conforme', 'attribuee'].includes(s.statut)).length,
+    refusees: soumissions.filter((s) => s.statut === 'refusee').length,
   };
 
   return (
@@ -289,9 +274,9 @@ export default function MesSoumissionsPage({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2">
             <div className="relative">
-              <FontAwesomeIcon 
-                icon={faSearch} 
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" 
+              <FontAwesomeIcon
+                icon={faSearch}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
               />
               <input
                 type="text"
@@ -337,33 +322,54 @@ export default function MesSoumissionsPage({
           {filteredSoumissions.map((soumission) => {
             const statutConfig = getStatutConfig(soumission.statut);
             return (
-              <div key={soumission.id} className="bg-white rounded-xl border-2 border-gray-200 hover:border-[#306B6F] transition-all shadow-sm">
+              <div
+                key={soumission.id}
+                className="bg-white rounded-xl border-2 border-gray-200 hover:border-[#306B6F] transition-all shadow-sm"
+              >
                 <div className="p-6">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        <span className="text-sm font-medium text-[#418387]">{soumission.appelOffreReference}</span>
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${statutConfig.bg} ${statutConfig.color}`}>
+                        <span className="text-sm font-medium text-[#418387]">
+                          {soumission.appelOffreReference}
+                        </span>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-bold ${statutConfig.bg} ${statutConfig.color}`}
+                        >
                           <FontAwesomeIcon icon={statutConfig.icon} className="me-1" />
                           {statutConfig.label}
                         </span>
                       </div>
-                      <h3 className="text-lg font-bold text-[#0D2527] mb-1">{soumission.appelOffreTitre}</h3>
+                      <h3 className="text-lg font-bold text-[#0D2527] mb-1">
+                        {soumission.appelOffreTitre}
+                      </h3>
                       <p className="text-sm text-gray-600">{soumission.serviceContractant}</p>
                     </div>
-                    
-                    <div className="flex items-center gap-6">
+
+                    <div className="flex items-center gap-3">
                       <div className="text-end">
                         <p className="text-xs text-gray-500 mb-1">{t.montant}</p>
-                        <p className="text-lg font-bold text-[#173C3F]">{formatMontant(soumission.montantSoumis)}</p>
+                        <p className="text-lg font-bold text-[#173C3F]">
+                          {formatMontant(soumission.montantSoumis)}
+                        </p>
                       </div>
                       <Link
                         href={`/${lang}/dashboard/operator/soumissions/${soumission.id}`}
-                        className="px-6 py-2.5 bg-[#306B6F] text-white rounded-xl font-bold hover:bg-[#173C3F] transition-colors flex items-center gap-2"
+                        className="px-4 py-2.5 bg-[#306B6F] text-white rounded-xl font-bold hover:bg-[#173C3F] transition-colors flex items-center gap-2 text-sm"
                       >
                         <FontAwesomeIcon icon={faEye} />
                         {t.details}
                       </Link>
+                      {/* Recours button — only for refused soumissions */}
+                      {soumission.statut === 'refusee' && (
+                        <Link
+                          href={`/${lang}/dashboard/operator/recours/nouveau?submissionId=${soumission.id}`}
+                          className="px-4 py-2.5 border-2 border-red-400 text-red-600 rounded-xl font-bold hover:bg-red-50 transition-colors flex items-center gap-2 text-sm"
+                        >
+                          <FontAwesomeIcon icon={faGavel} />
+                          {t.deposerRecours}
+                        </Link>
+                      )}
                     </div>
                   </div>
 
@@ -378,18 +384,21 @@ export default function MesSoumissionsPage({
                         </p>
                       </div>
                     </div>
-                    
                     {soumission.statut !== 'soumise' && (
                       <>
                         <div>
                           <p className="text-xs text-gray-500 mb-1">{t.conformiteAdmin}</p>
-                          <span className={`text-sm font-medium ${getConformiteStatus(soumission.conformiteAdmin).color}`}>
+                          <span
+                            className={`text-sm font-medium ${getConformiteStatus(soumission.conformiteAdmin).color}`}
+                          >
                             {getConformiteStatus(soumission.conformiteAdmin).label}
                           </span>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 mb-1">{t.conformiteTechnique}</p>
-                          <span className={`text-sm font-medium ${getConformiteStatus(soumission.conformiteTechnique).color}`}>
+                          <span
+                            className={`text-sm font-medium ${getConformiteStatus(soumission.conformiteTechnique).color}`}
+                          >
                             {getConformiteStatus(soumission.conformiteTechnique).label}
                           </span>
                         </div>
@@ -397,11 +406,14 @@ export default function MesSoumissionsPage({
                     )}
                   </div>
 
-                  {/* Refusal Reason */}
+                  {/* Refusal reason */}
                   {soumission.statut === 'refusee' && soumission.motifRefus && (
                     <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
                       <div className="flex items-start gap-3">
-                        <FontAwesomeIcon icon={faExclamationTriangle} className="text-red-600 mt-1" />
+                        <FontAwesomeIcon
+                          icon={faExclamationTriangle}
+                          className="text-red-600 mt-1"
+                        />
                         <div>
                           <p className="text-sm font-bold text-red-800 mb-1">Motif du refus</p>
                           <p className="text-sm text-red-700">{soumission.motifRefus}</p>
@@ -410,26 +422,33 @@ export default function MesSoumissionsPage({
                     </div>
                   )}
 
-                  {/* Evaluation Results */}
+                  {/* Evaluation results */}
                   {soumission.noteGlobale && (
                     <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl">
                       <div className="grid grid-cols-3 gap-4">
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Note technique</p>
-                          <p className="text-lg font-bold text-green-700">{soumission.noteTechnique}/100</p>
+                          <p className="text-lg font-bold text-green-700">
+                            {soumission.noteTechnique}/100
+                          </p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Note financière</p>
-                          <p className="text-lg font-bold text-green-700">{soumission.noteFinanciere}/100</p>
+                          <p className="text-lg font-bold text-green-700">
+                            {soumission.noteFinanciere}/100
+                          </p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Note globale</p>
-                          <p className="text-lg font-bold text-green-700">{soumission.noteGlobale}/100</p>
+                          <p className="text-lg font-bold text-green-700">
+                            {soumission.noteGlobale}/100
+                          </p>
                         </div>
                       </div>
                       {soumission.rang && (
                         <p className="text-sm text-green-800 mt-2 text-center font-bold">
-                          Rang: {soumission.rang}{soumission.rang === 1 ? 'er' : 'ème'}
+                          Rang: {soumission.rang}
+                          {soumission.rang === 1 ? 'er' : 'ème'}
                         </p>
                       )}
                     </div>

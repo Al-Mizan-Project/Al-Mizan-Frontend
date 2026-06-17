@@ -4,14 +4,14 @@ import { useEffect, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/app/components/Header';
 import { InputField } from '@/app/components/forms/InputField';
-import { SelectField } from '@/app/components/forms/SelectField';
-import { DatePicker } from '@/app/components/forms/DatePicker';
 import FileUpload from '@/app/components/forms/FileUpload';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
+import {
   faBuilding,
   faArrowRight,
-  faSpinner
+  faSpinner,
+  faCheckCircle,
+  faXmark,
 } from '@fortawesome/free-solid-svg-icons';
 
 type PageProps = {
@@ -19,259 +19,190 @@ type PageProps = {
 };
 
 type FormData = {
-  nomOfficiel: string;
-  adresseSiege: string;
-  emailContact: string;
-  typeEntite: string;
+  nom_organisation: string;
+  email_contact: string;
+  telephone: string;
   nif: string;
-  registreCommerce: string;
-  rib: string;
-  casnosNumero: string;
-  casnosDate: string;
-  cnasNumero: string;
-  cnasDate: string;
-  extraitRole: File | null;
-  certificatCasnos: File | null;
-  certificatCnas: File | null;
-  registreCommerceScan: File | null;
+  num_registre_commerce: string;
+  doc_registre_commerce: File | null;
+  doc_nif: File | null;
+  doc_cnas_casnos: File | null;
+  doc_non_faillite: File | null;
 };
 
 type FormErrors = Partial<Record<keyof FormData, string>>;
+
+// ── Toast component ───────────────────────────────────────────────────
+function Toast({
+  message,
+  onClose,
+  isArabic,
+}: {
+  message: string;
+  onClose: () => void;
+  isArabic: boolean;
+}) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div
+      className={`fixed bottom-6 ${isArabic ? 'left-6' : 'right-6'} z-50 flex items-start gap-3 bg-white border border-green-200 shadow-xl rounded-2xl px-5 py-4 max-w-sm animate-slide-up`}
+    >
+      <div className="w-9 h-9 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+        <FontAwesomeIcon icon={faCheckCircle} className="text-white text-base" />
+      </div>
+      <div className="flex-1">
+        <p className="text-sm font-bold text-green-800 font-cairo">
+          {isArabic ? 'تم الإرسال بنجاح' : 'Demande soumise !'}
+        </p>
+        <p className="text-xs text-gray-500 font-cairo mt-0.5">{message}</p>
+      </div>
+      <button onClick={onClose} className="text-gray-400 hover:text-gray-600 mt-0.5">
+        <FontAwesomeIcon icon={faXmark} />
+      </button>
+    </div>
+  );
+}
 
 export default function OperateurEconomiqueRegistration({ params }: PageProps) {
   const router = useRouter();
   const [lang, setLang] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  
+  const [showToast, setShowToast] = useState(false);
+  const [idServiceContractant, setIdServiceContractant] = useState<number | null>(null);
+
   const [formData, setFormData] = useState<FormData>({
-    nomOfficiel: '',
-    adresseSiege: '',
-    emailContact: '',
-    typeEntite: '',
+    nom_organisation: '',
+    email_contact: '',
+    telephone: '',
     nif: '',
-    registreCommerce: '',
-    rib: '',
-    casnosNumero: '',
-    casnosDate: '',
-    cnasNumero: '',
-    cnasDate: '',
-    extraitRole: null,
-    certificatCasnos: null,
-    certificatCnas: null,
-    registreCommerceScan: null,
+    num_registre_commerce: '',
+    doc_registre_commerce: null,
+    doc_nif: null,
+    doc_cnas_casnos: null,
+    doc_non_faillite: null,
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
 
-  // Resolve dynamic params after mount to avoid render-time state updates.
   useEffect(() => {
     let isMounted = true;
-
     const loadLang = async () => {
       const resolvedParams = await params;
-      if (isMounted) {
-        setLang(resolvedParams.lang);
-      }
+      if (isMounted) setLang(resolvedParams.lang);
     };
-
     loadLang();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [params]);
 
-  const isArabic = lang === 'ar';
+  useEffect(() => {
+    const scId = localStorage.getItem('redirect_service_contractant_id');
+    if (scId) setIdServiceContractant(Number(scId));
+  }, []);
 
-  // Entity type options
-  const entityTypeOptions = [
-    { value: 'sar', label: isArabic ? 'شركة ذات مسؤولية محدودة' : 'Société à Responsibilité Limitée (SARL)' },
-    { value: 'eurl', label: isArabic ? 'مؤسسة ذات شخص واحد' : 'Entreprise Unipersonnelle (EURL)' },
-    { value: 'spa', label: isArabic ? 'شركة مساهمة' : 'Société Par Actions (SPA)' },
-    { value: 'snc', label: isArabic ? 'شركة ذات اسم جماعي' : 'Société en Nom Collectif (SNC)' },
-    { value: 'sca', label: isArabic ? 'شركة توصية بالأسهم' : 'Société en Commandite (SCA)' },
-    { value: 'personnePhysique', label: isArabic ? 'شخص طبيعي' : 'Personne Physique' },
-    { value: 'groupement', label: isArabic ? 'مجموعة مؤسسات' : 'Groupement d\'entreprises' },
-    { value: 'autre', label: isArabic ? 'أخرى' : 'Autre' },
-  ];
+  const isArabic = lang === 'ar';
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    // Nom officiel
-    if (!formData.nomOfficiel.trim()) {
-      newErrors.nomOfficiel = isArabic ? 'الاسم الرسمي مطلوب' : 'Raison sociale requise';
-    }
+    if (!formData.nom_organisation.trim())
+      newErrors.nom_organisation = isArabic ? 'الاسم الرسمي مطلوب' : 'Raison sociale requise';
 
-    // Adresse
-    if (!formData.adresseSiege.trim()) {
-      newErrors.adresseSiege = isArabic ? 'العنوان مطلوب' : 'Adresse requise';
-    }
+    if (!formData.email_contact.trim())
+      newErrors.email_contact = isArabic ? 'البريد الإلكتروني مطلوب' : 'Email requis';
+    else if (!/\S+@\S+\.\S+/.test(formData.email_contact))
+      newErrors.email_contact = isArabic ? 'بريد إلكتروني غير صالح' : 'Email invalide';
 
-    // Email
-    if (!formData.emailContact.trim()) {
-      newErrors.emailContact = isArabic ? 'البريد الإلكتروني مطلوب' : 'Email requis';
-    } else if (!/\S+@\S+\.\S+/.test(formData.emailContact)) {
-      newErrors.emailContact = isArabic ? 'بريد إلكتروني غير صالح' : 'Email invalide';
-    }
+    if (!formData.telephone.trim())
+      newErrors.telephone = isArabic ? 'رقم الهاتف مطلوب' : 'Téléphone requis';
+    else if (!/^\+?[\d\s\-]{9,15}$/.test(formData.telephone.trim()))
+      newErrors.telephone = isArabic ? 'رقم هاتف غير صالح' : 'Numéro de téléphone invalide';
 
-    // Type d'entité
-    if (!formData.typeEntite) {
-      newErrors.typeEntite = isArabic ? 'النوع القانوني مطلوب' : 'Forme juridique requise';
-    }
-
-    // NIF - 15 digits
-    if (!formData.nif.trim()) {
+    if (!formData.nif.trim())
       newErrors.nif = isArabic ? 'الرقم الجبائي مطلوب' : 'NIF requis';
-    } else if (!/^\d{15}$/.test(formData.nif.replace(/\s/g, ''))) {
+    else if (!/^\d{15}$/.test(formData.nif.replace(/\s/g, '')))
       newErrors.nif = isArabic ? 'يجب أن يحتوي NIF على 15 رقمًا' : 'NIF doit contenir 15 chiffres';
-    }
 
-    // Registre de Commerce
-    if (!formData.registreCommerce.trim()) {
-      newErrors.registreCommerce = isArabic ? 'رقم السجل التجاري مطلوب' : 'RC requis';
-    } else if (!/^\d{2}\/\d{2}-\d{7}[A-Z]\d{2}$/i.test(formData.registreCommerce.replace(/\s/g, ''))) {
-      // More flexible validation
-      if (formData.registreCommerce.length < 10) {
-        newErrors.registreCommerce = isArabic ? 'رقم السجل التجاري غير صالح' : 'Numéro RC invalide';
-      }
-    }
+    if (!formData.num_registre_commerce.trim())
+      newErrors.num_registre_commerce = isArabic ? 'رقم السجل التجاري مطلوب' : 'RC requis';
+    else if (formData.num_registre_commerce.trim().length < 10)
+      newErrors.num_registre_commerce = isArabic ? 'رقم السجل التجاري غير صالح' : 'Numéro RC invalide';
 
-    // RIB - 20 digits
-    if (!formData.rib.trim()) {
-      newErrors.rib = isArabic ? 'البيان البنكي مطلوب' : 'RIB requis';
-    } else if (!/^\d{20}$/.test(formData.rib.replace(/\s/g, ''))) {
-      newErrors.rib = isArabic ? 'يجب أن يحتوي RIB على 20 رقمًا' : 'RIB doit contenir 20 chiffres';
-    }
-
-    // CASNOS
-    if (!formData.casnosNumero.trim()) {
-      newErrors.casnosNumero = isArabic ? 'رقم الكاسنوس مطلوب' : 'Numéro CASNOS requis';
-    }
-
-    if (!formData.casnosDate) {
-      newErrors.casnosDate = isArabic ? 'تاريخ الصلاحية مطلوب' : 'Date de validité requise';
-    }
-
-    // CNAS
-    if (!formData.cnasNumero.trim()) {
-      newErrors.cnasNumero = isArabic ? 'رقم الضمان الاجتماعي مطلوب' : 'Numéro CNAS requis';
-    }
-
-    if (!formData.cnasDate) {
-      newErrors.cnasDate = isArabic ? 'تاريخ الصلاحية مطلوب' : 'Date de validité requise';
-    }
-
-    // Documents
-    if (!formData.extraitRole) {
-      newErrors.extraitRole = isArabic ? 'مستخلص الدور مطلوب' : 'Extrait de rôle requis';
-    }
-
-    if (!formData.certificatCasnos) {
-      newErrors.certificatCasnos = isArabic ? 'شهادة الكاسنوس مطلوبة' : 'Certificat CASNOS requis';
-    }
-
-    if (!formData.certificatCnas) {
-      newErrors.certificatCnas = isArabic ? 'شهادة الضمان الاجتماعي مطلوبة' : 'Certificat CNAS requis';
-    }
-
-    if (!formData.registreCommerceScan) {
-      newErrors.registreCommerceScan = isArabic ? 'السجل التجاري مطلوب' : 'Registre de commerce requis';
-    }
+    if (!formData.doc_registre_commerce)
+      newErrors.doc_registre_commerce = isArabic ? 'السجل التجاري مطلوب' : 'Registre de commerce requis';
+    if (!formData.doc_nif)
+      newErrors.doc_nif = isArabic ? 'البطاقة الجبائية مطلوبة' : 'Carte fiscale (NIF) requise';
+    if (!formData.doc_cnas_casnos)
+      newErrors.doc_cnas_casnos = isArabic ? 'شهادة CNAS/CASNOS مطلوبة' : 'Attestation CNAS/CASNOS requise';
+    if (!formData.doc_non_faillite)
+      newErrors.doc_non_faillite = isArabic ? 'شهادة عدم الإفلاس مطلوبة' : 'Certificat de non-faillite requis';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
- const handleSubmit = async (e: FormEvent) => {
-  e.preventDefault();
-  
-  if (!validateForm()) {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
-  }
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    setLoading(true);
 
-  setLoading(true);
+    try {
+      const payload = new FormData();
+      payload.append('nom_organisation', formData.nom_organisation);
+      payload.append('email_contact', formData.email_contact);
+      payload.append('telephone', formData.telephone);
+      payload.append('nif', formData.nif);
+      payload.append('num_registre_commerce', formData.num_registre_commerce);
+      if (idServiceContractant)
+        payload.append('id_service_contractant', String(idServiceContractant));
+      if (formData.doc_registre_commerce) payload.append('doc_registre_commerce', formData.doc_registre_commerce);
+      if (formData.doc_nif) payload.append('doc_nif', formData.doc_nif);
+      if (formData.doc_cnas_casnos) payload.append('doc_cnas_casnos', formData.doc_cnas_casnos);
+      if (formData.doc_non_faillite) payload.append('doc_non_faillite', formData.doc_non_faillite);
 
-  try {
-    const token = localStorage.getItem('access_token');
-    
-    if (!token) {
-      alert(isArabic ? 'Veuillez vous connecter d\'abord' : 'Please login first');
-      router.push(`/${lang}/login`);
-      return;
-    }
+      const res = await fetch('http://localhost:8080/demandes/soumettre/', {
+        method: 'POST',
+        body: payload,
+      });
 
-    // Step 1: Create Membre
-    const membreResponse = await fetch('http://localhost:18081/membres', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        nom: formData.nomOfficiel,
-        prenom: formData.nomOfficiel,
-        email: formData.emailContact,
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(JSON.stringify(err));
+      }
+
+      localStorage.removeItem('redirect_appel_id');
+      localStorage.removeItem('redirect_service_contractant_id');
+
+      // Reset form
+      setFormData({
+        nom_organisation: '',
+        email_contact: '',
         telephone: '',
-        type_membre: 'operateur_economique',
-      }),
-    });
+        nif: '',
+        num_registre_commerce: '',
+        doc_registre_commerce: null,
+        doc_nif: null,
+        doc_cnas_casnos: null,
+        doc_non_faillite: null,
+      });
+      setIdServiceContractant(null);
 
-    if (!membreResponse.ok) {
-      const errorData = await membreResponse.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Failed to create membre');
+      // Show toast instead of redirecting
+      setShowToast(true);
+
+    } catch (error: any) {
+      alert(isArabic ? 'حدث خطأ أثناء التسجيل' : 'Erreur lors de la soumission : ' + error.message);
+    } finally {
+      setLoading(false);
     }
-
-    const membreData = await membreResponse.json();
-    const idMembre = membreData.id_membre;
-
-    // Step 2: Create Operateur Économique
-    const operateurResponse = await fetch('http://localhost:18081/operateurs-economiques', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        nom_officiel: formData.nomOfficiel,
-        adresse_siege: formData.adresseSiege,
-        email_contact: formData.emailContact,
-        type_entite: formData.typeEntite,
-        nif: formData.nif,
-        registre_commerce: formData.registreCommerce,
-        rib: formData.rib,
-        id_membre: idMembre,
-      }),
-    });
-
-    if (!operateurResponse.ok) {
-      const errorData = await operateurResponse.json().catch(() => ({}));
-      console.error('Operateur error:', errorData);
-      throw new Error(errorData.message || 'Failed to create operateur');
-    }
-
-    setSubmitted(true);
-    
-    setTimeout(() => {
-      router.push(`/${lang}/dashboard/operator`);
-    }, 2000);
-    
-  } catch (error: any) {
-    console.error('Registration error:', error);
-    alert(isArabic ? 'حدث خطأ في التسجيل' : 'Erreur lors de l\'enregistrement: ' + error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleChange = (field: keyof FormData, value: string | File | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user types
-    if (errors[field as keyof FormErrors]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-    }
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: undefined }));
   };
 
   if (!lang) return null;
@@ -280,9 +211,22 @@ export default function OperateurEconomiqueRegistration({ params }: PageProps) {
     <div className="min-h-screen bg-[#FCFFFF]">
       <Header currentLang={lang} showLogo={true} showBackButton={true} />
 
+      {/* Toast notification */}
+      {showToast && (
+        <Toast
+          isArabic={isArabic}
+          message={
+            isArabic
+              ? 'طلبك قيد المراجعة. ستتلقى بريدًا إلكترونيًا عند الموافقة.'
+              : 'Votre demande est en cours d\'examen. Vous recevrez un email à l\'approbation.'
+          }
+          onClose={() => setShowToast(false)}
+        />
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        
-        {/* Header Section */}
+
+        {/* Page Header */}
         <div className="mb-10">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 bg-[#418387] rounded-xl flex items-center justify-center">
@@ -293,98 +237,87 @@ export default function OperateurEconomiqueRegistration({ params }: PageProps) {
                 {isArabic ? 'تصريح - المتعامل الاقتصادي' : 'Déclaration - Opérateur Économique'}
               </h1>
               <p className="text-[#418387] font-cairo mt-1">
-                {isArabic 
-                  ? 'يرجى ملء النموذج أدناه لتسجيل مؤسستك' 
-                  : 'Veuillez remplir le formulaire ci-dessous pour enregistrer votre entreprise'
-                }
+                {isArabic
+                  ? 'يرجى ملء النموذج أدناه لتقديم طلب التسجيل'
+                  : "Veuillez remplir le formulaire ci-dessous pour soumettre votre demande d'inscription"}
               </p>
             </div>
           </div>
+
+          {/* Info banner */}
+          <div className="mt-6 p-4 bg-[#EEF8F8] border border-[#9BCFCF] rounded-xl flex items-start gap-3">
+            <div className="w-5 h-5 mt-0.5 rounded-full bg-[#418387] flex items-center justify-center flex-shrink-0">
+              <span className="text-white text-xs font-bold">i</span>
+            </div>
+            <p className="text-sm text-[#306B6F] font-cairo">
+              {isArabic
+                ? 'بعد تقديم الطلب، سيتم مراجعته من قِبل الإدارة. ستصلك رسالة إلكترونية عند الموافقة وإنشاء حسابك.'
+                : "Après soumission, votre demande sera examinée par l'administrateur. Vous recevrez un email à l'approbation avec les identifiants de votre compte."}
+            </p>
+          </div>
+
+          {/* SC link banner */}
+          {idServiceContractant && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2">
+              <span className="text-amber-700 text-xs font-cairo">
+                {isArabic
+                  ? `طلبك مرتبط بالمصلحة المتعاقدة رقم ${idServiceContractant}`
+                  : `Votre demande est liée au service contractant n° ${idServiceContractant}`}
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Success Message */}
-        {submitted && (
-          <div className="mb-8 p-6 bg-green-50 border-2 border-green-200 rounded-2xl flex items-center gap-4">
-            <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-green-800 font-cairo">
-                {isArabic ? 'تم التسجيل بنجاح!' : 'Enregistrement réussi!'}
-              </h3>
-              <p className="text-green-700 font-cairo">
-                {isArabic ? 'جاري إعادة التوجيه...' : 'Redirecting...'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-8" noValidate>
-          
+
           {/* Section 1: General Information */}
           <section className="bg-white border-2 border-[#9BCFCF] rounded-2xl p-8 shadow-sm">
             <h2 className="text-xl font-bold text-[#173C3F] mb-6 pb-3 border-b-2 border-[#E2E8F0] font-cairo">
               {isArabic ? 'المعلومات العامة' : 'Informations Générales'}
             </h2>
-            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <InputField
                 label={isArabic ? 'الاسم التجاري / الاسم الرسمي' : 'Raison sociale / Nom officiel'}
-                value={formData.nomOfficiel}
-                onChange={(e) => handleChange('nomOfficiel', e.target.value)}
-                error={errors.nomOfficiel}
+                value={formData.nom_organisation}
+                onChange={(e) => handleChange('nom_organisation', e.target.value)}
+                error={errors.nom_organisation}
                 isArabic={isArabic}
                 required
                 placeholder={isArabic ? 'شركة مثال للتكنولوجيا' : 'SARL Example Technology'}
               />
-
-              <InputField
-                label={isArabic ? 'عنوان المقر الاجتماعي' : 'Adresse du siège social'}
-                value={formData.adresseSiege}
-                onChange={(e) => handleChange('adresseSiege', e.target.value)}
-                error={errors.adresseSiege}
-                isArabic={isArabic}
-                required
-                placeholder={isArabic ? '15 شارع محمد بلوزداد، الجزائر' : '15 Rue Mohamed Belouizdad, Alger'}
-              />
-
               <InputField
                 label={isArabic ? 'البريد الإلكتروني المهني' : 'Email de contact professionnel'}
                 type="email"
-                value={formData.emailContact}
-                onChange={(e) => handleChange('emailContact', e.target.value)}
-                error={errors.emailContact}
+                value={formData.email_contact}
+                onChange={(e) => handleChange('email_contact', e.target.value)}
+                error={errors.email_contact}
                 isArabic={isArabic}
                 required
                 placeholder="contact@entreprise.dz"
                 dir="ltr"
               />
-
-              <SelectField
-                label={isArabic ? 'الشكل القانوني' : 'Forme juridique'}
-                options={entityTypeOptions}
-                value={formData.typeEntite}
-                onChange={(e) => handleChange('typeEntite', e.target.value)}
-                error={errors.typeEntite}
+              <InputField
+                label={isArabic ? 'رقم الهاتف' : 'Numéro de téléphone'}
+                type="tel"
+                value={formData.telephone}
+                onChange={(e) => handleChange('telephone', e.target.value)}
+                error={errors.telephone}
                 isArabic={isArabic}
                 required
-                placeholder={isArabic ? 'اختر النوع' : 'Sélectionnez le type'}
+                placeholder="+213 555 123 456"
+                dir="ltr"
               />
             </div>
           </section>
 
-          {/* Section 2: Fiscal & Commercial Identification */}
+          {/* Section 2: Fiscal & Commercial */}
           <section className="bg-white border-2 border-[#9BCFCF] rounded-2xl p-8 shadow-sm">
             <h2 className="text-xl font-bold text-[#173C3F] mb-6 pb-3 border-b-2 border-[#E2E8F0] font-cairo">
               {isArabic ? 'التعريف الجبائي والتجاري' : 'Identification Fiscale & Commerciale'}
             </h2>
-            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <InputField
-                label={isArabic ? 'رقم التعريف الجبائي (NIF)' : 'Numéro d\'Identification Fiscale (NIF)'}
+                label={isArabic ? 'رقم التعريف الجبائي (NIF)' : "Numéro d'Identification Fiscale (NIF)"}
                 value={formData.nif}
                 onChange={(e) => handleChange('nif', e.target.value)}
                 error={errors.nif}
@@ -394,126 +327,60 @@ export default function OperateurEconomiqueRegistration({ params }: PageProps) {
                 dir="ltr"
                 maxLength={15}
               />
-
               <InputField
                 label={isArabic ? 'رقم السجل التجاري (RC)' : 'Numéro Registre de Commerce (RC)'}
-                value={formData.registreCommerce}
-                onChange={(e) => handleChange('registreCommerce', e.target.value)}
-                error={errors.registreCommerce}
+                value={formData.num_registre_commerce}
+                onChange={(e) => handleChange('num_registre_commerce', e.target.value)}
+                error={errors.num_registre_commerce}
                 isArabic={isArabic}
                 required
                 placeholder="16/00-1234567A12"
                 dir="ltr"
               />
-
-              <InputField
-                label={isArabic ? 'البيان التعريفي البنكي (RIB)' : 'Relevé d\'Identité Bancaire (RIB)'}
-                value={formData.rib}
-                onChange={(e) => handleChange('rib', e.target.value)}
-                error={errors.rib}
-                isArabic={isArabic}
-                required
-                placeholder="00115451510000234567"
-                dir="ltr"
-                maxLength={20}
-              />
             </div>
           </section>
 
-          {/* Section 3: Social Affiliations */}
-          <section className="bg-white border-2 border-[#9BCFCF] rounded-2xl p-8 shadow-sm">
-            <h2 className="text-xl font-bold text-[#173C3F] mb-6 pb-3 border-b-2 border-[#E2E8F0] font-cairo">
-              {isArabic ? 'الانتماءات الاجتماعية' : 'Affiliations Sociales'}
-            </h2>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <InputField
-                label={isArabic ? 'رقم الكاسنوس' : 'Numéro CASNOS'}
-                value={formData.casnosNumero}
-                onChange={(e) => handleChange('casnosNumero', e.target.value)}
-                error={errors.casnosNumero}
-                isArabic={isArabic}
-                required
-                placeholder="Numéro d'affiliation"
-                dir="ltr"
-              />
-
-              <DatePicker
-                label={isArabic ? 'تاريخ صلاحية الكاسنوس' : 'Date de validité CASNOS'}
-                value={formData.casnosDate}
-                onChange={(e) => handleChange('casnosDate', e.target.value)}
-                error={errors.casnosDate}
-                isArabic={isArabic}
-                required
-              />
-
-              <InputField
-                label={isArabic ? 'رقم الضمان الاجتماعي (CNAS)' : 'Numéro CNAS'}
-                value={formData.cnasNumero}
-                onChange={(e) => handleChange('cnasNumero', e.target.value)}
-                error={errors.cnasNumero}
-                isArabic={isArabic}
-                required
-                placeholder="Numéro d'affiliation"
-                dir="ltr"
-              />
-
-              <DatePicker
-                label={isArabic ? 'تاريخ صلاحية الضمان الاجتماعي' : 'Date de validité CNAS'}
-                value={formData.cnasDate}
-                onChange={(e) => handleChange('cnasDate', e.target.value)}
-                error={errors.cnasDate}
-                isArabic={isArabic}
-                required
-              />
-            </div>
-          </section>
-
-          {/* Section 4: Documents */}
+          {/* Section 3: Documents */}
           <section className="bg-white border-2 border-[#9BCFCF] rounded-2xl p-8 shadow-sm">
             <h2 className="text-xl font-bold text-[#173C3F] mb-6 pb-3 border-b-2 border-[#E2E8F0] font-cairo">
               {isArabic ? 'الوثائق الإدارية' : 'Documents Administratifs'}
             </h2>
-            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <FileUpload
-                label={isArabic ? 'مستخلص الدور (وصل جبائي)' : 'Extrait de rôle (Quittance fiscale)'}
-                helpText={isArabic ? 'صيغة PDF فقط. الحجم الأقصى: 5MB' : 'Format PDF uniquement. Taille max: 5MB'}
-                error={errors.extraitRole}
-                isArabic={isArabic}
-                accept=".pdf"
-                maxSizeMB={5}
-                onChange={(file) => handleChange('extraitRole', file)}
-              />
-
-              <FileUpload
-                label={isArabic ? 'شهادة الانتماء للكاسنوس' : 'Certificat d\'affiliation CASNOS'}
-                helpText={isArabic ? 'صيغة PDF فقط. الحجم الأقصى: 5MB' : 'Format PDF uniquement. Taille max: 5MB'}
-                error={errors.certificatCasnos}
-                isArabic={isArabic}
-                accept=".pdf"
-                maxSizeMB={5}
-                onChange={(file) => handleChange('certificatCasnos', file)}
-              />
-
-              <FileUpload
-                label={isArabic ? 'شهادة الانتماء للضمان الاجتماعي' : 'Certificat d\'affiliation CNAS'}
-                helpText={isArabic ? 'صيغة PDF فقط. الحجم الأقصى: 5MB' : 'Format PDF uniquement. Taille max: 5MB'}
-                error={errors.certificatCnas}
-                isArabic={isArabic}
-                accept=".pdf"
-                maxSizeMB={5}
-                onChange={(file) => handleChange('certificatCnas', file)}
-              />
-
               <FileUpload
                 label={isArabic ? 'السجل التجاري (مسح ضوئي)' : 'Registre de Commerce (Scan)'}
                 helpText={isArabic ? 'صيغة PDF أو صورة. الحجم الأقصى: 10MB' : 'Format PDF ou Image. Taille max: 10MB'}
-                error={errors.registreCommerceScan}
+                error={errors.doc_registre_commerce}
                 isArabic={isArabic}
                 accept=".pdf,.jpg,.jpeg,.png"
                 maxSizeMB={10}
-                onChange={(file) => handleChange('registreCommerceScan', file)}
+                onChange={(file) => handleChange('doc_registre_commerce', file)}
+              />
+              <FileUpload
+                label={isArabic ? 'البطاقة الجبائية (NIF)' : 'Carte Fiscale (NIF)'}
+                helpText={isArabic ? 'صيغة PDF فقط. الحجم الأقصى: 5MB' : 'Format PDF uniquement. Taille max: 5MB'}
+                error={errors.doc_nif}
+                isArabic={isArabic}
+                accept=".pdf"
+                maxSizeMB={5}
+                onChange={(file) => handleChange('doc_nif', file)}
+              />
+              <FileUpload
+                label={isArabic ? 'شهادة CNAS / CASNOS' : 'Attestation CNAS / CASNOS'}
+                helpText={isArabic ? 'صيغة PDF فقط. الحجم الأقصى: 5MB' : 'Format PDF uniquement. Taille max: 5MB'}
+                error={errors.doc_cnas_casnos}
+                isArabic={isArabic}
+                accept=".pdf"
+                maxSizeMB={5}
+                onChange={(file) => handleChange('doc_cnas_casnos', file)}
+              />
+              <FileUpload
+                label={isArabic ? 'شهادة عدم الإفلاس' : 'Certificat de Non-Faillite'}
+                helpText={isArabic ? 'صيغة PDF فقط. الحجم الأقصى: 5MB' : 'Format PDF uniquement. Taille max: 5MB'}
+                error={errors.doc_non_faillite}
+                isArabic={isArabic}
+                accept=".pdf"
+                maxSizeMB={5}
+                onChange={(file) => handleChange('doc_non_faillite', file)}
               />
             </div>
           </section>
@@ -523,24 +390,23 @@ export default function OperateurEconomiqueRegistration({ params }: PageProps) {
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-8 py-3.5 border-2 border-[#9BCFCF] text-[#418387] rounded-xl font-bold hover:bg-[#FCFFFF] transition-colors font-cairo"
+              className="px-8 py-3.5 border-2 border-[#9BCFCF] text-[#418387] rounded-xl font-bold hover:bg-[#EEF8F8] transition-colors font-cairo"
             >
               {isArabic ? 'إلغاء' : 'Annuler'}
             </button>
-            
             <button
               type="submit"
-              disabled={loading || submitted}
+              disabled={loading}
               className="px-8 py-3.5 bg-[#418387] hover:bg-[#306B6F] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed shadow-lg shadow-[#418387]/25 font-cairo"
             >
               {loading ? (
                 <>
                   <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
-                  <span>{isArabic ? 'جاري الحفظ...' : 'Enregistrement...'}</span>
+                  <span>{isArabic ? 'جاري الإرسال...' : 'Envoi en cours...'}</span>
                 </>
               ) : (
                 <>
-                  <span>{isArabic ? 'حفظ' : 'Sauvegarder'}</span>
+                  <span>{isArabic ? 'إرسال الطلب' : 'Soumettre la demande'}</span>
                   <FontAwesomeIcon icon={faArrowRight} className={isArabic ? 'rotate-180' : ''} />
                 </>
               )}
@@ -548,7 +414,6 @@ export default function OperateurEconomiqueRegistration({ params }: PageProps) {
           </div>
 
         </form>
-
       </main>
     </div>
   );

@@ -1,101 +1,138 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  ReactNode,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { setupAuthInterceptor, authAPI, LoginResponse } from '@/lib/api';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 export type User = {
-  id?: number;
+  id: number;
+  id_utilisateur?: number;  // ← branch adds this
   email: string;
   nom?: string;
   prenom?: string;
   id_membre?: string | number;
+  id_membre?: string | number;
   id_role?: number;
-  role?: string;
+  role?: string;            // ← branch adds this
 };
 
 type AuthContextType = {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
+  setSession: (
+    accessToken: string,
+    refreshToken: string | null | undefined,  // ← branch: optional
+    user: User,
+  ) => void;
   logout: () => void;
   isLoading: boolean;
 };
 
+// ─── Context ──────────────────────────────────────────────────────────────────
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+
+const AUTH_STORAGE_KEYS = [      // ← branch adds this (safer than localStorage.clear())
+  'access_token',
+  'refresh_token',
+  'user',
+  'membre_id',
+  'authToken',
+  'token',
+  'validation_token',
+] as const;
+
+function persistAuthSession({
+  accessToken,
+  refreshToken,
+  user,
+}: {
+  accessToken: string;
+  refreshToken?: string | null;
+  user: User;
+}) {
+  // Branch saves token under 3 keys for legacy compatibility
+  localStorage.setItem('access_token', accessToken);
+  localStorage.setItem('authToken',    accessToken);
+  localStorage.setItem('token',        accessToken);
+
+  if (refreshToken) {
+    localStorage.setItem('refresh_token', refreshToken);
+  } else {
+    localStorage.removeItem('refresh_token');
+  }
+
+  localStorage.setItem('user', JSON.stringify(user));
+
+  if (user.id_membre !== undefined && user.id_membre !== null) {
+    localStorage.setItem('membre_id', String(user.id_membre));
+  } else {
+    localStorage.removeItem('membre_id');
+  }
+}
+
+function clearAuthSession() {
+  // ← branch: surgical removal instead of localStorage.clear()
+  //   which would wipe unrelated app data
+  for (const key of AUTH_STORAGE_KEYS) {
+    localStorage.removeItem(key);
+  }
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser]           = useState<User | null>(null);
+  const [token, setToken]         = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
+  // Rehydrate session on mount
   useEffect(() => {
     const storedToken = localStorage.getItem('access_token');
-    const storedUser = localStorage.getItem('user');
+    const storedUser  = localStorage.getItem('user');
 
     if (storedToken && storedUser && storedUser !== 'undefined') {
       setToken(storedToken);
       try {
         setUser(JSON.parse(storedUser));
       } catch (e) {
-        console.error('Failed to parse user:', e);
+        console.error('Failed to parse stored user:', e);
       }
       setupAuthInterceptor(storedToken);
     }
+
     setIsLoading(false);
   }, []);
+
+  const setSession = (
+    accessToken: string,
+    refreshToken: string | null | undefined,
+    nextUser: User,
+  ) => {
+    setToken(accessToken);
+    setUser(nextUser);
+    persistAuthSession({ accessToken, refreshToken, user: nextUser });
+    setupAuthInterceptor(accessToken);
+  };
 
   const login = async (email: string, password: string) => {
     try {
       const data: LoginResponse = await authAPI.login(email, password);
-      setToken(data.access);
-      setUser(data.user);
-      localStorage.setItem('access_token', data.access);
-      localStorage.setItem('refresh_token', data.refresh);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setupAuthInterceptor(data.access);
-      // Redirection en fonction du rôle renvoyé par le service d'auth
-      const roleName = (data.user && (data.user.role as string)) || '';
-      const idRole = (data.user && (data.user.id as number)) || 0;
-
-      const normalized = roleName.toLowerCase().trim().replace(/\s+/g, '_');
-      const ROLE_REDIRECTS: Record<string, string> = {
-        admin: '/fr/system-admin',
-        operateur_economique: '/fr/dashboard/operator',
-        service_contractant: '/fr/dashboard/contractant',
-        resp_valid_intern: '/fr/validation/dashboard/commission',
-        resp_cm: '/fr/validation/dashboard/commission',
-        validateur_interne_cdc: '/fr/validation/dashboard/validatorCDC',
-        validateur_interne_marche: '/fr/validation/dashboard/validatorMarche',
-        validateur_externe_cdc: '/fr/validation/dashboard/validatorCDC',
-        validateur_externe_marche: '/fr/validation/dashboard/validatorMarche',
-      };
-
-      if (ROLE_REDIRECTS[normalized]) {
-        router.push(ROLE_REDIRECTS[normalized]);
-        return;
-      }
-
-      if (normalized.includes('admin')) return router.push('/fr/system-admin');
-      if (normalized.includes('operateur')) return router.push('/fr/dashboard/operator');
-      if (normalized.includes('contractant')) return router.push('/fr/dashboard/contractant');
-      if (normalized.includes('resp_valid_intern') || normalized.includes('resp_cm')) return router.push('/fr/validation/dashboard/commission');
-      if (normalized.includes('validateur')) {
-        if (normalized.includes('cdc')) return router.push('/fr/validation/dashboard/validatorCDC');
-        if (normalized.includes('marche')) return router.push('/fr/validation/dashboard/validatorMarche');
-        return router.push('/fr/validation/dashboard/validatorCDC');
-      }
-
-      // fallback by idRole
-      const idRoleMap: Record<number, string> = {
-        1: '/fr/system-admin',
-        2: '/fr/dashboard/contractant',
-        3: '/fr/validation/dashboard/commission',
-        4: '/fr/dashboard/operator',
-        5: '/fr/dashboard/operator',
-      };
-      router.push(idRoleMap[idRole] ?? '/fr/dashboard/operator');
+      // ← No redirect here: LoginPage handles role-based redirection
+      setSession(data.access, data.refresh, data.user);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -105,15 +142,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.clear();
+    clearAuthSession();                // ← safe, not localStorage.clear()
     setupAuthInterceptor(null);
     router.push('/fr/login');
   };
 
-  // ✅ CRITIQUE : Empêche les re-renders inutiles des enfants
-  const contextValue = useMemo(() => ({
-    user, token, login, logout, isLoading
-  }), [user, token, isLoading]);
+  const contextValue = useMemo(
+    () => ({ user, token, login, setSession, logout, isLoading }),
+    [user, token, isLoading],
+  );
 
   return (
     <AuthContext.Provider value={contextValue}>
@@ -122,8 +159,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
   return context;
 }

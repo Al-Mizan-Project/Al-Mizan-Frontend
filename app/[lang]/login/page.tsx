@@ -11,63 +11,74 @@ import {
   faBuildingColumns
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type PageProps = {
   params: Promise<{ lang: string }>;
 };
 
-// Mapping des rôles vers les URLs de redirection
 const ROLE_REDIRECTS: Record<string, string> = {
-  admin: '/fr/system-admin',
-  operateur_economique: '/fr/dashboard/operator',
-  service_contractant: '/fr/dashboard/contractant',
+  // Système
+  admin:                        '/fr/system-admin',
 
-  // Nouveaux rôles
-  resp_valid_intern: '/fr/validation/dashboard/commission',
-  resp_cm: '/fr/validation/dashboard/commission',
-  validateur_interne_cdc: '/fr/validation/dashboard/validatorCDC',
-  validateur_interne_marche: '/fr/validation/dashboard/validatorMarche',
-  validateur_externe_cdc: '/fr/validation/dashboard/validatorCDC',
-  validateur_externe_marche: '/fr/validation/dashboard/validatorMarche',
+  // Service contractant
+  resp_sc:                      '/fr/dashboard/contractant',
+  redacteur_cdc:                '/fr/dashboard/contractant',
+  evaluateur:                   '/fr/dashboard/contractant',
+  membre_comite_technique:      '/fr/dashboard/contractant',
+
+  // Opérateur économique
+  resp_oe:                      '/fr/dashboard/operator',
+  preparateur_oe:               '/fr/dashboard/operator',
+
+  // Validation interne (CIV)
+  resp_valid_intern:            '/fr/validation/dashboard/commission',
+  validateur_interne_cdc:       '/fr/validation/dashboard/validatorCDC',
+  validateur_interne_marche:    '/fr/validation/dashboard/validatorMarche',
+
+  // Contrôle des marchés (CM)
+  resp_cm:                      '/fr/validation/dashboard/commission',
+  validateur_externe_cdc:       '/fr/validation/dashboard/validatorCDC',
+  validateur_externe_marche:    '/fr/validation/dashboard/validatorMarche',
 };
 
 /**
  * Détermine l'URL de redirection selon le rôle extrait du token JWT.
- * Accepte aussi bien les noms bruts (ex: "Commission Externe") que
- * les formes normalisées (ex: "commission_externe").
+ * Accepte les noms bruts Django (ex: "RESP_SC") comme les formes normalisées.
  */
 function getRedirectPath(roleName: string, idRole: number): string {
-  // Normalisation : minuscules + espaces → underscore
   const normalized = roleName
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '_');
 
-  // Correspondance exacte après normalisation
-  if (ROLE_REDIRECTS[normalized]) {
-    return ROLE_REDIRECTS[normalized];
-  }
+  // Correspondance exacte en priorité
+  if (ROLE_REDIRECTS[normalized]) return ROLE_REDIRECTS[normalized];
 
-  // Correspondance partielle (fallback)
-  if (normalized.includes('admin')) return ROLE_REDIRECTS.admin;
-  if (normalized.includes('operateur')) return ROLE_REDIRECTS.operateur_economique;
-  if (normalized.includes('contractant')) return ROLE_REDIRECTS.service_contractant;
-  if (normalized.includes('resp_valid_intern') || normalized.includes('resp_cm')) return ROLE_REDIRECTS.resp_valid_intern;
+  // Correspondances partielles (fallback)
+  if (normalized.includes('admin'))                                         return ROLE_REDIRECTS.admin;
+  if (normalized.includes('resp_sc') || normalized.includes('contractant')) return ROLE_REDIRECTS.resp_sc;
+  if (normalized.includes('redacteur'))                                     return ROLE_REDIRECTS.redacteur_cdc;
+  if (normalized.includes('evaluateur'))                                    return ROLE_REDIRECTS.evaluateur;
+  if (normalized.includes('comite_technique'))                              return ROLE_REDIRECTS.membre_comite_technique;
+  if (normalized.includes('resp_oe') || normalized.includes('operateur'))   return ROLE_REDIRECTS.resp_oe;
+  if (normalized.includes('preparateur'))                                   return ROLE_REDIRECTS.preparateur_oe;
+  if (normalized.includes('resp_valid'))                                    return ROLE_REDIRECTS.resp_valid_intern;
+  if (normalized.includes('resp_cm'))                                       return ROLE_REDIRECTS.resp_cm;
   if (normalized.includes('validateur')) {
-    if (normalized.includes('cdc')) return ROLE_REDIRECTS.validateur_interne_cdc;
-    if (normalized.includes('marche')) return ROLE_REDIRECTS.validateur_interne_marche;
+    const isExterne = normalized.includes('extern');
+    if (normalized.includes('cdc'))    return isExterne ? ROLE_REDIRECTS.validateur_externe_cdc   : ROLE_REDIRECTS.validateur_interne_cdc;
+    if (normalized.includes('marche')) return isExterne ? ROLE_REDIRECTS.validateur_externe_marche : ROLE_REDIRECTS.validateur_interne_marche;
     return ROLE_REDIRECTS.validateur_interne_cdc;
   }
-  if (normalized.includes('commission')) return ROLE_REDIRECTS.commission_externe;
-  if (normalized.includes('tutelle')) return ROLE_REDIRECTS.tutelle;
 
-  // Fallback par id_role si le nom ne correspond à rien
+  // Fallback par id_role (à adapter selon ta BDD)
   const idRoleMap: Record<number, string> = {
     1: ROLE_REDIRECTS.admin,
-    2: ROLE_REDIRECTS.service_contractant,
-    3: ROLE_REDIRECTS.commission_externe,
-    4: ROLE_REDIRECTS.operateur_economique,
-    5: ROLE_REDIRECTS.tutelle,
+    2: ROLE_REDIRECTS.resp_sc,
+    3: ROLE_REDIRECTS.resp_valid_intern,
+    4: ROLE_REDIRECTS.resp_oe,
+    5: ROLE_REDIRECTS.resp_cm,
   };
 
   return idRoleMap[idRole] ?? '/fr/dashboard/operator';
@@ -81,7 +92,8 @@ export default function LoginPage({ params }: PageProps) {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { login: authLogin } = useAuth();
+  const { login: authLogin, user } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     let isMounted = true;
@@ -113,9 +125,15 @@ export default function LoginPage({ params }: PageProps) {
     }
 
     try {
-      // Utiliser la méthode centralisée d'authentification du contexte
       await authLogin(email, password);
-      // AuthContext gère le stockage du token et la redirection par défaut
+      // user est mis à jour de façon synchrone dans le contexte via setSession
+      // On le relit depuis localStorage pour éviter la dépendance au re-render
+      const storedUser = localStorage.getItem('user');
+      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+      const roleName   = parsedUser?.role ?? '';
+      const idRole     = parsedUser?.id_role ?? 0;
+      const redirectTo = getRedirectPath(roleName, idRole);
+      router.push(redirectTo);
       return;
     } catch (err: any) {
       if (err.response?.status === 401 || err.message?.includes('Invalid') || err.message?.includes('Identifiants')) {
@@ -240,7 +258,6 @@ export default function LoginPage({ params }: PageProps) {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute inset-y-0 inset-e-0 flex items-center pe-4 text-[#589C9F] hover:text-[#306B6F] transition-colors"
-                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                 >
                   <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} className="w-4 h-4" />
                 </button>
@@ -310,7 +327,6 @@ export default function LoginPage({ params }: PageProps) {
               </Link>
             </p>
 
-            {/* Language Switcher */}
             <div className="mt-6 flex justify-center gap-2">
               {(['fr', 'ar'] as const).map((l) => (
                 <Link
@@ -327,7 +343,6 @@ export default function LoginPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* Ministry Footer */}
           <div className="mt-12 flex justify-center opacity-60">
             <div className="flex items-center gap-2 text-[#418387] text-xs font-cairo">
               <FontAwesomeIcon icon={faBuildingColumns} className="w-4 h-4" />

@@ -1,131 +1,69 @@
 'use client';
 
-import {
-  createContext, useContext, useReducer, useEffect,
-  useCallback, ReactNode
-} from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { useAuth } from './auth';
+import { api } from './api';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-export interface UserProfile {
-  nom: string;
-  prenom: string;
-  role: string;
+interface UserProfile {
   email: string;
-  photoUrl: string | null; // base64 data URL or null
+  role: string;
+  photoUrl: string | null;
 }
 
-interface ProfileState {
-  profile: UserProfile;
-  lastSaved: Date | null;
-}
-
-type ProfileAction =
-  | { type: 'UPDATE'; payload: Partial<UserProfile> }
-  | { type: 'SET_PHOTO'; url: string | null }
-  | { type: 'LOAD'; payload: UserProfile };
-
-const DEFAULT_PROFILE: UserProfile = {
-  nom: '',
-  prenom: '',
-  role: 'Chef évaluateur',
-  email: '',
-  photoUrl: null,
-};
-
-const STORAGE_KEY = 'elmizan_user_profile';
-
-// ─── Reducer ──────────────────────────────────────────────────────────────────
-function reducer(state: ProfileState, action: ProfileAction): ProfileState {
-  switch (action.type) {
-    case 'LOAD':
-      return { ...state, profile: action.payload };
-    case 'UPDATE':
-      return {
-        profile: { ...state.profile, ...action.payload },
-        lastSaved: new Date(),
-      };
-    case 'SET_PHOTO':
-      return {
-        profile: { ...state.profile, photoUrl: action.url },
-        lastSaved: new Date(),
-      };
-    default:
-      return state;
-  }
-}
-
-// ─── Context ──────────────────────────────────────────────────────────────────
 interface ProfileContextValue {
   profile: UserProfile;
   lastSaved: Date | null;
-  updateProfile: (data: Partial<UserProfile>) => void;
+  updateProfile: (data: Partial<UserProfile>) => Promise<void>;
   setPhoto: (url: string | null) => void;
-  /** Returns initials like "AB" for display in avatar */
   initials: string;
-  /** Full display name */
   displayName: string;
 }
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
 export function UserProfileProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, {
-    profile: DEFAULT_PROFILE,
-    lastSaved: null,
+  const { user: authUser } = useAuth();
+  const [profile, setProfile] = useState<UserProfile>({
+    email: '',
+    role: '',
+    photoUrl: null,
   });
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  // Load from localStorage on mount
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as UserProfile;
-        dispatch({ type: 'LOAD', payload: saved });
-      }
-    } catch {
-      // ignore parse errors
+    if (authUser) {
+      setProfile({
+        email: authUser.email || '',
+        role: authUser.id_role ? `Rôle #${authUser.id_role}` : 'Sans rôle',
+        photoUrl: null,
+      });
     }
-  }, []);
+  }, [authUser]);
 
-  // Persist to localStorage on every update
-  useEffect(() => {
-    if (state.lastSaved) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.profile));
-      } catch {
-        // ignore storage errors
-      }
-    }
-  }, [state.profile, state.lastSaved]);
+  const updateProfile = async (data: Partial<UserProfile>) => {
+    if (!authUser) return;
+    const payload: any = {};
+    if (data.email !== undefined) payload.email = data.email;
+    await api.patch(`/users/${authUser.id_utilisateur}`, payload);
+    setProfile((prev) => ({ ...prev, ...data }));
+    setLastSaved(new Date());
+  };
 
-  const updateProfile = useCallback((data: Partial<UserProfile>) => {
-    dispatch({ type: 'UPDATE', payload: data });
-  }, []);
+  const setPhoto = (url: string | null) => {
+    setProfile((prev) => ({ ...prev, photoUrl: url }));
+    setLastSaved(new Date());
+  };
 
-  const setPhoto = useCallback((url: string | null) => {
-    dispatch({ type: 'SET_PHOTO', url });
-  }, []);
-
-  const { nom, prenom, role } = state.profile;
-  const displayName = [prenom, nom].filter(Boolean).join(' ') || role || 'Utilisateur';
-  const initials = [prenom[0], nom[0]].filter(Boolean).join('').toUpperCase() || 'U';
+  const displayName = profile.email || 'Utilisateur';
+  const initials = profile.email?.[0]?.toUpperCase() || 'U';
 
   return (
-    <ProfileContext.Provider value={{
-      profile: state.profile,
-      lastSaved: state.lastSaved,
-      updateProfile,
-      setPhoto,
-      initials,
-      displayName,
-    }}>
+    <ProfileContext.Provider value={{ profile, lastSaved, updateProfile, setPhoto, initials, displayName }}>
       {children}
     </ProfileContext.Provider>
   );
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useUserProfile() {
   const ctx = useContext(ProfileContext);
   if (!ctx) throw new Error('useUserProfile must be used within UserProfileProvider');

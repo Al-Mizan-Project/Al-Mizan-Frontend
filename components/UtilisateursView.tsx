@@ -1,7 +1,8 @@
+// components/UtilisateursView.tsx
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
-import { USERS, SystemUser } from '@/components/DashboardSystemView';
+import { useState, useEffect, useMemo } from 'react';
+import { api } from '@/lib/api';
 import Pagination from '@/components/Pagination';
 
 const ROWS_PER_PAGE = 10;
@@ -26,6 +27,7 @@ const STATUT_STYLE: Record<SystemUser['statut'], string> = {
   'En attente': 'text-amber-600',
   'Bloqué': 'text-red-600',
 };
+const ROWS_PER_PAGE = 10;
 
 type SortDir = 'asc' | 'desc' | null;
 
@@ -37,10 +39,7 @@ function buildHistory(u: SystemUser) {
   ];
 }
 
-// ─── Dropdown ─────────────────────────────────────────────────────────────────
-function Dropdown<T extends string>({ label, options, value, onChange }: {
-  label: string; options: T[]; value: T; onChange: (v: T) => void;
-}) {
+function Dropdown<T extends string>({ label, options, value, onChange }: { label: string; options: T[]; value: T; onChange: (v: T) => void }) {
   const [open, setOpen] = useState(false);
   const isActive = value !== options[0];
   return (
@@ -68,27 +67,19 @@ function Dropdown<T extends string>({ label, options, value, onChange }: {
   );
 }
 
-// ─── Col header ──────────────────────────────────────────────────────────────
-function ColHeader({ label, sortKey, sortBy, sortDir, onSort }: {
-  label: string; sortKey: string; sortBy: string | null; sortDir: SortDir; onSort: (k: string) => void;
-}) {
+function ColHeader({ label, sortKey, sortBy, sortDir, onSort }: { label: string; sortKey: string; sortBy: string | null; sortDir: 'asc' | 'desc' | null; onSort: (k: string) => void }) {
   const active = sortBy === sortKey;
   return (
-    <button onClick={() => onSort(sortKey)}
-      className="flex items-center gap-1 text-xs font-bold text-gray-600 uppercase tracking-wider hover:text-[#1C4532] transition-colors">
+    <button onClick={() => onSort(sortKey)} className="flex items-center gap-1 text-xs font-bold text-gray-600 uppercase tracking-wider hover:text-[#1C4532] transition-colors">
       {label}
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-        className={active ? 'text-[#1C4532]' : 'text-gray-400'}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={active ? 'text-[#1C4532]' : 'text-gray-400'}>
         <polyline points={(!active || sortDir === 'asc') ? '6 9 12 15 18 9' : '18 15 12 9 6 15'} />
       </svg>
     </button>
   );
 }
 
-// ─── Confirm modal ────────────────────────────────────────────────────────────
-function ConfirmModal({ message, onConfirm, onCancel, danger = false }: {
-  message: string; onConfirm: () => void; onCancel: () => void; danger?: boolean;
-}) {
+function ConfirmModal({ message, onConfirm, onCancel, danger = false }: { message: string; onConfirm: () => void; onCancel: () => void; danger?: boolean }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7">
@@ -109,39 +100,33 @@ function ConfirmModal({ message, onConfirm, onCancel, danger = false }: {
   );
 }
 
-// ─── User profile drawer ──────────────────────────────────────────────────────
-function UserDrawer({ user, onClose, onAction }: {
-  user: SystemUser;
+function UserDrawer({ user, roleName, onClose, onAction, onNavigateToRoles, onNavigateToPermissions }: {
+  user: User;
+  roleName: string;
   onClose: () => void;
-  onAction: (id: string, action: 'valider' | 'bloquer' | 'debloquer' | 'supprimer') => void;
+  onAction: (id: number, action: 'supprimer' | 'bloquer' | 'debloquer') => void;
+  onNavigateToRoles: () => void;
+  onNavigateToPermissions: () => void;
 }) {
-  const history = buildHistory(user);
+  const initials = user.email?.[0]?.toUpperCase() || '?';
 
   return (
     <div className="fixed inset-0 z-40 flex">
-      {/* Backdrop */}
       <div className="flex-1 bg-black/40" onClick={onClose} />
-
-      {/* Panel */}
       <div className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-y-auto">
-        {/* Header */}
         <div className="flex items-start justify-between p-6 border-b border-gray-100">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-lg font-black flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #1C4532, #00738C)' }}>
-              {user.prenom[0]}{user.nom[0]}
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-lg font-black flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1C4532, #00738C)' }}>
+              {initials}
             </div>
             <div>
-              <h3 className="text-lg font-black text-gray-900">{user.prenom} {user.nom}</h3>
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_BADGE[user.role]}`}>
-                {user.role}
-              </span>
+              <h3 className="text-lg font-black text-gray-900">{user.email}</h3>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{roleName}</span>
             </div>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none mt-1">×</button>
         </div>
 
-        {/* Info */}
         <div className="p-6 border-b border-gray-100 space-y-3">
           <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Informations</h4>
           {[
@@ -151,61 +136,38 @@ function UserDrawer({ user, onClose, onAction }: {
             ['Date d\'inscription', user.dateInscription],
             ['Dernière action', user.derniereAction],
           ].map(([k, v]) => (
-            <div key={k} className="flex items-center justify-between text-sm">
+            <div key={String(k)} className="flex items-center justify-between text-sm">
               <span className="text-gray-500 font-medium">{k}</span>
-              <span className={`font-semibold ${k === 'Statut' ? STATUT_STYLE[v as SystemUser['statut']] : 'text-gray-800'}`}>
-                {v}
-              </span>
+              <span className="font-semibold text-gray-800">{String(v)}</span>
             </div>
           ))}
         </div>
 
-        {/* History */}
-        <div className="p-6 border-b border-gray-100">
-          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Historique des actions</h4>
-          <div className="space-y-3">
-            {history.map((h, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-[#00738C] mt-1.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">{h.action}</p>
-                  {h.detail && <p className="text-xs text-gray-500">{h.detail}</p>}
-                  <p className="text-xs text-gray-400">{h.date}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Actions */}
         <div className="p-6 flex flex-col gap-2 mt-auto">
           <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Actions</h4>
-
-          {user.statut === 'En attente' && (
-            <button onClick={() => onAction(user.id, 'valider')}
-              className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all"
-              style={{ background: 'linear-gradient(135deg, #1C4532, #00738C)' }}>
-              ✓ Valider le compte
-            </button>
-          )}
-
-          {user.statut === 'Actif' && (
-            <button onClick={() => onAction(user.id, 'bloquer')}
-              className="w-full py-2.5 rounded-xl text-sm font-bold border-2 border-red-300 text-red-600 hover:bg-red-50 transition-all">
-              Bloquer le compte
-            </button>
-          )}
-
-          {user.statut === 'Bloqué' && (
-            <button onClick={() => onAction(user.id, 'debloquer')}
-              className="w-full py-2.5 rounded-xl text-sm font-bold border-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-all">
-              Débloquer le compte
-            </button>
-          )}
-
-          <button onClick={() => onAction(user.id, 'supprimer')}
-            className="w-full py-2.5 rounded-xl text-sm font-bold border-2 border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600 transition-all">
-            Supprimer (soft delete)
+          <button
+            onClick={onNavigateToRoles}
+            className="w-full py-2.5 rounded-xl text-sm font-bold border-2 border-[#00738C] text-[#00738C] hover:bg-[#D6EAD4] transition-all"
+          >
+            Modifier le rôle
+          </button>
+          <button
+            onClick={onNavigateToPermissions}
+            className="w-full py-2.5 rounded-xl text-sm font-bold border-2 border-blue-300 text-blue-600 hover:bg-blue-50 transition-all"
+          >
+            Modifier les permissions
+          </button>
+          <button
+            onClick={() => onAction(user.id_utilisateur, user.is_active ? 'bloquer' : 'debloquer')}
+            className={`w-full py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${user.is_active ? 'border-orange-300 text-orange-600 hover:bg-orange-50' : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'}`}
+          >
+            {user.is_active ? 'Bloquer' : 'Débloquer'}
+          </button>
+          <button
+            onClick={() => onAction(user.id_utilisateur, 'supprimer')}
+            className="w-full py-2.5 rounded-xl text-sm font-bold border-2 border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600 transition-all"
+          >
+            Supprimer
           </button>
         </div>
       </div>
@@ -254,7 +216,7 @@ export default function UtilisateursView() {
         : sortBy === 'role' ? b.role : sortBy === 'date' ? b.dateInscription : b.statut;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
-  }, [filtered, sortBy, sortDir]);
+  }, [filtered, sortBy, sortDir, roles]);
 
   const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE);
   const paged = sorted.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
@@ -285,12 +247,12 @@ export default function UtilisateursView() {
     });
   };
 
-  const resetFilters = () => { setSearch(''); setRoleFilter('Tous'); setStatutFilter('Tous'); setPage(1); };
+  const resetFilters = () => { setSearch(''); setStatutFilter('Tous'); setPage(1); };
+
+  if (loading) return <div className="flex justify-center p-12">Chargement des utilisateurs...</div>;
 
   return (
     <div className="flex flex-col gap-4">
-
-      {/* Search + filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[240px] max-w-lg">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -305,30 +267,10 @@ export default function UtilisateursView() {
         <Dropdown label="Statut" options={STATUTS} value={statutFilter} onChange={v => { setStatutFilter(v); setPage(1); }} />
       </div>
 
-      {/* Active pills */}
-      {(roleFilter !== 'Tous' || statutFilter !== 'Tous') && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {roleFilter !== 'Tous' && (
-            <span className="flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-300 rounded-full text-xs font-semibold text-gray-700">
-              {roleFilter}
-              <button onClick={() => setRoleFilter('Tous')} className="text-gray-400 hover:text-red-500 transition-colors">×</button>
-            </span>
-          )}
-          {statutFilter !== 'Tous' && (
-            <span className="flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-300 rounded-full text-xs font-semibold text-gray-700">
-              {statutFilter}
-              <button onClick={() => setStatutFilter('Tous')} className="text-gray-400 hover:text-red-500 transition-colors">×</button>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Count */}
       <p className="text-xs text-gray-500">
         <span className="font-bold text-gray-700">{filtered.length}</span> utilisateur{filtered.length !== 1 ? 's' : ''} trouvé{filtered.length !== 1 ? 's' : ''}
       </p>
 
-      {/* Table or empty */}
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-28 gap-4">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.2">
@@ -337,10 +279,7 @@ export default function UtilisateursView() {
             <line x1="23" y1="11" x2="17" y2="11" />
           </svg>
           <h3 className="text-2xl font-black text-gray-800">Aucun utilisateur trouvé</h3>
-          <button onClick={resetFilters}
-            className="flex items-center gap-2 px-5 py-2.5 border-2 border-[#00738C] text-[#00738C] font-bold text-sm rounded-xl hover:bg-[#D6EAD4] transition-all">
-            Réinitialiser les filtres
-          </button>
+          <button onClick={resetFilters} className="flex items-center gap-2 px-5 py-2.5 border-2 border-[#00738C] text-[#00738C] font-bold text-sm rounded-xl hover:bg-[#D6EAD4] transition-all">Réinitialiser les filtres</button>
         </div>
       ) : (
         <>
@@ -348,102 +287,55 @@ export default function UtilisateursView() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100 bg-[#F4F7F4]">
-                  <th className="px-5 py-3 text-left"><ColHeader label="Utilisateur" sortKey="nom" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} /></th>
+                  <th className="px-5 py-3 text-left"><ColHeader label="ID" sortKey="id" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} /></th>
                   <th className="px-5 py-3 text-left"><ColHeader label="Email" sortKey="email" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} /></th>
                   <th className="px-5 py-3 text-left"><ColHeader label="Rôle" sortKey="role" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} /></th>
-                  <th className="px-5 py-3 text-left"><ColHeader label="Inscription" sortKey="date" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} /></th>
-                  <th className="px-5 py-3 text-left"><ColHeader label="Statut" sortKey="statut" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} /></th>
+                  <th className="px-5 py-3 text-left"><ColHeader label="Créé le" sortKey="date" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} /></th>
                   <th className="px-5 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {paged.map(u => (
-                  <tr key={u.id} className="border-b border-gray-50 hover:bg-[#F4F7F4]/60 transition-colors">
-                    {/* User */}
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                          style={{ background: 'linear-gradient(135deg, #1C4532, #00738C)' }}>
-                          {u.prenom[0]}{u.nom[0]}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-800">{u.prenom} {u.nom}</p>
-                          <p className="text-xs text-gray-400">{u.id}</p>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Email */}
-                    <td className="px-5 py-3 text-sm text-gray-500">{u.email}</td>
-
-                    {/* Role */}
-                    <td className="px-5 py-3">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_BADGE[u.role]}`}>
-                        {u.role}
-                      </span>
-                    </td>
-
-                    {/* Date */}
-                    <td className="px-5 py-3 text-sm text-gray-500">{u.dateInscription}</td>
-
-                    {/* Statut */}
-                    <td className="px-5 py-3">
-                      <span className={`text-xs font-bold ${STATUT_STYLE[u.statut]}`}>{u.statut}</span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-1.5">
-                        {/* Voir profil */}
-                        <button onClick={() => setSelectedUser(u)}
-                          className="px-3 py-1.5 text-xs font-semibold border border-gray-200 text-gray-600 rounded-lg hover:border-[#00738C] hover:text-[#00738C] transition-all">
+                {paged.map(u => {
+                  const roleName = getRoleName(u.id_role);
+                  return (
+                    <tr key={u.id_utilisateur} className="border-b border-gray-50 hover:bg-[#F4F7F4]/60 transition-colors">
+                      <td className="px-5 py-3 text-sm text-gray-500">{u.id_utilisateur}</td>
+                      <td className="px-5 py-3 text-sm text-gray-800 font-medium">{u.email}</td>
+                      <td className="px-5 py-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_BADGE[roleName] || ROLE_BADGE['default']}`}>{roleName}</span>
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-500">{new Date(u.created_at).toLocaleDateString('fr-FR')}</td>
+                      <td className="px-5 py-3">
+                        <button
+                          onClick={() => setSelectedUser(u)}
+                          className="px-3 py-1.5 text-xs font-semibold border border-gray-200 text-gray-600 rounded-lg hover:border-[#00738C] hover:text-[#00738C] transition-all"
+                        >
                           Voir
                         </button>
-
-                        {/* Context action */}
-                        {u.statut === 'En attente' && (
-                          <button onClick={() => applyAction(u.id, 'valider')}
-                            className="px-3 py-1.5 text-xs font-bold rounded-lg text-white transition-all"
-                            style={{ background: '#1C4532' }}>
-                            Valider
-                          </button>
-                        )}
-                        {u.statut === 'Actif' && (
-                          <button onClick={() => applyAction(u.id, 'bloquer')}
-                            className="px-3 py-1.5 text-xs font-semibold border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-all">
-                            Bloquer
-                          </button>
-                        )}
-                        {u.statut === 'Bloqué' && (
-                          <button onClick={() => applyAction(u.id, 'debloquer')}
-                            className="px-3 py-1.5 text-xs font-semibold border border-emerald-200 text-emerald-700 rounded-lg hover:bg-emerald-50 transition-all">
-                            Débloquer
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-
           {totalPages > 1 && (
-            
+            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={sorted.length} rowsPerPage={ROWS_PER_PAGE} />
           )}
         </>
       )}
 
-      {/* Profile drawer */}
       {selectedUser && (
         <UserDrawer
           user={selectedUser}
+          roleName={getRoleName(selectedUser.id_role)}
           onClose={() => setSelectedUser(null)}
           onAction={applyAction}
+          onNavigateToRoles={() => { setSelectedUser(null); onNavigateToRoles?.(); }}
+          onNavigateToPermissions={() => { setSelectedUser(null); onNavigateToPermissions?.(); }}
         />
       )}
 
-      {/* Confirm modal */}
       {confirmModal && (
         <ConfirmModal
           message={confirmModal.message}

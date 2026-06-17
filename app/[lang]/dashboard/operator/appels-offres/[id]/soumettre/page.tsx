@@ -26,7 +26,6 @@ import { upsertStoredSubmission } from '@/lib/operator-submissions-store';
 type FormData = {
   offreTechnique: File | null;
   offreFinanciere: File | null;
-  accepterConditions: boolean;
 };
 
 type FormErrors = Partial<Record<keyof FormData, string>>;
@@ -47,7 +46,6 @@ export default function SoumettreOffrePage({
   const [formData, setFormData] = useState<FormData>({
     offreTechnique: null,
     offreFinanciere: null,
-    accepterConditions: false,
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -136,10 +134,6 @@ export default function SoumettreOffrePage({
       newErrors.offreFinanciere = isArabic ? 'العرض المالي مطلوب' : 'Offre financière requise';
     }
 
-    if (!formData.accepterConditions) {
-      newErrors.accepterConditions = isArabic ? 'يجب قبول الشروط' : 'Vous devez accepter les conditions';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -174,7 +168,7 @@ export default function SoumettreOffrePage({
         }),
       ]);
 
-      const documentsBase = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8003';
+      const documentsBase = process.env.NEXT_PUBLIC_DOCUMENTS_SERVICE_URL || 'http://localhost:8080';
       const financialUrl = `${documentsBase}/api/documents/${finDoc.id_document}/`;
 
       const created = await createSoumission({
@@ -266,7 +260,6 @@ export default function SoumettreOffrePage({
       steps: {
         1: 'Vérification',
         2: 'Documents',
-        3: 'Confirmation'
       },
       section1: {
         title: 'Vos documents administratifs',
@@ -286,18 +279,8 @@ export default function SoumettreOffrePage({
         label: 'Télécharger votre offre financière',
         encryption: 'Chiffrement AES-256 activé'
       },
-      section4: {
-        title: 'Confirmation',
-        conditions: 'Je déclare sur l\'honneur que:',
-        condition1: 'Les informations fournies sont exactes et conformes',
-        condition2: 'Mon offre est valable pendant 120 jours',
-        condition3: 'Je m\'engage à respecter le cahier des charges',
-        condition4: 'Je n\'ai fait l\'objet d\'aucune exclusion légale',
-        warning: 'Attention: Une fois soumise, votre offre ne peut plus être modifiée'
-      },
       submit: 'Soumettre l\'offre',
       submitting: 'Soumission en cours...',
-      success: 'Offre soumise avec succès',
       next: 'Continuer',
       previous: 'Retour'
     },
@@ -310,7 +293,6 @@ export default function SoumettreOffrePage({
       steps: {
         1: 'التحقق',
         2: 'الوثائق',
-        3: 'التأكيد'
       },
       section1: {
         title: 'وثائقك الإدارية',
@@ -330,18 +312,8 @@ export default function SoumettreOffrePage({
         label: 'تحميل عرضك المالي',
         encryption: 'التشفير AES-256 مفعل'
       },
-      section4: {
-        title: 'التأكيد',
-        conditions: 'أصرح على الشرف بأن:',
-        condition1: 'المعلومات المقدمة دقيقة ومتوافقة',
-        condition2: 'عرضي ساري المفعول لمدة 120 يوماً',
-        condition3: 'ألتزم باحترام كراسة الشروط',
-        condition4: 'لم أكن موضوع أي إقصاء قانوني',
-        warning: 'تنبيه: بمجرد التقديم، لا يمكن تعديل عرضك'
-      },
       submit: 'تقديم العرض',
       submitting: 'جاري التقديم...',
-      success: 'تم تقديم العرض بنجاح',
       next: 'متابعة',
       previous: 'رجوع'
     }
@@ -403,10 +375,10 @@ export default function SoumettreOffrePage({
           )}
         </div>
 
-        {/* Progress Steps */}
+        {/* Progress Steps - now 2 steps only */}
         <div className="mb-8">
           <div className="flex items-center justify-center">
-            {[1, 2, 3].map((stepNum) => (
+            {[1, 2].map((stepNum) => (
               <div key={stepNum} className="flex items-center">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
                   stepNum <= step 
@@ -415,21 +387,18 @@ export default function SoumettreOffrePage({
                 }`}>
                   {stepNum < step ? <FontAwesomeIcon icon={faCheckCircle} /> : stepNum}
                 </div>
-                {stepNum < 3 && (
+                {stepNum < 2 && (
                   <div className={`w-24 h-1 ${stepNum < step ? 'bg-[#306B6F]' : 'bg-gray-200'}`} />
                 )}
               </div>
             ))}
           </div>
-          <div className="flex justify-center gap-16 mt-2">
+          <div className="flex justify-center gap-32 mt-2">
             <span className={`text-sm ${step >= 1 ? 'text-[#306B6F] font-bold' : 'text-gray-500'}`}>
               {t.steps[1 as keyof typeof t.steps]}
             </span>
             <span className={`text-sm ${step >= 2 ? 'text-[#306B6F] font-bold' : 'text-gray-500'}`}>
               {t.steps[2 as keyof typeof t.steps]}
-            </span>
-            <span className={`text-sm ${step >= 3 ? 'text-[#306B6F] font-bold' : 'text-gray-500'}`}>
-              {t.steps[3 as keyof typeof t.steps]}
             </span>
           </div>
         </div>
@@ -477,7 +446,7 @@ export default function SoumettreOffrePage({
             </div>
           )}
 
-          {/* Step 2: Technical & Financial Offers */}
+          {/* Step 2: Technical & Financial Offers — submits directly */}
           {step === 2 && (
             <div className="space-y-6">
               {/* Technical Offer */}
@@ -566,65 +535,6 @@ export default function SoumettreOffrePage({
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="px-8 py-3 border-2 border-[#9BCFCF] text-[#418387] rounded-xl font-bold hover:bg-[#FCFFFF] transition-colors"
-                >
-                  {t.previous}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep(3)}
-                  className="px-8 py-3 bg-[#306B6F] text-white rounded-xl font-bold hover:bg-[#173C3F] transition-colors"
-                >
-                  {t.next}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Confirmation */}
-          {step === 3 && (
-            <div className="bg-white rounded-2xl p-8 shadow-sm">
-              <h2 className="text-xl font-bold text-[#0D2527] mb-6 font-cairo">{t.section4.title}</h2>
-              
-              <div className="space-y-4 mb-8">
-                <p className="font-bold text-[#0D2527] mb-4">{t.section4.conditions}</p>
-                
-                {[
-                  t.section4.condition1,
-                  t.section4.condition2,
-                  t.section4.condition3,
-                  t.section4.condition4
-                ].map((condition, index) => (
-                  <label key={index} className="flex items-start gap-3 p-4 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={formData.accepterConditions}
-                      onChange={(e) => setFormData(prev => ({ ...prev, accepterConditions: e.target.checked }))}
-                      className="mt-1 w-5 h-5 text-[#306B6F] border-gray-300 rounded focus:ring-[#306B6F]"
-                    />
-                    <span className="text-gray-700">{condition}</span>
-                  </label>
-                ))}
-              </div>
-
-              {errors.accepterConditions && (
-                <p className="text-red-600 text-sm mb-4 flex items-center gap-2">
-                  <FontAwesomeIcon icon={faExclamationTriangle} />
-                  {errors.accepterConditions}
-                </p>
-              )}
-
-              <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
-                <div className="flex items-start gap-3">
-                  <FontAwesomeIcon icon={faExclamationTriangle} className="text-red-600 mt-1" />
-                  <p className="text-red-800 font-bold">{t.section4.warning}</p>
-                </div>
-              </div>
-
-              <div className="flex justify-between">
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
                   className="px-8 py-3 border-2 border-[#9BCFCF] text-[#418387] rounded-xl font-bold hover:bg-[#FCFFFF] transition-colors"
                 >
                   {t.previous}

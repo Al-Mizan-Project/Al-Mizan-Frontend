@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { proxyRequest } from '../_utils';
 
-const ACTEURS_BASE = process.env.NEXT_PUBLIC_ACTEURS_SERVICE_URL || 'http://localhost:8000';
+const ACTEURS_BASE = process.env.NEXT_PUBLIC_ACTEURS_SERVICE_URL || 'http://localhost:8080';
 
 const options = {
   baseUrl: ACTEURS_BASE,
