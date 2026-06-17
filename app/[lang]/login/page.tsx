@@ -1,84 +1,99 @@
 'use client';
-
+import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useState, FormEvent } from 'react';
-import Link from 'next/link';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useAuth } from '@/lib/auth';
-import { 
-  faEnvelope, 
-  faLock, 
-  faEye, 
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  faEnvelope,
+  faLock,
+  faEye,
   faEyeSlash,
-  faBuildingColumns,
-  faArrowRight
+  faBuildingColumns
 } from '@fortawesome/free-solid-svg-icons';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type PageProps = {
   params: Promise<{ lang: string }>;
 };
 
 const ROLE_REDIRECTS: Record<string, string> = {
-  // Admin
-  'ADMIN':                        '/fr/system-admin',
-  // Service Contractant
-  'RESP_SC':                      '/fr/dashboard/contractant',
-  'REDACTEUR_CDC':                '/fr/dashboard/contractant',
-  'VALIDATEUR_INTERNE_MARCHE':    '/fr/dashboard/contractant',
-  'VALIDATEUR_INTERNE_CDC':       '/fr/dashboard/contractant',
-  'RESP_VALID_INTERN':            '/fr/dashboard/contractant',
-  // Opérateur Économique
-  'RESP_OE':                      '/fr/dashboard/operator',
-  'PREPARATEUR_OE':               '/fr/dashboard/operator',
-  // COPEO — Évaluateur
-  'EVALUATEUR':                   '/fr/copeo',
-  // Comité Technique
-  'MEMBRE_COMITE_TECHNIQUE':      '/fr/comite-technique',
-  // Commission des Marchés (externe)
-  'RESP_CM':                      '/fr/validation/dashboard/validator',
-  'VALIDATEUR_EXTERNE_MARCHE':    '/fr/validation/dashboard/validator',
-  'VALIDATEUR_EXTERNE_CDC':       '/fr/validation/dashboard/validator',
-  // Legacy role names (kept for backward compat with old seed)
-  'admin':                        '/fr/system-admin',
-  'operateur_economique':         '/fr/dashboard/operator',
-  'service_contractant':          '/fr/dashboard/contractant',
-  'commission_externe':           '/fr/validation/dashboard/validator',
-  'tutelle':                      '/fr/validation/dashboard/validator',
-  'evaluateur':                   '/fr/copeo',
-  'evaluateur_administratif':     '/fr/copeo',
-  'chef_commission':              '/fr/copeo',
-  'membre_comite_technique':      '/fr/comite-technique',
+  // Système
+  admin:                        '/fr/system-admin',
+
+  // Service contractant
+  resp_sc:                      '/fr/dashboard/contractant',
+  redacteur_cdc:                '/fr/dashboard/contractant',
+  evaluateur:                   '/fr/dashboard/contractant',
+  membre_comite_technique:      '/fr/dashboard/contractant',
+
+  // Opérateur économique
+  resp_oe:                      '/fr/dashboard/operator',
+  preparateur_oe:               '/fr/dashboard/operator',
+
+  // Validation interne (CIV)
+  resp_valid_intern:            '/fr/validation/dashboard/commission',
+  validateur_interne_cdc:       '/fr/validation/dashboard/validatorCDC',
+  validateur_interne_marche:    '/fr/validation/dashboard/validatorMarche',
+
+  // Contrôle des marchés (CM)
+  resp_cm:                      '/fr/validation/dashboard/commission',
+  validateur_externe_cdc:       '/fr/validation/dashboard/validatorCDC',
+  validateur_externe_marche:    '/fr/validation/dashboard/validatorMarche',
 };
 
-function getRedirectPath(roleName: string): string {
-  // Exact match first (handles NOM_NOM format)
-  if (ROLE_REDIRECTS[roleName]) return ROLE_REDIRECTS[roleName];
+/**
+ * Détermine l'URL de redirection selon le rôle extrait du token JWT.
+ * Accepte les noms bruts Django (ex: "RESP_SC") comme les formes normalisées.
+ */
+function getRedirectPath(roleName: string, idRole: number): string {
+  const normalized = roleName
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_');
 
-  // Normalized lowercase fallback
-  const normalized = roleName.toLowerCase().trim().replace(/\s+/g, '_');
+  // Correspondance exacte en priorité
   if (ROLE_REDIRECTS[normalized]) return ROLE_REDIRECTS[normalized];
 
-  // Substring fallback
-  if (normalized.includes('admin'))              return '/fr/system-admin';
-  if (normalized.includes('evaluateur') || normalized.includes('copeo')) return '/fr/copeo';
-  if (normalized.includes('comite_technique') || normalized.includes('comité_technique')) return '/fr/comite-technique';
-  if (normalized.includes('operateur'))          return '/fr/dashboard/operator';
-  if (normalized.includes('contractant'))        return '/fr/dashboard/contractant';
-  if (normalized.includes('commission') || normalized.includes('tutelle')) return '/fr/validation/dashboard/validator';
+  // Correspondances partielles (fallback)
+  if (normalized.includes('admin'))                                         return ROLE_REDIRECTS.admin;
+  if (normalized.includes('resp_sc') || normalized.includes('contractant')) return ROLE_REDIRECTS.resp_sc;
+  if (normalized.includes('redacteur'))                                     return ROLE_REDIRECTS.redacteur_cdc;
+  if (normalized.includes('evaluateur'))                                    return ROLE_REDIRECTS.evaluateur;
+  if (normalized.includes('comite_technique'))                              return ROLE_REDIRECTS.membre_comite_technique;
+  if (normalized.includes('resp_oe') || normalized.includes('operateur'))   return ROLE_REDIRECTS.resp_oe;
+  if (normalized.includes('preparateur'))                                   return ROLE_REDIRECTS.preparateur_oe;
+  if (normalized.includes('resp_valid'))                                    return ROLE_REDIRECTS.resp_valid_intern;
+  if (normalized.includes('resp_cm'))                                       return ROLE_REDIRECTS.resp_cm;
+  if (normalized.includes('validateur')) {
+    const isExterne = normalized.includes('extern');
+    if (normalized.includes('cdc'))    return isExterne ? ROLE_REDIRECTS.validateur_externe_cdc   : ROLE_REDIRECTS.validateur_interne_cdc;
+    if (normalized.includes('marche')) return isExterne ? ROLE_REDIRECTS.validateur_externe_marche : ROLE_REDIRECTS.validateur_interne_marche;
+    return ROLE_REDIRECTS.validateur_interne_cdc;
+  }
 
-  // Final fallback
-  return '/fr/dashboard/operator';
+  // Fallback par id_role (à adapter selon ta BDD)
+  const idRoleMap: Record<number, string> = {
+    1: ROLE_REDIRECTS.admin,
+    2: ROLE_REDIRECTS.resp_sc,
+    3: ROLE_REDIRECTS.resp_valid_intern,
+    4: ROLE_REDIRECTS.resp_oe,
+    5: ROLE_REDIRECTS.resp_cm,
+  };
+
+  return idRoleMap[idRole] ?? '/fr/dashboard/operator';
 }
 
 export default function LoginPage({ params }: PageProps) {
-  const [lang, setLang] = useState<string>('fr');
+  const [lang, setLang] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [remember, setRemember] = useState(false);
-  
-  const { setSession } = useAuth();
+  const { login: authLogin, user } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     let isMounted = true;
@@ -97,59 +112,35 @@ export default function LoginPage({ params }: PageProps) {
     setError(null);
     setLoading(true);
 
+    if (!email || !password) {
+      setError(isArabic ? 'هذا الحقل مطلوب' : 'Ce champ est obligatoire');
+      setLoading(false);
+      return;
+    }
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setError(isArabic ? 'عنوان بريد إلكتروني غير صالح' : 'Adresse e-mail invalide');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch('/api/proxy/auth?path=auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!res.ok) throw new Error('Identifiants incorrects');
-      const data = await res.json();
-      
-      const token = data.access;
-      const refreshToken = data.refresh;
-
-      const idMembre = data.user?.id_membre;
-      const finalRoleName = data.user?.role || '';
-      const userEmail = data.user?.email;
-
-      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      const userId = payload.user_id;
-
-      let memberInfo = null;
-      if (idMembre) {
-        const profRes = await fetch(`/api/proxy/acteurs?path=membres/${idMembre}/`, {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        if (profRes.ok) {
-          const profData = await profRes.json();
-          memberInfo = Array.isArray(profData) ? profData[0] : profData;
-        }
-      }
-
-      localStorage.setItem('access_token', token);
-      if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
-      localStorage.setItem('user_id', userId);
-      if (idMembre) localStorage.setItem('id_membre', idMembre);
-      if (memberInfo) localStorage.setItem('member_info', JSON.stringify(memberInfo));
-
-      if (setSession) {
-        setSession(token, refreshToken, { 
-          id: userId, 
-          email: userEmail, 
-          role: finalRoleName,
-          id_membre: idMembre
-        });
-      }
-
-      window.location.href = getRedirectPath(finalRoleName);
-
+      await authLogin(email, password);
+      // user est mis à jour de façon synchrone dans le contexte via setSession
+      // On le relit depuis localStorage pour éviter la dépendance au re-render
+      const storedUser = localStorage.getItem('user');
+      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+      const roleName   = parsedUser?.role ?? '';
+      const idRole     = parsedUser?.id_role ?? 0;
+      const redirectTo = getRedirectPath(roleName, idRole);
+      router.push(redirectTo);
+      return;
     } catch (err: any) {
-      setError(isArabic ? 'خطأ في الدخول، يرجى التحقق من البيانات' : 'Erreur de connexion, veuillez vérifier vos identifiants');
+      if (err.response?.status === 401 || err.message?.includes('Invalid') || err.message?.includes('Identifiants')) {
+        setError(isArabic ? 'بيانات الدخول غير صحيحة' : 'Identifiants incorrects');
+      } else {
+        setError(err.message || (isArabic ? 'خطأ في الاتصال' : 'Erreur de connexion'));
+      }
     } finally {
       setLoading(false);
     }
@@ -158,7 +149,7 @@ export default function LoginPage({ params }: PageProps) {
   return (
     <main className="min-h-screen flex flex-col lg:flex-row bg-[#FCFFFF]">
 
-      {/* Left Panel – Branding */}
+      {/* ── Left Panel – Branding ── */}
       <section className="hidden lg:flex lg:w-1/2 bg-[#0D2527] flex-col justify-center items-center p-12 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-10 right-10 w-32 h-32 border-2 border-[#9BCFCF] rounded-full"></div>
@@ -196,7 +187,7 @@ export default function LoginPage({ params }: PageProps) {
         </div>
       </section>
 
-      {/* Right Panel – Login Form */}
+      {/* ── Right Panel – Login Form ── */}
       <section className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-md">
 
@@ -267,7 +258,6 @@ export default function LoginPage({ params }: PageProps) {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute inset-y-0 inset-e-0 flex items-center pe-4 text-[#589C9F] hover:text-[#306B6F] transition-colors"
-                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                 >
                   <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} className="w-4 h-4" />
                 </button>
@@ -337,15 +327,14 @@ export default function LoginPage({ params }: PageProps) {
               </Link>
             </p>
 
-            {/* Language Switcher */}
             <div className="mt-6 flex justify-center gap-2">
               {(['fr', 'ar'] as const).map((l) => (
                 <Link
                   key={l}
                   href={`/${l}/login`}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${lang === l
-                    ? 'bg-[#306B6F] text-white'
-                    : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
+                      ? 'bg-[#306B6F] text-white'
+                      : 'bg-[#FCFFFF] text-[#418387] border border-[#9BCFCF] hover:border-[#589C9F]'
                     }`}
                 >
                   {l === 'fr' ? 'Français' : 'العربية'}
@@ -354,7 +343,6 @@ export default function LoginPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* Ministry Footer */}
           <div className="mt-12 flex justify-center opacity-60">
             <div className="flex items-center gap-2 text-[#418387] text-xs font-cairo">
               <FontAwesomeIcon icon={faBuildingColumns} className="w-4 h-4" />

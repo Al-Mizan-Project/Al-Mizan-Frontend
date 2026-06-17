@@ -352,7 +352,8 @@ function EnAttenteTab() {
             </tbody>
           </table>
         </div>
-        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} totalItems={filtered.length} rowsPerPage={ROWS_PER_PAGE} />
+
+        
       </div>
     </div>
   );

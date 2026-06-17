@@ -21,6 +21,7 @@ export interface EmployeeData {
 export interface fileRecord{
     id : string;
     rawId?: number | string; // Utilisé pour la navigation (ID backend dynamique)
+    id_doc_cdc?: number | string | null; // ID du document CDC associé
     reference: string;
     economicOperator:string;
     validator?:{
@@ -32,7 +33,7 @@ export interface fileRecord{
     validationDeadline:string;
     status:'En Attente'|'En Cours'|'En Retard'|'Prêt'|'Soumis';
     delayDays?:number;
-    etape?: 'Evaluation Administrative' | 'Evaluation des Offres'; // ← AJOUTER CECI
+    etape?: 'Evaluation Administrative' | 'Evaluation des Offres' | 'Validation';
 
 }
 export interface Validator {

@@ -75,8 +75,7 @@ export default function DossierTable({
   currentPage,
   rowsPerPage = 5,
 }: DossierTableProps) {
-  const start = (currentPage - 1) * rowsPerPage;
-  const paginated = data.slice(start, start + rowsPerPage);
+  const paginated = data;
 
   if (paginated.length === 0) {
     return (
@@ -95,6 +94,7 @@ export default function DossierTable({
             {[
               'Référence Dossier',
               'Opérateur Économique',
+              'Validateur',
               'Date de soumission',
               'Délai d\'évaluation',
               'Étape',
@@ -141,6 +141,11 @@ export default function DossierTable({
                     </div>
                     <span className="font-medium text-gray-800 text-sm">{row.operateur}</span>
                   </div>
+                </td>
+
+                {/* Validator */}
+                <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-700">
+                  {row.validateur ?? '-'}
                 </td>
 
                 {/* Date */}

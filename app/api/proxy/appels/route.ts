@@ -7,6 +7,7 @@ const options = {
   baseUrl: APPELS_BASE,
   requirePath: true,
   errorLabel: 'AppelsProxy',
+  internalTokenEnvVar: 'APPELS_INTERNAL_TOKEN',
 };
 
 export function GET(req: NextRequest) {

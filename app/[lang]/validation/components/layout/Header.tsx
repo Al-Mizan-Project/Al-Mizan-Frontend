@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBell, faCog, faUser } from '@fortawesome/free-solid-svg-icons';
 import { commissionRoutes, validatorRoutes } from '../../routes';
+import { useNotifications } from '../notification/useNotifications';
 
 type UserRole = 'commission' | 'validator';
 
@@ -121,6 +122,7 @@ export default function Header({ lang, role, variant, dict, dossierId }: HeaderP
   const fontFamily = isAr ? 'Cairo, sans-serif' : 'Roboto, sans-serif';
 
   const { title, label } = getHeaderContent(variant, role, isAr, dict, dossierId);
+  const { unreadCount } = useNotifications();
 
   // 🎨 Classes utilitaires pour les icônes interactives
   const iconBaseClasses = "transition-colors duration-200 cursor-pointer";
@@ -195,9 +197,11 @@ export default function Header({ lang, role, variant, dict, dossierId }: HeaderP
             }}
             className="w-[18px] h-5 hover:!text-[var(--color-blue-9)]"
           />
-          <div className="val-badge-danger absolute left-6 top-2">
-            <span className="val-badge-danger-text">9</span>
-          </div>
+          {unreadCount > 0 && (
+            <div className="val-badge-danger absolute left-6 top-2">
+              <span className="val-badge-danger-text">{unreadCount}</span>
+            </div>
+          )}
         </button>
       </div>
     </header>
