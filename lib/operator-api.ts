@@ -294,6 +294,7 @@ export async function runConformiteAuto(payload: {
   soumissionId: number;
   idAppelOffre: number;
   providedDocumentIds: number[];
+  requiredDocuments?: string[];
   performOcr?: boolean;
 }): Promise<{
   conformite_statut: string;
@@ -307,6 +308,7 @@ export async function runConformiteAuto(payload: {
       body: JSON.stringify({
         id_appel_offre: payload.idAppelOffre,
         provided_document_ids: payload.providedDocumentIds,
+        required_documents: payload.requiredDocuments,
         perform_ocr: payload.performOcr ?? true,
       }),
     }

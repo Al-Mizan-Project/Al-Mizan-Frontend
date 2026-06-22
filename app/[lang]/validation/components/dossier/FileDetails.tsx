@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { validationsApi } from '@/lib/api/validation';
+import AnomaliesTab from './AnomaliesTab';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faDownload,
@@ -14,7 +15,7 @@ import {
   faChevronUp,
 } from '@fortawesome/free-solid-svg-icons';
 
-type TabType = 'financial' | 'technical' | 'call' | 'reports' | 'decision';
+type TabType = 'financial' | 'technical' | 'call' | 'reports' | 'decision' | 'anomalies';
 type ReportSubTab = 'administrative' | 'offers';
 type DecisionSubTab = 'general' | 'commission' | 'technical' | 'conclusion';
 type UserRole = 'commission' | 'validator';
@@ -111,7 +112,7 @@ export default function FileDetails({
   const isReportsTab = activeTab === 'reports';
   const missingDocumentText = 'Document non disponible';
 
-  const shouldShowDocumentViewer = activeTab !== 'decision' || (activeTab === 'decision' && activeDecisionSubTab === 'general');
+  const shouldShowDocumentViewer = activeTab !== 'decision' && activeTab !== 'anomalies' || (activeTab === 'decision' && activeDecisionSubTab === 'general');
   const validatorNoButtons = isValidator && activeTab === 'call';
   const validatorDownloadOnly = isValidator && (activeTab === 'financial' || activeTab === 'technical');
   const validatorReportsDownloadOnly = isValidator && activeTab === 'reports';
@@ -1343,7 +1344,14 @@ Date de validation : ${new Date().toLocaleDateString('fr-FR')}
 
 
 
-          {isDecisionTab && isValidator && activeDecisionSubTab === 'commission' ? (
+          {activeTab === 'anomalies' ? (
+            <div className="val-file-details-content">
+              <AnomaliesTab
+                soumissionId={data?.soumission?.id_soumission}
+                appelOffreId={data?.soumission?.id_appel_offre}
+              />
+            </div>
+          ) : isDecisionTab && isValidator && activeDecisionSubTab === 'commission' ? (
             renderCommissionContent()
           ) : isDecisionTab && isValidator && activeDecisionSubTab === 'technical' ? (
             renderTechnicalEvaluationContent()
@@ -1371,7 +1379,7 @@ Date de validation : ${new Date().toLocaleDateString('fr-FR')}
             </div>
           )}
 
-          {isCommission && (
+          {isCommission && activeTab !== 'anomalies' && (
             <>
               {isDecisionTab ? (
                 <>

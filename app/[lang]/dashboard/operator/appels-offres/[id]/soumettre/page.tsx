@@ -9,6 +9,7 @@ import {
   faLock,
   faUpload,
   faCheckCircle,
+  faTimesCircle,
   faExclamationTriangle,
   faFileSignature,
   faShieldHalved,
@@ -236,10 +237,10 @@ export default function SoumettreOffrePage({
         const result = await runConformiteAuto({
           soumissionId: created.id,
           idAppelOffre: appelOffre.id,
+          requiredDocuments: ['offre_technique', 'offre_financiere'],
           providedDocumentIds: [
             techDoc.id_document,
             finDoc.id_document,
-            ...documentsProfile.map((doc) => doc.id),
           ],
           performOcr: true,
         });
