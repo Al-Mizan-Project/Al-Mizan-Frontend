@@ -9,10 +9,12 @@ import {
   faLock,
   faUpload,
   faCheckCircle,
+  faTimesCircle,
   faExclamationTriangle,
   faFileSignature,
   faShieldHalved,
-  faInfoCircle
+  faInfoCircle,
+  faRobot
 } from '@fortawesome/free-solid-svg-icons';
 import Link from 'next/link';
 import {
@@ -20,6 +22,7 @@ import {
   fetchAppelOffreById,
   fetchOperatorDocuments,
   uploadDocument,
+  runConformiteAuto,
 } from '@/lib/operator-api';
 import { upsertStoredSubmission } from '@/lib/operator-submissions-store';
 
@@ -42,6 +45,11 @@ export default function SoumettreOffrePage({
   const [loadError, setLoadError] = useState('');
   const [step, setStep] = useState(1);
   const [operatorId] = useState<number>(() => Number(process.env.NEXT_PUBLIC_OPERATOR_ID || 1));
+  const [conformiteModal, setConformiteModal] = useState<{
+    type: 'success' | 'failure';
+    rapport?: { missing_documents?: string[]; invalid_documents?: string[] };
+  } | null>(null);
+  const [conformiteLoading, setConformiteLoading] = useState(false);
   
   const [formData, setFormData] = useState<FormData>({
     offreTechnique: null,
@@ -221,11 +229,79 @@ export default function SoumettreOffrePage({
         ],
       });
 
-      router.push(`/${lang}/dashboard/operator/soumissions`);
+      // Run AI conformity analysis
+      setLoading(false);
+      setConformiteLoading(true);
+
+      try {
+        const result = await runConformiteAuto({
+          soumissionId: created.id,
+          idAppelOffre: appelOffre.id,
+          requiredDocuments: ['offre_technique', 'offre_financiere'],
+          providedDocumentIds: [
+            techDoc.id_document,
+            finDoc.id_document,
+          ],
+          performOcr: true,
+        });
+
+        const isConforme = result.conformite_statut === 'CONFORME';
+
+        // Update local store with conformity result
+        upsertStoredSubmission({
+          id: created.id,
+          appelOffre: {
+            id: appelOffre.id,
+            reference: appelOffre.reference,
+            titre: appelOffre.titre,
+            serviceContractant: appelOffre.serviceContractant,
+            montantEstime: appelOffre.montantEstime,
+          },
+          dateSoumission: new Date().toISOString(),
+          montantSoumis: 0,
+          statut: isConforme ? 'conforme' : 'soumise',
+          conformiteAdmin: isConforme ? 'conforme' : 'non_conforme',
+          conformiteTechnique: 'en_attente',
+          conformiteFinanciere: 'en_attente',
+          conformiteRapport: result.conformite_rapport || null,
+          documents: [
+            {
+              idDocument: techDoc.id_document,
+              name: techDoc.nom,
+              type: 'technique',
+              size: `${(techDoc.taille_fichier / 1024 / 1024).toFixed(2)} MB`,
+            },
+            {
+              idDocument: finDoc.id_document,
+              name: finDoc.nom,
+              type: 'financiere',
+              size: `${(finDoc.taille_fichier / 1024 / 1024).toFixed(2)} MB`,
+              encrypted: true,
+            },
+            ...documentsProfile.map((doc) => ({
+              idDocument: doc.id,
+              name: doc.name,
+              type: 'administratif' as const,
+              size: 'N/A',
+            })),
+          ],
+        });
+
+        setConformiteModal({
+          type: isConforme ? 'success' : 'failure',
+          rapport: result.conformite_rapport || undefined,
+        });
+      } catch {
+        setConformiteModal({
+          type: 'failure',
+          rapport: { missing_documents: [], invalid_documents: [isArabic ? 'Erreur lors de l\'analyse de conformité' : 'Erreur lors de l\'analyse de conformité'] },
+        });
+      } finally {
+        setConformiteLoading(false);
+      }
     } catch (error) {
       console.error('Submission error:', error);
       alert(isArabic ? 'حدث خطأ في التقديم' : 'Erreur lors de la soumission');
-    } finally {
       setLoading(false);
     }
   };
@@ -282,7 +358,18 @@ export default function SoumettreOffrePage({
       submit: 'Soumettre l\'offre',
       submitting: 'Soumission en cours...',
       next: 'Continuer',
-      previous: 'Retour'
+      previous: 'Retour',
+      analyseIA: 'Analyse de conformité en cours...',
+      analyseIADesc: 'Notre IA vérifie automatiquement vos documents. Veuillez patienter...',
+      successTitle: 'Soumission réussie !',
+      successDesc: 'Votre offre a été soumise avec succès et l\'analyse de conformité est positive.',
+      successLabel: 'CONFORME',
+      failureTitle: 'Documents non conformes',
+      failureDesc: 'L\'analyse de conformité a détecté des problèmes avec vos documents.',
+      failureLabel: 'NON CONFORME',
+      missingDocs: 'Documents manquants',
+      invalidDocs: 'Documents invalides',
+      goToList: 'Voir mes soumissions'
     },
     ar: {
       back: 'رجوع',
@@ -315,7 +402,18 @@ export default function SoumettreOffrePage({
       submit: 'تقديم العرض',
       submitting: 'جاري التقديم...',
       next: 'متابعة',
-      previous: 'رجوع'
+      previous: 'رجوع',
+      analyseIA: 'تحليل المطابقة جارٍ...',
+      analyseIADesc: 'يقوم الذكاء الاصطناعي بالتحقق من وثائقك تلقائياً. يرجى الانتظار...',
+      successTitle: 'تم التقديم بنجاح!',
+      successDesc: 'تم تقديم عرضك بنجاح ونتيجة تحليل المطابقة إيجابية.',
+      successLabel: 'مطابق',
+      failureTitle: 'الوثائق غير مطابقة',
+      failureDesc: 'كشف تحليل المطابقة مشاكل في وثائقك.',
+      failureLabel: 'غير مطابق',
+      missingDocs: 'الوثائق الناقصة',
+      invalidDocs: 'الوثائق غير الصالحة',
+      goToList: 'عرض طلباتي'
     }
   };
 
@@ -457,7 +555,7 @@ export default function SoumettreOffrePage({
                 <div className="border-2 border-dashed border-[#9BCFCF] rounded-xl p-8 text-center hover:border-[#306B6F] transition-colors cursor-pointer bg-[#FCFFFF]">
                   <input
                     type="file"
-                    accept=".pdf"
+                    accept=".pdf,.png,.jpg,.jpeg"
                     onChange={(e) => handleFileChange('offreTechnique', e.target.files?.[0] || null)}
                     className="hidden"
                     id="offre-technique"
@@ -500,7 +598,7 @@ export default function SoumettreOffrePage({
                 <div className="border-2 border-dashed border-[#9BCFCF] rounded-xl p-8 text-center hover:border-[#306B6F] transition-colors cursor-pointer bg-[#FCFFFF]">
                   <input
                     type="file"
-                    accept=".pdf"
+                    accept=".pdf,.png,.jpg,.jpeg"
                     onChange={(e) => handleFileChange('offreFinanciere', e.target.files?.[0] || null)}
                     className="hidden"
                     id="offre-financiere"
@@ -563,6 +661,112 @@ export default function SoumettreOffrePage({
             </div>
           )}
         </form>
+
+        {/* Conformity analysis loading overlay */}
+        {conformiteLoading && (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+            <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-sm w-full mx-4 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-[#1C4532] to-[#00738C] flex items-center justify-center">
+                <FontAwesomeIcon icon={faRobot} className="text-white text-2xl animate-pulse" />
+              </div>
+              <h3 className="text-lg font-bold text-[#0D2527] mb-2">{t.analyseIA}</h3>
+              <p className="text-sm text-gray-600 mb-6">{t.analyseIADesc}</p>
+              <div className="flex justify-center">
+                <svg className="animate-spin w-8 h-8 text-[#306B6F]" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Conformity result modal */}
+        {conformiteModal && (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+            <div className={`bg-white rounded-2xl p-8 shadow-2xl max-w-lg w-full mx-4 ${
+              conformiteModal.type === 'success' ? 'border-t-4 border-emerald-500' : 'border-t-4 border-red-500'
+            }`}>
+              {/* Header */}
+              <div className="text-center mb-6">
+                <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                  conformiteModal.type === 'success' ? 'bg-emerald-100' : 'bg-red-100'
+                }`}>
+                  <FontAwesomeIcon
+                    icon={conformiteModal.type === 'success' ? faCheckCircle : faTimesCircle}
+                    className={`text-3xl ${conformiteModal.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}
+                  />
+                </div>
+                <h3 className="text-xl font-bold text-[#0D2527] mb-2">
+                  {conformiteModal.type === 'success' ? t.successTitle : t.failureTitle}
+                </h3>
+                <p className="text-gray-600">
+                  {conformiteModal.type === 'success' ? t.successDesc : t.failureDesc}
+                </p>
+              </div>
+
+              {/* Status badge */}
+              <div className="text-center mb-6">
+                <span className={`inline-block px-6 py-2 rounded-lg font-bold ${
+                  conformiteModal.type === 'success'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-red-100 text-red-700'
+                }`}>
+                  <FontAwesomeIcon icon={conformiteModal.type === 'success' ? faCheckCircle : faTimesCircle} className="mr-2" />
+                  {conformiteModal.type === 'success' ? t.successLabel : t.failureLabel}
+                </span>
+              </div>
+
+              {/* Failure details */}
+              {conformiteModal.type === 'failure' && conformiteModal.rapport && (
+                <div className="space-y-3 mb-6">
+                  {(conformiteModal.rapport.missing_documents?.length ?? 0) > 0 && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                      <p className="font-bold text-amber-800 mb-2 flex items-center gap-2">
+                        <FontAwesomeIcon icon={faExclamationTriangle} className="text-amber-600" />
+                        {t.missingDocs}
+                      </p>
+                      <ul className="text-sm text-amber-700 space-y-1">
+                        {conformiteModal.rapport.missing_documents!.map((d, i) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            {d}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {(conformiteModal.rapport.invalid_documents?.length ?? 0) > 0 && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                      <p className="font-bold text-red-800 mb-2 flex items-center gap-2">
+                        <FontAwesomeIcon icon={faTimesCircle} className="text-red-600" />
+                        {t.invalidDocs}
+                      </p>
+                      <ul className="text-sm text-red-700 space-y-1">
+                        {conformiteModal.rapport.invalid_documents!.map((d, i) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            {d}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-center">
+                <button
+                  onClick={() => router.push(`/${lang}/dashboard/operator/soumissions`)}
+                  className="px-8 py-3 bg-[#306B6F] hover:bg-[#173C3F] text-white rounded-xl font-bold transition-colors shadow-lg"
+                >
+                  {t.goToList}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ export type StoredSubmission = {
   conformiteAdmin: 'conforme' | 'non_conforme' | 'en_attente';
   conformiteTechnique: 'conforme' | 'non_conforme' | 'en_attente';
   conformiteFinanciere: 'conforme' | 'non_conforme' | 'en_attente';
+  conformiteRapport?: { missing_documents?: string[]; invalid_documents?: string[] } | null;
   motifRefus?: string;
   dateEvaluation?: string;
   documents: StoredSubmissionDocument[];

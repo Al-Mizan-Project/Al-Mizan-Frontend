@@ -1,6 +1,6 @@
 'use client';
 
-type TabType = 'financial' | 'technical' | 'call' | 'reports' | 'decision';
+export type TabType = 'financial' | 'technical' | 'call' | 'reports' | 'decision' | 'anomalies';
 
 interface TabNavigationProps {
   activeTab: TabType;
@@ -16,6 +16,7 @@ const tabs = [
   { id: 'call' as TabType, key: 'call', defaultLabel: "Appel d'Offre" },
   { id: 'reports' as TabType, key: 'reports', defaultLabel: "Rapports d'évaluation" },
   { id: 'decision' as TabType, key: 'decision', defaultLabel: 'Décision de Validation' },
+  { id: 'anomalies' as TabType, key: 'anomalies', defaultLabel: 'Anomalies IA' },
 ];
 
 export default function TabNavigation({ 

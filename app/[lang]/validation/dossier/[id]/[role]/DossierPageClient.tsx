@@ -9,7 +9,7 @@ import { appelsApi } from '@/lib/api/appels';
 import { documentsApi } from '@/lib/api/documents';
 import { getAuthToken } from '@/lib/api/client';
 
-type TabType = 'financial' | 'technical' | 'call' | 'reports' | 'decision';
+type TabType = 'financial' | 'technical' | 'call' | 'reports' | 'decision' | 'anomalies';
 type UserRole = 'commission' | 'validator';
 
 interface DossierPageProps {

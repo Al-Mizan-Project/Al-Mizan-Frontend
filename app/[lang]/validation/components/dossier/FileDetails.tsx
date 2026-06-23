@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { validationsApi } from '@/lib/api/validation';
+import AnomaliesTab from './AnomaliesTab';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faDownload,
@@ -14,7 +15,7 @@ import {
   faChevronUp,
 } from '@fortawesome/free-solid-svg-icons';
 
-type TabType = 'financial' | 'technical' | 'call' | 'reports' | 'decision';
+type TabType = 'financial' | 'technical' | 'call' | 'reports' | 'decision' | 'anomalies';
 type ReportSubTab = 'administrative' | 'offers';
 type DecisionSubTab = 'general' | 'commission' | 'technical' | 'conclusion';
 type UserRole = 'commission' | 'validator';
