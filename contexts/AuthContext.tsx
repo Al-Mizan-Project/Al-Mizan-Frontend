@@ -20,7 +20,6 @@ export type User = {
   nom?: string;
   prenom?: string;
   id_membre?: string | number;
-  id_membre?: string | number;
   id_role?: number;
   role?: string;            // ← branch adds this
 };
@@ -48,6 +47,8 @@ const AUTH_STORAGE_KEYS = [      // ← branch adds this (safer than localStorag
   'access_token',
   'refresh_token',
   'user',
+  'member_info',
+  'id_membre',
   'membre_id',
   'authToken',
   'token',
@@ -75,11 +76,15 @@ function persistAuthSession({
   }
 
   localStorage.setItem('user', JSON.stringify(user));
+  // The Service Contractant session reads `member_info` / `id_membre`; keep them in sync.
+  localStorage.setItem('member_info', JSON.stringify(user));
 
   if (user.id_membre !== undefined && user.id_membre !== null) {
     localStorage.setItem('membre_id', String(user.id_membre));
+    localStorage.setItem('id_membre', String(user.id_membre));
   } else {
     localStorage.removeItem('membre_id');
+    localStorage.removeItem('id_membre');
   }
 }
 
@@ -108,8 +113,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(storedToken);
       try {
         setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Failed to parse stored user:', e);
+      } catch {
+        clearAuthSession();
+        setToken(null);
+        setUser(null);
       }
       setupAuthInterceptor(storedToken);
     }
@@ -129,14 +136,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
-    try {
-      const data: LoginResponse = await authAPI.login(email, password);
-      // ← No redirect here: LoginPage handles role-based redirection
-      setSession(data.access, data.refresh, data.user);
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
+    const data: LoginResponse = await authAPI.login(email, password);
+    // ← No redirect here: LoginPage handles role-based redirection
+    setSession(data.access, data.refresh, data.user);
   };
 
   const logout = () => {

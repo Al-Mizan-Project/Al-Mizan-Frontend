@@ -9,12 +9,14 @@ export interface Organisation {
 }
 
 export interface Membre {
-  id_membre: string;             // UUID
-  id_organisation: string;       // UUID
+  id_membre: string;
+  id_organisation: string;
   prenom: string;
   nom: string;
   telephone: string;
   fonction: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DemandeOE {

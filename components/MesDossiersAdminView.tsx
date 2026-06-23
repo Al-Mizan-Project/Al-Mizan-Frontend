@@ -14,19 +14,19 @@ const MY_DOSSIERS = DOSSIERS.filter(d => ASSIGNED_REFS.includes(d.reference));
 const ROWS_PER_PAGE = 10;
 
 // ─── Filter options (derived from real data) ──────────────────────────────────
-const DOMAINES  = ['Tous', 'BTP', 'Industrie', 'Agriculture', 'Énergie', 'Santé', 'Technologie'];
-const PERIODES  = ['Toutes', 'Ce mois', '3 derniers mois', '6 derniers mois', 'Cette année'];
+const DOMAINES = ['Tous', 'BTP', 'Industrie', 'Agriculture', 'Énergie', 'Santé', 'Technologie'];
+const PERIODES = ['Toutes', 'Ce mois', '3 derniers mois', '6 derniers mois', 'Cette année'];
 const STATUTS: ('Tous' | DossierStatus)[] = ['Tous', 'En attente', 'En cours', 'En retard', 'Prêt'];
 
 const STATUS_BADGE: Record<string, string> = {
   'En attente': 'text-amber-700',
-  'En cours':   'text-blue-700',
-  'En retard':  'text-red-600',
-  'Prêt':       'text-emerald-700',
+  'En cours': 'text-blue-700',
+  'En retard': 'text-red-600',
+  'Prêt': 'text-emerald-700',
 };
 
 const DROPDOWN_ACTIVE = 'bg-[#1C4532] text-white border-[#1C4532]';
-const DROPDOWN_IDLE   = 'bg-white text-gray-700 border-gray-200 hover:bg-[#F4F7F4]';
+const DROPDOWN_IDLE = 'bg-white text-gray-700 border-gray-200 hover:bg-[#F4F7F4]';
 
 type SortDir = 'asc' | 'desc' | null;
 
@@ -36,10 +36,10 @@ function matchesPeriode(dateSoumission: string, periode: string): boolean {
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
-  if (periode === 'Ce mois')           return diffDays <= 30;
-  if (periode === '3 derniers mois')   return diffDays <= 90;
-  if (periode === '6 derniers mois')   return diffDays <= 180;
-  if (periode === 'Cette année')       return d.getFullYear() === now.getFullYear();
+  if (periode === 'Ce mois') return diffDays <= 30;
+  if (periode === '3 derniers mois') return diffDays <= 90;
+  if (periode === '6 derniers mois') return diffDays <= 180;
+  if (periode === 'Cette année') return d.getFullYear() === now.getFullYear();
   return true;
 }
 
@@ -84,9 +84,8 @@ function Dropdown<T extends string>({ label, options, value, onChange }: {
         <div className="absolute top-full mt-1 left-0 bg-white border border-gray-200 rounded-xl shadow-lg z-20 min-w-[160px] py-1">
           {options.map(opt => (
             <button key={opt} onClick={() => { onChange(opt); setOpen(false); }}
-              className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                value === opt ? 'text-[#1C4532] font-bold bg-[#F4F7F4]' : 'text-gray-600 hover:bg-[#F4F7F4]'
-              }`}>
+              className={`w-full text-left px-4 py-2 text-sm transition-colors ${value === opt ? 'text-[#1C4532] font-bold bg-[#F4F7F4]' : 'text-gray-600 hover:bg-[#F4F7F4]'
+                }`}>
               {opt}
             </button>
           ))}
@@ -100,13 +99,13 @@ function Dropdown<T extends string>({ label, options, value, onChange }: {
 interface Props { onVoirDossier: (d: Dossier) => void; }
 
 export default function MesDossiersAdminView({ onVoirDossier }: Props) {
-  const [search,  setSearch]  = useState('');
+  const [search, setSearch] = useState('');
   const [domaine, setDomaine] = useState(DOMAINES[0]);
-  const [status,  setStatus]  = useState<typeof STATUTS[number]>(STATUTS[0]);
+  const [status, setStatus] = useState<typeof STATUTS[number]>(STATUTS[0]);
   const [periode, setPeriode] = useState(PERIODES[0]);
-  const [sortBy,  setSortBy]  = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
-  const [page,    setPage]    = useState(1);
+  const [page, setPage] = useState(1);
 
   const handleSort = (key: string) => {
     if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -117,8 +116,8 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return MY_DOSSIERS.filter(d => {
-      const matchSearch  = !q || d.reference.toLowerCase().includes(q) || d.operateur.toLowerCase().includes(q) || d.id.toLowerCase().includes(q);
-      const matchStatus  = status === 'Tous' || d.status === status;
+      const matchSearch = !q || d.reference.toLowerCase().includes(q) || d.operateur.toLowerCase().includes(q) || d.id.toLowerCase().includes(q);
+      const matchStatus = status === 'Tous' || d.status === status;
       const matchPeriode = matchesPeriode(d.dateSoumission, periode);
       // domaine filter is illustrative — no domaine field on Dossier yet
       return matchSearch && matchStatus && matchPeriode;
@@ -129,9 +128,9 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
     if (!sortBy) return filtered;
     return [...filtered].sort((a, b) => {
       const av = sortBy === 'reference' ? a.reference : sortBy === 'operateur' ? a.operateur
-               : sortBy === 'date' ? a.dateSoumission : sortBy === 'delai' ? a.delaiEvaluation : a.status;
+        : sortBy === 'date' ? a.dateSoumission : sortBy === 'delai' ? a.delaiEvaluation : a.status;
       const bv = sortBy === 'reference' ? b.reference : sortBy === 'operateur' ? b.operateur
-               : sortBy === 'date' ? b.dateSoumission : sortBy === 'delai' ? b.delaiEvaluation : b.status;
+        : sortBy === 'date' ? b.dateSoumission : sortBy === 'delai' ? b.delaiEvaluation : b.status;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
   }, [filtered, sortBy, sortDir]);
@@ -142,7 +141,7 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
   // Active filter pills
   const activePills: { label: string; clear: () => void }[] = [];
   if (domaine !== DOMAINES[0]) activePills.push({ label: domaine, clear: () => setDomaine(DOMAINES[0]) });
-  if (status !== STATUTS[0])   activePills.push({ label: status,  clear: () => setStatus(STATUTS[0])  });
+  if (status !== STATUTS[0]) activePills.push({ label: status, clear: () => setStatus(STATUTS[0]) });
   if (periode !== PERIODES[0]) activePills.push({ label: periode, clear: () => setPeriode(PERIODES[0]) });
 
   const resetAll = () => { setSearch(''); setDomaine(DOMAINES[0]); setStatus(STATUTS[0]); setPeriode(PERIODES[0]); setPage(1); };
@@ -153,7 +152,7 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[240px] max-w-lg">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
           </svg>
           <input
             type="text"
@@ -164,9 +163,9 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
             style={{ color: '#1C4532' }}
           />
         </div>
-        <Dropdown label="Domaine"  options={DOMAINES} value={domaine} onChange={v => { setDomaine(v); setPage(1); }} />
-        <Dropdown label="Status"   options={STATUTS}  value={status}  onChange={v => { setStatus(v);  setPage(1); }} />
-        <Dropdown label="Période"  options={PERIODES} value={periode} onChange={v => { setPeriode(v); setPage(1); }} />
+        <Dropdown label="Domaine" options={DOMAINES} value={domaine} onChange={v => { setDomaine(v); setPage(1); }} />
+        <Dropdown label="Status" options={STATUTS} value={status} onChange={v => { setStatus(v); setPage(1); }} />
+        <Dropdown label="Période" options={PERIODES} value={periode} onChange={v => { setPeriode(v); setPage(1); }} />
       </div>
 
       {/* Active filter pills */}
@@ -185,15 +184,15 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-28 gap-4">
           <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.2">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            <line x1="8" y1="11" x2="14" y2="11"/>
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+            <line x1="8" y1="11" x2="14" y2="11" />
           </svg>
           <h3 className="text-2xl font-black text-gray-800">Aucun résultat trouvé</h3>
           <p className="text-sm text-gray-500">Nous n'avons trouvé aucun article correspondant à votre recherche.</p>
           <button onClick={resetAll}
             className="flex items-center gap-2 px-5 py-2.5 border-2 border-[#00738C] text-[#00738C] font-bold text-sm rounded-xl hover:bg-[#D6EAD4] transition-all">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
             </svg>
             Réinitialiser les filtres
           </button>
@@ -218,7 +217,7 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
                     className="border-b border-gray-50 hover:bg-blue-50/40 cursor-pointer transition-colors">
                     <td className="px-4 py-3 text-gray-300">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                       </svg>
                     </td>
                     <td className="px-4 py-3">
@@ -237,7 +236,7 @@ export default function MesDossiersAdminView({ onVoirDossier }: Props) {
             </table>
           </div>
           {totalPages > 1 && (
-            
+            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={sorted.length} rowsPerPage={ROWS_PER_PAGE} />
           )}
         </>
       )}

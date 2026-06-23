@@ -65,13 +65,7 @@ const getActionButton = (fileStatus: string) => {
   const isAr = lang === 'ar';
 
   const getColumnCount = () => {
-    switch (status) {
-      case 'En Attente': return 6;
-      case 'En Cours': return 7;
-      case 'En Retard': return 6;
-      case 'Prêt': return 5;
-      default: return 6;
-    }
+    return hideEconomicOperator ? 5 : 6;
   };
 
   return (
@@ -95,57 +89,16 @@ const getActionButton = (fileStatus: string) => {
               <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
                 {t('files.table.headers.etape', 'Étape')}
               </th>
-            {/* MODE VALIDATEUR - DOSSIERS EN COURS */}
-            {viewMode === 'validateur' && status === 'En Cours' && (
-              <>
-                <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                  {t('files.table.headers.assignmentDate', "Date d'affectation")}
-                </th>
-                <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                  {t('files.table.headers.validationDeadline', "Délai d'évaluation")}
-                </th>
-              </>
-            )}
 
-            {/* MODE VALIDATEUR - DOSSIERS EN RETARD */}
-            {viewMode === 'validateur' && status === 'En Retard' && (
-              <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                {t('files.table.headers.delayDays', 'Jours de retard')}
-              </th>
-            )}
+            {/* COLONNE 3b: Statut De Validation */}
+            <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
+              {isAr ? 'حالة التحقق' : 'Statut De Validation'}
+            </th>
 
-            {viewMode === 'standard' && (
-              <>
-                {status !== 'En Attente' && (
-                  <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                    {t('files.table.headers.validator', 'Validateur')}
-                  </th>
-                )}
-                {status === 'En Attente' && (
-                  <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                    {t('files.table.headers.submissionDate', 'Date de soumission')}
-                  </th>
-                )}
-                {status === 'En Cours' && (
-                  <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                    {t('files.table.headers.assignmentDate', "Date d'affectation")}
-                  </th>
-                )}
-                {status === 'En Retard' && (
-                  <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                    {t('files.table.headers.delayDays', 'Jours de retard')}
-                  </th>
-                )}
-                {(status === 'En Attente' || status === 'En Cours') && (
-                  <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                    {t('files.table.headers.validationDeadline', 'Délai de validation')}
-                  </th>
-                )}
-                <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
-                  {t('files.table.headers.actions', 'Action')}
-                </th>
-              </>
-            )}
+            {/* COLONNE 4: Action */}
+            <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
+              {t('files.table.headers.actions', 'Action')}
+            </th>
 
             {/* COLONNE STATUS (toujours affichée en dernier) */}
             <th className={`py-3 px-4 font-medium text-gray-700 ${isAr ? 'text-right' : 'text-left'}`}>
@@ -194,64 +147,39 @@ const getActionButton = (fileStatus: string) => {
                   {/* COLONNE 3: Étape (toujours Validation) */}
                   <td className="py-3 px-4 text-sm">Validation</td>
 
-                {/* MODE VALIDATEUR - DOSSIERS EN COURS */}
-                {viewMode === 'validateur' && status === 'En Cours' && (
-                  <>
-                    <td className="py-3 px-4 text-sm">{file.assignmentDate}</td>
-                    <td className="py-3 px-4 text-sm">{file.validationDeadline}</td>
-                  </>
-                )}
+                {/* COLONNE 3b: Statut De Validation */}
+                <td className="py-3 px-4">
+                  <span className={`px-2 py-1 text-xs rounded-full ${
+                    (file as any).statutValidation === 'valide' ? 'bg-green-100 text-green-700' :
+                    (file as any).statutValidation === 'refuse' ? 'bg-red-100 text-red-700' :
+                    (file as any).statutValidation === 'non_valide' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {(file as any).statutValidation || 'Inconnu'}
+                  </span>
+                </td>
 
-                {/* MODE VALIDATEUR - DOSSIERS EN RETARD */}
-                {viewMode === 'validateur' && status === 'En Retard' && (
-                  <td className="py-3 px-4 text-sm">{file.delayDays}j</td>
-                )}
-
-                {/* MODE STANDARD - Colonnes supplémentaires */}
-                {viewMode === 'standard' && (
-                  <>
-                    {status !== 'En Attente' && file.validator && (
-                      <td className="py-3 px-4">
-                        <div className="text-sm font-medium">{file.validator.name}</div>
-                        <div className="text-xs text-gray-500">{file.validator.id}</div>
-                      </td>
+                {/* COLONNE 4: Action */}
+                <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex gap-2 flex-wrap">
+                    {actionHandler && !(file.status === 'Prêt' && onView) && (
+                      <button
+                        onClick={() => actionHandler(file)}
+                        className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                      >
+                        {getActionButton(file.status)}
+                      </button>
                     )}
-                    {status === 'En Attente' && file.submissionDate && (
-                      <td className="py-3 px-4 text-sm">{file.submissionDate}</td>
+                    {file.status === 'Prêt' && onView && (
+                      <button
+                        onClick={() => onView(file)}
+                        className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                      >
+                        {t('files.table.actions.view', 'Voir')}
+                      </button>
                     )}
-                    {status === 'En Cours' && file.assignmentDate && (
-                      <td className="py-3 px-4 text-sm">{file.assignmentDate}</td>
-                    )}
-                    {status === 'En Retard' && (
-                      <td className="py-3 px-4 text-sm">{file.delayDays}j</td>
-                    )}
-                    {(status === 'En Attente' || status === 'En Cours') && (
-                      <td className="py-3 px-4 text-sm">{file.validationDeadline}</td>
-                    )}
-                    <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex gap-2 flex-wrap">
-                        {actionHandler && !(file.status === 'Prêt' && onView) && (
-                          <>
-                            <button
-                              onClick={() => actionHandler(file)}
-                              className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
-                            >
-                              {getActionButton(file.status)}
-                            </button>
-                          </>
-                        )}
-                        {file.status === 'Prêt' && onView && (
-                          <button
-                            onClick={() => onView(file)}
-                            className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
-                          >
-                            {t('files.table.actions.view', 'Voir')}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </>
-                )}
+                  </div>
+                </td>
 
                 {/* COLONNE STATUS */}
                 <td className="py-3 px-4">

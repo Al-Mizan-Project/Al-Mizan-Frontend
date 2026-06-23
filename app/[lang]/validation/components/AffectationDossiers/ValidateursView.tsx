@@ -21,6 +21,9 @@ export default function ValidateursView({ lang, dict }: ValidateursViewProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Nouveaux états pour les statistiques des validateurs
+  const [validatorStats, setValidatorStats] = useState<Record<string, { enCours: number, enRetard: number }>>({});
+  
   // État pour le formulaire d'ajout de membre
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [addMemberStep, setAddMemberStep] = useState<'user' | 'member'>('user');
@@ -76,14 +79,18 @@ export default function ValidateursView({ lang, dict }: ValidateursViewProps) {
 
         console.log('Total experts after all attempts:', experts?.length || 0);
 
-        // Map experts to Validator format
-        const mapped: Validator[] = (experts || []).map(m => ({
+        const mapped: Validator[] = (experts || [])
+          .filter((m: any) => m.id_utilisateur != null)
+          .map((m: any) => ({
           id: String(m.id_utilisateur || m.id_membre || m.id || m.user_id),
+          utilisateurId: m.id_utilisateur ?? null,
           nom: m.nom || m.lastName || m.last_name || 'Inconnu',
           prenom: m.prenom || m.firstName || m.first_name || '',
           matricule: m.matricule || `EXP-${m.id || m.id_membre || ''}`,
           chargeActuelle: m.charge_actuelle || 0,
           disponibilite: (m.charge_actuelle || 0) > 3 ? 'Surchargé' : 'Disponible',
+          role: m.role || '',
+          fonction: m.fonction || ''
         }));
 
         setValidators(mapped);
@@ -107,6 +114,58 @@ export default function ValidateursView({ lang, dict }: ValidateursViewProps) {
       setIsLoading(false);
     }
   }, [token, user]);
+
+  // Récupérer les stats (en cours / en retard) pour chaque validateur
+  useEffect(() => {
+    if (!token || validators.length === 0) return;
+
+    const fetchStats = async () => {
+      const statsMap: Record<string, { enCours: number, enRetard: number }> = {};
+
+      await Promise.all(
+        validators.map(async (v) => {
+          let enCours = 0;
+          let enRetard = 0;
+          try {
+            if (v.role === 'VALIDATEUR_EXTERNE_CDC' || v.role === 'VALIDATEUR_INTERNE_CDC') {
+              const res = await fetch(`/api/proxy/appels?path=appels-offres&validated_by=${v.id}&statut=non_valide,provisoire`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              if (res.ok) {
+                const data = await res.json();
+                const items = Array.isArray(data) ? data : (data.results || []);
+                items.forEach((item: any) => {
+                  const status = item.status || 'En Cours';
+                  if (status === 'En Cours') enCours++;
+                  if (status === 'En Retard') enRetard++;
+                });
+              }
+            } else if (v.role === 'VALIDATEUR_EXTERNE_MARCHE' || v.role === 'VALIDATEUR_INTERNE_MARCHE') {
+              const res = await fetch(`/api/proxy/contrats/validator-attributions?user_id=${v.id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              if (res.ok) {
+                const data = await res.json();
+                const items = data.attributions || (Array.isArray(data) ? data : (data.results || []));
+                items.forEach((item: any) => {
+                  const status = item.status || 'En Cours';
+                  if (status === 'En Cours') enCours++;
+                  if (status === 'En Retard') enRetard++;
+                });
+              }
+            }
+          } catch (e) {
+            console.error(`Failed to fetch stats for validator ${v.id}`, e);
+          }
+          statsMap[v.id] = { enCours, enRetard };
+        })
+      );
+
+      setValidatorStats(statsMap);
+    };
+
+    fetchStats();
+  }, [validators, token]);
 
   // Handler pour créer un nouveau membre
   const handleCreateNewMember = async () => {
@@ -406,38 +465,61 @@ export default function ValidateursView({ lang, dict }: ValidateursViewProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  const handleEditValidator = async (e: React.FormEvent) => {
+  const handleEditValidator = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!editingValidator) return;
     setIsEditing(true);
+
+    const formData = new FormData(e.currentTarget);
+    const nom = formData.get('nom') as string;
+    const prenom = formData.get('prenom') as string;
+
     try {
-      // TODO: Call API to update validator details
-      // await fetch(`/api/validators/${editingValidator?.id}`, { method: 'PUT', body: JSON.stringify(...) });
-      console.log('Update validator:', editingValidator);
-      // Mock success
-      setTimeout(() => {
-        setEditingValidator(null);
-        window.location.reload();
-      }, 500);
+      const response = await fetch(`/api/proxy/auth?path=users/${editingValidator.utilisateurId}/member-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify({ nom, prenom }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`Erreur ${response.status}: ${errBody.substring(0, 200)}`);
+      }
+
+      setEditingValidator(null);
+      window.location.reload();
     } catch (err) {
-      console.error(err);
+      console.error('Erreur modification membre:', err);
+      alert(err instanceof Error ? err.message : 'Erreur lors de la modification du membre');
     } finally {
       setIsEditing(false);
     }
   };
 
   const handleDeleteValidator = async () => {
+    if (!deletingValidator) return;
     setIsDeleting(true);
     try {
-      // TODO: Call API to delete validator
-      // await fetch(`/api/validators/${deletingValidator?.id}`, { method: 'DELETE' });
-      console.log('Delete validator:', deletingValidator?.id);
-      // Mock success
-      setTimeout(() => {
-        setDeletingValidator(null);
-        window.location.reload();
-      }, 500);
+      const response = await fetch(`/api/proxy/auth?path=users/${deletingValidator.utilisateurId}/member-update`, {
+        method: 'DELETE',
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`Erreur ${response.status}: ${errBody.substring(0, 200)}`);
+      }
+
+      setDeletingValidator(null);
+      window.location.reload();
     } catch (err) {
-      console.error(err);
+      console.error('Erreur suppression membre:', err);
+      alert(err instanceof Error ? err.message : 'Erreur lors de la suppression du membre');
     } finally {
       setIsDeleting(false);
     }
@@ -620,62 +702,202 @@ export default function ValidateursView({ lang, dict }: ValidateursViewProps) {
           <p className="text-sm text-gray-400 mt-1">Vérifiez vos filtres de recherche</p>
         </div>
       ) : (
-        <>
-          {/* Liste des validateurs en mode readOnly avec clic */}
-          <div className="val-table-container">
-            <table className="val-table">
-              <thead className="val-table-header">
-                <tr>
-                  <th className="val-table-cell-left">Validateur ↓</th>
-                  <th className="val-table-cell-left">Dossiers En Cours ↓</th>
-                  <th className="val-table-cell-left">Dossiers En Retard ↓</th>
-                  <th className="val-table-cell-left">Disponibilité</th>
-              </tr>
-            </thead>
-            <tbody className="val-validator-body">
-              {filteredValidators.map((validator) => (
-                <tr 
-                  key={validator.id} 
-                  className="val-validator-row cursor-default"
-                >
-                <td className="val-table-cell-left">
-                  <div className="flex items-center gap-2">
-                    <div className="val-user-icon">
-                      <svg className="val-icon-16 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                      </svg>
+        <div className="space-y-8">
+          {/* Section Responsable */}
+          {(() => {
+            const responsables = filteredValidators.filter(v => v.role === 'RESP_CM' || v.role === 'RESP_VALID_INTERN');
+            if (responsables.length === 0) return null;
+            return (
+              <div>
+                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Responsable de la Commission</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {responsables.map((resp) => (
+                    <div key={resp.id} className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-4 shadow-sm">
+                      <div className="val-user-icon bg-blue-100 text-blue-600 rounded-full p-3">
+                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-gray-900 font-bold">{resp.nom} {resp.prenom}</p>
+                        <p className="text-sm text-gray-500">{resp.fonction || 'Responsable'}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="val-body-medium">
-                        {validator.nom} {validator.prenom}
-                      </p>
-                      <p className="val-small">{validator.matricule}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="val-table-cell-left val-body">
-                  {validator.chargeActuelle}
-                </td>
-                <td className="val-table-cell-left val-body">
-                  {validator.chargeActuelle > 5 ? Math.floor(validator.chargeActuelle / 3) : 0}
-                </td>
-                <td className="val-table-cell-right val-validator-availability">
-                  <span className={`val-badge ${
-                    validator.disponibilite === 'Disponible' || validator.disponibilite === 'Recommandé'
-                      ? 'val-badge-available'
-                      : validator.disponibilite === 'Conflit'
-                      ? 'val-badge-conflict'
-                      : 'val-badge-unavailable'
-                  }`}>
-                    <span className="val-badge-text">{validator.disponibilite}</span>
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-            </table>
-          </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
+          {/* Section Validateurs CDC */}
+          {(() => {
+            const validateursCDC = filteredValidators.filter(v => v.role === 'VALIDATEUR_EXTERNE_CDC' || v.role === 'VALIDATEUR_INTERNE_CDC');
+            if (validateursCDC.length === 0) return null;
+            return (
+              <div>
+                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Validateurs CDC</h3>
+                <div className="val-table-container">
+                  <table className="val-table">
+                    <thead className="val-table-header">
+                      <tr>
+                        <th className="val-table-cell-left">Validateur ↓</th>
+                        <th className="val-table-cell-left">Appels d'offres En Cours ↓</th>
+                        <th className="val-table-cell-left">Appels d'offre En Retard ↓</th>
+                        <th className="val-table-cell-left">Disponibilité</th>
+                        {user?.role === 'RESP_CM' && <th className="val-table-cell-center">Actions</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="val-validator-body">
+                      {validateursCDC.map((validator) => (
+                        <tr key={validator.id} className="val-validator-row cursor-default">
+                          <td className="val-table-cell-left">
+                            <div className="flex items-center gap-2">
+                              <div className="val-user-icon">
+                                <svg className="val-icon-16 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="val-body-medium">{validator.nom} {validator.prenom}</p>
+                                <p className="val-small">{validator.fonction || validator.matricule}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="val-table-cell-left val-body">{validatorStats[validator.id]?.enCours || 0}</td>
+                          <td className="val-table-cell-left val-body">{validatorStats[validator.id]?.enRetard || 0}</td>
+                          <td className="val-table-cell-right val-validator-availability">
+                            <span className={`val-badge ${
+                              validator.disponibilite === 'Disponible' || validator.disponibilite === 'Recommandé'
+                                ? 'val-badge-available'
+                                : validator.disponibilite === 'Conflit'
+                                ? 'val-badge-conflict'
+                                : 'val-badge-unavailable'
+                            }`}>
+                              <span className="val-badge-text">{validator.disponibilite}</span>
+                            </span>
+                          </td>
+                          {user?.role === 'RESP_CM' && (
+                            <td className="val-table-cell-center">
+                              <div className="flex items-center justify-center gap-2">
+                                {/* Edit button removed as requested */}
+                                {editingValidator && editingValidator.id === validator.id && (
+                                  <button
+                                    onClick={() => setEditingValidator(null)}
+                                    className="text-gray-600 hover:text-gray-800"
+                                    title="Annuler l'édition"
+                                  >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => setDeletingValidator(validator)}
+                                  disabled={!validator.utilisateurId}
+                                  className="text-red-600 hover:text-red-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  title={validator.utilisateurId ? 'Supprimer' : 'Aucun compte auth'}
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Section Validateurs Marché */}
+          {(() => {
+            const validateursMarche = filteredValidators.filter(v => v.role === 'VALIDATEUR_EXTERNE_MARCHE' || v.role === 'VALIDATEUR_INTERNE_MARCHE');
+            // Show this section if there are validators, or if it's the only section left (fallback for unmapped roles)
+            const otherRoles = filteredValidators.filter(v => 
+              !['RESP_CM', 'RESP_VALID_INTERN', 'VALIDATEUR_EXTERNE_CDC', 'VALIDATEUR_INTERNE_CDC', 'VALIDATEUR_EXTERNE_MARCHE', 'VALIDATEUR_INTERNE_MARCHE'].includes(v.role || '')
+            );
+            const allMarcheAndOthers = [...validateursMarche, ...otherRoles];
+            
+            if (allMarcheAndOthers.length === 0) return null;
+            return (
+              <div>
+                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Validateurs Marché</h3>
+                <div className="val-table-container">
+                  <table className="val-table">
+                    <thead className="val-table-header">
+                      <tr>
+                        <th className="val-table-cell-left">Validateur ↓</th>
+                        <th className="val-table-cell-left">Dossiers En Cours ↓</th>
+                        <th className="val-table-cell-left">Dossiers En Retard ↓</th>
+                        <th className="val-table-cell-left">Disponibilité</th>
+                        {user?.role === 'RESP_CM' && <th className="val-table-cell-center w-24">Actions</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="val-validator-body">
+                      {allMarcheAndOthers.map((validator) => (
+                        <tr key={validator.id} className="val-validator-row cursor-default">
+                          <td className="val-table-cell-left">
+                            <div className="flex items-center gap-2">
+                              <div className="val-user-icon">
+                                <svg className="val-icon-16 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="val-body-medium">{validator.nom} {validator.prenom}</p>
+                                <p className="val-small">{validator.fonction || validator.matricule}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="val-table-cell-left val-body">{validatorStats[validator.id]?.enCours || 0}</td>
+                          <td className="val-table-cell-left val-body">{validatorStats[validator.id]?.enRetard || 0}</td>
+                          <td className="val-table-cell-right val-validator-availability">
+                            <span className={`val-badge ${
+                              validator.disponibilite === 'Disponible' || validator.disponibilite === 'Recommandé'
+                                ? 'val-badge-available'
+                                : validator.disponibilite === 'Conflit'
+                                ? 'val-badge-conflict'
+                                : 'val-badge-unavailable'
+                            }`}>
+                              <span className="val-badge-text">{validator.disponibilite}</span>
+                            </span>
+                          </td>
+                          {user?.role === 'RESP_CM' && (
+                            <td className="val-table-cell-center">
+                              <div className="flex items-center justify-center gap-2">
+                                {/* Edit button removed as requested */}
+                                  {editingValidator && editingValidator.id === validator.id && (
+                                    <button
+                                      onClick={() => setEditingValidator(null)}
+                                      className="text-gray-600 hover:text-gray-800"
+                                      title="Annuler l'édition"
+                                    >
+                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  )}
+                                <button
+                                  onClick={() => setDeletingValidator(validator)}
+                                  disabled={!validator.utilisateurId}
+                                  className="text-red-600 hover:text-red-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  title={validator.utilisateurId ? 'Supprimer' : 'Aucun compte auth'}
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
           {/* Pagination */}
           <div className="val-pagination-container">
             <button className="val-pagination-button" disabled>Previous</button>
@@ -692,7 +914,7 @@ export default function ValidateursView({ lang, dict }: ValidateursViewProps) {
             </div>
             <button className="val-pagination-button">Next</button>
           </div>
-        </>
+        </div>
       )}
 
       {/* Modal Ajouter Membre */}
@@ -874,6 +1096,47 @@ export default function ValidateursView({ lang, dict }: ValidateursViewProps) {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Éditer Membre */}
+      {editingValidator && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Modifier le Membre</h2>
+            <form onSubmit={handleEditValidator} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
+                <input name="nom" type="text" defaultValue={editingValidator.nom} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                <input name="prenom" type="text" defaultValue={editingValidator.prenom} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setEditingValidator(null)} className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Annuler</button>
+                <button type="submit" disabled={isEditing} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400">
+                  {isEditing ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Supprimer Membre */}
+      {deletingValidator && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h2 className="text-xl font-bold text-red-600 mb-4">Supprimer le Membre</h2>
+            <p className="text-gray-700 mb-6">Êtes-vous sûr de vouloir supprimer <strong>{deletingValidator.nom} {deletingValidator.prenom}</strong> ? Cette action est irréversible.</p>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setDeletingValidator(null)} className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Annuler</button>
+              <button type="button" onClick={handleDeleteValidator} disabled={isDeleting} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-red-400">
+                {isDeleting ? 'Suppression...' : 'Supprimer'}
+              </button>
+            </div>
           </div>
         </div>
       )}

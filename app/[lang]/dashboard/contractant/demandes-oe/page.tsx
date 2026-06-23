@@ -16,6 +16,7 @@ function DemandesOEInner() {
   const [demandes, setDemandes] = useState<DemandeOE[]>([]);
   const [loading, setLoading] = useState(true);
   const [refuse, setRefuse] = useState<{ d: DemandeOE; text: string } | null>(null);
+  const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
 
   async function load() {
     if (serviceId) setDemandes(await scApi.listDemandesOE(serviceId));
@@ -26,16 +27,26 @@ function DemandesOEInner() {
   async function approve(d: DemandeOE) {
     const ok = await confirm({
       title: isArabic ? 'قبول الطلب' : 'Approuver la demande',
-      message: isArabic ? 'سيتم إنشاء مؤسسة المتعامل وحساب المسؤول تلقائيا.' : "L'organisation de l'opérateur et le compte de son responsable seront créés automatiquement.",
+      message: isArabic ? 'سيتم إنشاء حساب المتعامل وإرسال رابط التفعيل إليه تلقائيا.' : "Le compte de l'opérateur sera créé et un lien d'activation lui sera envoyé automatiquement.",
+      confirmLabel: isArabic ? 'قبول' : 'Approuver',
     });
     if (!ok || d.id == null) return;
-    try { await scApi.approveDemandeOE(d.id); toast('success', isArabic ? 'تم القبول وإنشاء الحساب.' : 'Demande approuvée — compte créé.'); load(); }
-    catch { toast('error', isArabic ? 'تعذر التنفيذ.' : 'Action indisponible côté serveur.'); }
+    try {
+      await scApi.approveDemandeOE(d.id);
+      toast('success', isArabic ? 'تم القبول. أُرسل رابط التفعيل إلى المتعامل.' : "Demande approuvée — lien d'activation envoyé à l'opérateur.");
+      load();
+    }
+    catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر التنفيذ.' : 'Action indisponible côté serveur.'));
+    }
   }
   async function doRefuse() {
     if (!refuse || refuse.d.id == null) return;
     try { await scApi.refuseDemandeOE(refuse.d.id, refuse.text); toast('success', isArabic ? 'تم رفض الطلب.' : 'Demande refusée.'); setRefuse(null); load(); }
-    catch { toast('error', isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.'); setRefuse(null); }
+    catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر التنفيذ.' : 'Action indisponible.'));
+      setRefuse(null);
+    }
   }
 
   if (loading) return <Spinner />;
@@ -50,8 +61,8 @@ function DemandesOEInner() {
           {demandes.map((d) => (
             <Card key={d.id} className="p-4 flex items-center justify-between gap-4 flex-wrap">
               <div className="min-w-0">
-                <p className="font-semibold" style={{ color: '#1C4532' }}>{d.nom_officiel || `Demande #${d.id}`}</p>
-                <p className="text-xs text-gray-400">{d.email_contact} {d.created_at ? `· ${new Date(d.created_at).toLocaleDateString('fr-DZ')}` : ''}</p>
+                <p className="font-semibold" style={{ color: '#1C4532' }}>{d.nom_organisation || `Demande #${d.id}`}</p>
+                <p className="text-xs text-gray-400">{d.email_contact} {d.cree_le ? `· ${new Date(d.cree_le).toLocaleDateString('fr-DZ')}` : ''}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button className={PRIMARY_BTN} style={PRIMARY_BTN_STYLE} onClick={() => approve(d)}>{isArabic ? 'قبول' : 'Approuver'}</button>

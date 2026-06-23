@@ -5,14 +5,17 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export interface BackendNotification {
   id: number;
-  user_id: number;
-  type: string; // e.g. "INFO", "WARNING", "DANGER", "NEW"
+  utilisateur_id: number;
+  type_notification: string;
   titre: string;
   message: string;
-  date_creation: string;
-  est_lu: boolean;
+  created_at: string;
+  read_at: string | null;
+  statut: string;
   lien_relatif?: string;
   reference_dossier?: string;
+  entite_liee_type?: string;
+  entite_liee_id?: number;
 }
 
 export interface UseNotificationsReturn {
@@ -122,7 +125,7 @@ export function useNotifications(): UseNotificationsReturn {
 
       if (response.ok) {
         setNotifications((prev) =>
-          prev.map((notif) => (notif.id === id ? { ...notif, est_lu: true } : notif))
+          prev.map((notif) => (notif.id === id ? { ...notif, read_at: new Date().toISOString(), statut: 'lu' } : notif))
         );
       }
     } catch (error) {
@@ -146,7 +149,7 @@ export function useNotifications(): UseNotificationsReturn {
       });
 
       if (response.ok) {
-        setNotifications((prev) => prev.map((notif) => ({ ...notif, est_lu: true })));
+        setNotifications((prev) => prev.map((notif) => ({ ...notif, read_at: new Date().toISOString(), statut: 'lu' })));
       }
     } catch (error) {
       console.error('Erreur markAllAsRead', error);
@@ -157,7 +160,7 @@ export function useNotifications(): UseNotificationsReturn {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  const unreadCount = notifications.filter((n) => !n.est_lu).length;
+  const unreadCount = notifications.filter((n) => !n.read_at).length;
 
   return { notifications, unreadCount, isLoading, error, refresh: fetchNotifications, markAsRead, markAllAsRead };
 }

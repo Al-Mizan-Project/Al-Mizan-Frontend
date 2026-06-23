@@ -35,7 +35,7 @@ export default function ContractantDashboardPage() {
     return acc;
   }, {});
   const enValidation = appels.filter((a) => deriveState(a) === 'EN_VALIDATION').length;
-  const ouverts = appels.filter((a) => deriveState(a) === 'OUVERT').length;
+  const ouverts = appels.filter((a) => deriveState(a) === 'PUBLIE').length;
 
   const base = `/${lang}/dashboard/contractant`;
 

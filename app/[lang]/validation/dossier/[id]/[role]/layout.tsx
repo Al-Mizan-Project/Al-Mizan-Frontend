@@ -34,7 +34,7 @@ export default async function DossierLayout({
       
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         { }
-        <Header variant="file" lang={lang} role='commission' dossierId={`Référence Dossier ${id}`} />
+        <Header variant="file" lang={lang} role={userRole} dossierId={`Référence Dossier ${id}`} />
         
         { }
         <main className="flex-1 overflow-y-auto p-4 md:p-6">

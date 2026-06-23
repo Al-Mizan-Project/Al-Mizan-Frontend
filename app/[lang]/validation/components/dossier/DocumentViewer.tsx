@@ -42,24 +42,115 @@ export default function DocumentViewer({ dict, lang, url }: DocumentViewerProps)
     fetch(`/api/proxy/documents?path=api/documents/${docId}/`, { headers })
       .then(res => {
         if (!res.ok) throw new Error(`Preview failed: ${res.status}`);
-        return res.blob();
+        const contentType = res.headers.get('Content-Type') || 'application/pdf';
+        const contentDisposition = res.headers.get('Content-Disposition') || '';
+        return res.blob().then(blob => ({ blob, contentType, contentDisposition }));
       })
-      .then(blob => {
-        if (isMounted) {
-          objectUrl = URL.createObjectURL(blob);
-          setBlobUrl(objectUrl);
-          setLoading(false);
+      .then(async ({ blob, contentType, contentDisposition }) => {
+        if (!isMounted) return;
+        
+        let finalType = blob.type || contentType;
+        const isTxt = contentDisposition.toLowerCase().includes('.txt') || finalType.includes('text');
+        const isPdf = contentDisposition.toLowerCase().includes('.pdf') || finalType.includes('pdf');
+        
+        if (isTxt && !isPdf) {
+          try {
+            const text = await blob.text();
+            
+            // Foolproof check: if it's actually a PDF masquerading as octet-stream
+            if (text.startsWith('%PDF-')) {
+              const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+              objectUrl = URL.createObjectURL(pdfBlob);
+              setBlobUrl(objectUrl);
+              setLoading(false);
+              return;
+            }
+
+            const { jsPDF } = await import('jspdf');
+            const doc = new jsPDF();
+            
+            const textLines = doc.splitTextToSize(text, 180);
+            
+            let cursorY = 20;
+            const pageHeight = doc.internal.pageSize.getHeight();
+            
+            for (let i = 0; i < textLines.length; i++) {
+              if (cursorY > pageHeight - 20) {
+                doc.addPage();
+                cursorY = 20;
+              }
+              // jsPDF standard fonts don't support all unicode chars, replacing some common ones if they break
+              doc.text(textLines[i], 15, cursorY);
+              cursorY += 7; // line height
+            }
+            
+            const pdfBlob = doc.output('blob');
+            objectUrl = URL.createObjectURL(pdfBlob);
+            setBlobUrl(objectUrl);
+            setLoading(false);
+            return;
+          } catch (e) {
+            console.error("Erreur de conversion PDF:", e);
+            // Fallback en cas d'erreur
+          }
         }
+        
+        if (isPdf) {
+          finalType = 'application/pdf';
+        } else if (finalType === 'application/octet-stream' || !finalType) {
+          finalType = 'application/pdf'; // fallback par défaut
+        }
+        
+        const typedBlob = new Blob([blob], { type: finalType });
+        objectUrl = URL.createObjectURL(typedBlob);
+        setBlobUrl(objectUrl);
+        setLoading(false);
       })
-      .catch(err => {
+      .catch(async (err) => {
+        let useFallback = false;
         if (err.message?.includes('404')) {
-          console.warn('Document non trouvé (404) : le fichier physique n\'existe probablement pas dans le stockage (données de test).');
-        } else {
-          console.error('Preview error:', err);
+          console.warn('Document non trouvé (404) : tentative de récupération du fallback base64...');
+          try {
+            const metaRes = await fetch(`/api/proxy/documents?path=documents/${docId}`, { headers });
+            if (metaRes.ok) {
+              const metaData = await metaRes.json();
+              if (metaData.ia_verif_details && metaData.ia_verif_details.startsWith('data:application/pdf;base64,')) {
+                if (isMounted) {
+                  // Transform base64 back to Blob
+                  const fetchRes = await fetch(metaData.ia_verif_details);
+                  const fallbackBlob = await fetchRes.blob();
+                  objectUrl = URL.createObjectURL(fallbackBlob);
+                  setBlobUrl(objectUrl);
+                  setLoading(false);
+                  useFallback = true;
+                }
+              }
+            }
+          } catch (fallbackErr) {
+            console.warn('Fallback error:', fallbackErr);
+          }
         }
-        if (isMounted) {
-          setError('Impossible de charger l\'aperçu du document (fichier introuvable)');
-          setLoading(false);
+        
+        if (!useFallback && err.message?.includes('404')) {
+          console.warn('Document non trouvé (404) : le fichier physique n\'existe probablement pas dans le stockage (données de test).');
+          if (isMounted) {
+            const htmlContent = `
+              <div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#666;background:#fff;flex-direction:column;">
+                <h2>Document de test (Simulé)</h2>
+                <p>Le fichier physique n'est pas présent sur le serveur (données de test).</p>
+              </div>
+            `;
+            const dummyBlob = new Blob([htmlContent], { type: 'text/html' });
+            objectUrl = URL.createObjectURL(dummyBlob);
+            setBlobUrl(objectUrl);
+            setLoading(false);
+          }
+        } else if (!useFallback) {
+          console.error('Preview error:', err);
+          if (isMounted) {
+            setError('Impossible de charger l\'aperçu du document (fichier introuvable)');
+            setLoading(false);
+          }
         }
       });
 

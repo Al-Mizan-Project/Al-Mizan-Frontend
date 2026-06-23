@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { scApi, type CommissionEvaluation, type OperateurRegistre } from '@/lib/sc/api';
+import { scApi, type OperateurRegistre } from '@/lib/sc/api';
 import { useSCSession } from '@/lib/sc/session';
-import { AO_TYPE_META, aoTypeLabel, TYPES_SANS_PLANNING, TYPES_SANS_VALIDATION, type AOType } from '@/lib/sc/ao-states';
+import { ALGERIAN_WILAYAS, AO_TYPE_META, aoTypeLabel, montantFitsType, typesForMontant, TYPES_SANS_PLANNING, TYPES_SANS_VALIDATION, type AOType } from '@/lib/sc/ao-states';
 import { Card, PageHeader, Spinner, EmptyState, useUI, PRIMARY_BTN, PRIMARY_BTN_STYLE, GHOST_BTN } from '@/lib/sc/ui';
 import AideRedactionModal from '@/components/contractant/AideRedactionModal';
 
@@ -20,12 +20,14 @@ interface DocItem {
 interface Details {
   reference: string; titre: string; description: string; montant_estime: string;
   type_procedure: AOType | '';
+  wilaya: string; secteur: string; localisation: string;
   date_publication: string; date_limite_soumission: string; date_ouverture_plis: string;
   poids_technique: string; poids_financier: string;
 }
 
 const EMPTY: Details = {
   reference: '', titre: '', description: '', montant_estime: '', type_procedure: '',
+  wilaya: '', secteur: '', localisation: '',
   date_publication: '', date_limite_soumission: '', date_ouverture_plis: '',
   poids_technique: '', poids_financier: '',
 };
@@ -52,13 +54,12 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
   const [step, setStep]                             = useState(0);
   const [docs, setDocs]                             = useState<DocItem[]>([]);
   const [details, setDetails]                       = useState<Details>(EMPTY);
-  const [commissions, setCommissions]               = useState<CommissionEvaluation[]>([]);
-  const [selectedCommissionId, setSelectedCommissionId] = useState<string>('');
   const [selectedOEs, setSelectedOEs]               = useState<(string | number)[]>([]);
   const [operateurs, setOperateurs]                 = useState<OperateurRegistre[]>([]);
   const [oeSearch, setOeSearch]                     = useState('');
   const [loadingExisting, setLoadingExisting]       = useState(!!appelId);
   const [saving, setSaving]                         = useState(false);
+  const [showMontantTypeError, setShowMontantTypeError] = useState(false);
   const cdcInput = useRef<HTMLInputElement>(null);
   const docInput = useRef<HTMLInputElement>(null);
   const [aideIAOpen, setAideIAOpen] = useState(false);
@@ -66,6 +67,17 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
   const type  = details.type_procedure;
   const steps = useMemo(() => stepsFor(type), [type]);
   const noPlanning = type && TYPES_SANS_PLANNING.includes(type);
+
+  const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
+
+  const hasMontantTypeMismatch = () => {
+    const montant = Number(details.montant_estime);
+    return !!details.type_procedure && Number.isFinite(montant) && montant > 0 && !montantFitsType(details.type_procedure as AOType, montant);
+  };
+
+  useEffect(() => {
+    setShowMontantTypeError(false);
+  }, [details.montant_estime, details.type_procedure]);
 
   // Load existing draft (edit mode)
   useEffect(() => {
@@ -77,12 +89,12 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
           reference: a.reference || '', titre: a.titre || '', description: a.description || '',
           montant_estime: a.montant_estime != null ? String(a.montant_estime) : '',
           type_procedure: (a.type_procedure as AOType) || '',
+          wilaya: a.wilaya || '', secteur: a.secteur || '', localisation: a.localisation || '',
           date_publication: a.date_publication || '', date_limite_soumission: a.date_limite_soumission || '',
           date_ouverture_plis: a.date_ouverture_plis || '',
           poids_technique: a.poids_technique != null ? String(a.poids_technique) : '',
           poids_financier: a.poids_financier != null ? String(a.poids_financier) : '',
         });
-        setSelectedCommissionId(a.commission_id ? String(a.commission_id) : '');
         if (Array.isArray(a.operateurs_invites)) {
           setSelectedOEs(a.operateurs_invites.map((item) => item.id_operateur_economique));
         } else if (a.id_operateur_choisi) {
@@ -92,11 +104,6 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
       setLoadingExisting(false);
     })();
   }, [appelId]);
-
-  useEffect(() => {
-    if (!serviceId) return;
-    scApi.listCommissionsEvaluation(serviceId).then(setCommissions);
-  }, [serviceId]);
 
   useEffect(() => {
     if (type === 'restreint' || type === 'gre_a_gre' || type === 'consultation') {
@@ -117,9 +124,9 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
   }
 
   // ── Upload de tous les docs en attente de l'étape docs ───────────────────
-  async function flushPendingUploads(): Promise<boolean> {
+  async function flushPendingUploads(): Promise<DocItem[] | null> {
     const pending = docs.filter((d) => d.file);
-    if (pending.length === 0) return true;
+    if (pending.length === 0) return docs;
 
     // Marquer uploading
     setDocs((prev) => prev.map((d) => d.file ? { ...d, uploading: true } : d));
@@ -128,12 +135,13 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
       const results = await Promise.all(
         docs.map((d) => d.file ? uploadOne(d) : Promise.resolve(d))
       );
-      setDocs(results.map((d) => ({ ...d, uploading: false })));
-      return true;
-    } catch {
+      const uploaded = results.map((d) => ({ ...d, uploading: false }));
+      setDocs(uploaded);
+      return uploaded;
+    } catch (err) {
       setDocs((prev) => prev.map((d) => ({ ...d, uploading: false })));
-      toast('error', isArabic ? 'تعذر رفع الوثائق.' : 'Échec du téléversement des documents.');
-      return false;
+      toast('error', errorText(err, isArabic ? 'تعذر رفع الوثائق.' : 'Échec du téléversement des documents.'));
+      return null;
     }
   }
 
@@ -149,6 +157,11 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     if (stepKey === 'details') {
       if (!details.reference || !details.titre || !details.montant_estime || !details.type_procedure)
         return isArabic ? 'يرجى ملء الحقول الإلزامية.' : 'Veuillez remplir les champs obligatoires.';
+      const montant = Number(details.montant_estime);
+      if (Number.isFinite(montant) && montant > 0 && !montantFitsType(details.type_procedure as AOType, montant))
+        return isArabic ? 'المبلغ غير مناسب لهذا النوع.' : 'Montant incompatible.';
+      if (!TYPES_SANS_VALIDATION.includes(details.type_procedure as AOType) && (!details.wilaya || !details.secteur))
+        return isArabic ? 'الولاية والقطاع إلزاميان لتوجيه التحقق تلقائيا.' : 'La wilaya et le secteur sont obligatoires pour le routage automatique de validation.';
       if (!noPlanning) {
         if (!details.date_publication || !details.date_limite_soumission || !details.date_ouverture_plis)
           return isArabic ? 'التواريخ إلزامية لهذا النوع.' : 'Les dates sont obligatoires pour ce type.';
@@ -156,13 +169,11 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
         if (pt + pf !== 100)
           return isArabic ? 'مجموع الأوزان يجب أن يساوي 100.' : 'La somme des poids doit être égale à 100.';
       }
-      if (!TYPES_SANS_VALIDATION.includes(details.type_procedure as AOType) && !selectedCommissionId)
-        return isArabic ? 'يرجى اختيار لجنة COPEO.' : 'Veuillez choisir une commission COPEO.';
     }
     if (stepKey === 'oe') {
       if (type === 'restreint'   && selectedOEs.length < 3)  return isArabic ? 'يجب اختيار 3 متعاملين على الأقل.' : 'Sélectionnez au moins 3 opérateurs.';
       if (type === 'gre_a_gre'   && selectedOEs.length !== 1) return isArabic ? 'اختر متعاملا واحدا فقط.' : 'Sélectionnez exactement un opérateur.';
-      if (type === 'consultation' && selectedOEs.length < 1)  return isArabic ? 'اختر متعاملا واحدا على الأقل.' : 'Sélectionnez au moins un opérateur.';
+      if (type === 'consultation' && selectedOEs.length !== 1) return isArabic ? 'اختر متعاملا واحدا فقط.' : 'Sélectionnez exactement un opérateur.';
       if ((type === 'restreint' || type === 'gre_a_gre') && !hasJustification)
         return isArabic ? 'وثيقة تبرير الاختيار إلزامية.' : 'Le document de justification est obligatoire.';
       if (type === 'consultation' && !hasBesoin)
@@ -173,25 +184,31 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
   }
 
   async function next() {
-    const err = validateStep(steps[step].key);
-    if (err) { toast('warning', err); return; }
+    const currentKey = steps[step].key;
+    const err = validateStep(currentKey);
+    if (err) {
+      if (currentKey === 'details' && hasMontantTypeMismatch()) setShowMontantTypeError(true);
+      toast('warning', err);
+      return;
+    }
+    setShowMontantTypeError(false);
 
     // ── Étape docs : uploader maintenant, au clic Suivant ──────────────────
-    if (steps[step].key === 'docs') {
+    if (currentKey === 'docs') {
       setSaving(true);
-      const ok = await flushPendingUploads();
+      const uploaded = await flushPendingUploads();
       setSaving(false);
-      if (!ok) return;
+      if (!uploaded) return;
     }
 
-    if (steps[step].key === 'details' && draftId) await persist();
+    if (currentKey === 'details' && draftId) await persist();
     setStep((s) => Math.min(s + 1, steps.length - 1));
   }
 
-  function buildPayload() {
-    const cdc          = docs.find((d) => d.kind === 'cdc'           && d.id_document);
-    const justification = docs.find((d) => d.kind === 'justification' && d.id_document);
-    const besoin        = docs.find((d) => d.kind === 'besoin'        && d.id_document);
+  function buildPayload(sourceDocs: DocItem[] = docs) {
+    const cdc          = sourceDocs.find((d) => d.kind === 'cdc'           && d.id_document);
+    const justification = sourceDocs.find((d) => d.kind === 'justification' && d.id_document);
+    const besoin        = sourceDocs.find((d) => d.kind === 'besoin'        && d.id_document);
     const inviteIds     = selectedOEs.map(Number).filter((id) => Number.isFinite(id) && id > 0);
     return {
       id_service_contractant: serviceId ? Number(serviceId) : undefined,
@@ -200,7 +217,9 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
       description: details.description,
       montant_estime: details.montant_estime ? Number(details.montant_estime) : undefined,
       type_procedure: details.type_procedure || undefined,
-      commission_id: selectedCommissionId || undefined,
+      wilaya: details.wilaya || undefined,
+      secteur: details.secteur || undefined,
+      localisation: details.localisation || undefined,
       date_publication: noPlanning ? null : details.date_publication || null,
       date_limite_soumission: noPlanning ? null : details.date_limite_soumission || null,
       date_ouverture_plis: noPlanning ? null : details.date_ouverture_plis || null,
@@ -209,8 +228,8 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
       id_doc_cdc: cdc?.id_document,
       id_doc_justification: justification?.id_document,
       id_doc_besoin: besoin?.id_document,
-      operateurs_invites: type === 'restreint' || type === 'consultation' ? inviteIds : undefined,
-      id_operateur_choisi: type === 'gre_a_gre' ? inviteIds[0] : undefined,
+      operateurs_invites: type === 'restreint' ? inviteIds : undefined,
+      id_operateur_choisi: type === 'gre_a_gre' || type === 'consultation' ? inviteIds[0] : undefined,
     };
   }
 
@@ -219,8 +238,8 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     setSaving(true);
     try {
       await scApi.updateAppel(draftId, buildPayload());
-    } catch {
-      toast('error', isArabic ? 'تعذر حفظ التعديلات.' : 'Enregistrement serveur indisponible.');
+    } catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر حفظ التعديلات.' : 'Enregistrement serveur indisponible.'));
     } finally {
       setSaving(false);
     }
@@ -230,23 +249,44 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
     const err = validateStep(steps[step].key);
     if (err) { toast('warning', err); return; }
     setSaving(true);
+    const uploadedDocs = await flushPendingUploads();
+    if (!uploadedDocs) {
+      setSaving(false);
+      return;
+    }
+    let saved;
     try {
-      const saved = draftId
-        ? await scApi.updateAppel(draftId, buildPayload())
-        : await scApi.createAppel(buildPayload());
-      const id = saved.id_appel_offres;
+      const payload = buildPayload(uploadedDocs);
+      saved = draftId
+        ? await scApi.updateAppel(draftId, payload)
+        : await scApi.createAppel(payload);
+    } catch (err) {
+      toast('error', errorText(err, isArabic ? 'تعذر حفظ المناقصة على الخادم. تحقق من الوثائق والمتعاملين.' : "Impossible d'enregistrer l'appel d'offres. Vérifiez les documents et les opérateurs."));
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const id = saved?.id_appel_offres ?? draftId;
+      if (!id) {
+        throw new Error(errorText(
+          saved,
+          isArabic ? 'تم الحفظ لكن لم يرجع الخادم معرف المناقصة.' : "L'appel est enregistré, mais le serveur n'a pas renvoyé son identifiant.",
+        ));
+      }
       setDraftId(id);
-      const extraDocIds = docs
+      const extraDocIds = uploadedDocs
         .filter((d) => d.kind === 'annexe' && d.id_document)
         .map((d) => d.id_document as number);
-      await Promise.all(extraDocIds.map((docId) => scApi.attachDocument(id, docId)));
-      if (type && !TYPES_SANS_VALIDATION.includes(type)) {
-        await scApi.submitForValidation(id);
+      try {
+        await Promise.all(extraDocIds.map((docId) => scApi.attachDocument(id, docId)));
+      } catch (err) {
+        throw new Error(errorText(err, isArabic ? 'تعذر ربط الوثائق.' : "Impossible d'associer les documents."));
       }
       toast('success', isArabic ? 'تم إرسال المناقصة بنجاح.' : "Appel d'offres soumis avec succès.");
       router.push(`${base}/marches/${id}`);
-    } catch {
-      toast('error', isArabic ? 'تعذر حفظ المناقصة على الخادم.' : "Impossible d'enregistrer l'appel d'offres.");
+    } catch (err) {
+      toast('error', errorText(err, isArabic ? 'تم حفظ المناقصة لكن تعذرت خطوة الإنهاء.' : "L'appel d'offres est enregistré, mais une étape de finalisation a échoué."));
       setSaving(false);
     }
   }
@@ -304,9 +344,7 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
             details={details}
             setDetails={setDetails}
             noPlanning={!!noPlanning}
-            commissions={commissions}
-            selectedCommissionId={selectedCommissionId}
-            setSelectedCommissionId={setSelectedCommissionId}
+            showMontantTypeError={showMontantTypeError}
           />
         )}
 
@@ -321,8 +359,7 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
         {current === 'review' && (
           <ReviewStep
             isArabic={isArabic} details={details} docs={docs}
-            selectedOEs={selectedOEs} commissions={commissions}
-            selectedCommissionId={selectedCommissionId}
+            selectedOEs={selectedOEs}
           />
         )}
 
@@ -349,7 +386,6 @@ export default function AOWizard({ appelId }: { appelId?: string }) {
       <AideRedactionModal
         isOpen={aideIAOpen}
         onClose={() => setAideIAOpen(false)}
-        cdcFile={docs.find((d) => d.kind === 'cdc')?.file ?? null}
       />
     </div>
   );
@@ -362,8 +398,8 @@ function DocumentsStep({ isArabic, docs, setDocs, hasCDC, cdcRef, docRef, onAide
   docs: DocItem[];
   setDocs: React.Dispatch<React.SetStateAction<DocItem[]>>;
   hasCDC: boolean;
-  cdcRef: React.RefObject<HTMLInputElement>;
-  docRef: React.RefObject<HTMLInputElement>;
+  cdcRef: React.RefObject<HTMLInputElement | null>;
+  docRef: React.RefObject<HTMLInputElement | null>;
   onAideIA: () => void;
 }) {
   const [pendingName, setPendingName] = useState('');
@@ -511,47 +547,69 @@ function DocumentsStep({ isArabic, docs, setDocs, hasCDC, cdcRef, docRef, onAide
 }
 
 // ─── Step 2: Details & type ───────────────────────────────────────────────────
-function DetailsStep({ isArabic, details, setDetails, noPlanning, commissions, selectedCommissionId, setSelectedCommissionId }: any) {
+function DetailsStep({
+  isArabic,
+  details,
+  setDetails,
+  noPlanning,
+  showMontantTypeError,
+}: any) {
   const set   = (k: keyof Details, v: string) => setDetails((d: Details) => ({ ...d, [k]: v }));
   const field = 'w-full mt-1 px-4 py-2.5 rounded-xl text-sm bg-[#F4F7F4] border border-transparent focus:border-[#97A675] focus:outline-none';
   const lbl   = 'text-xs font-semibold text-gray-500';
+
+  const montant = details.montant_estime ? Number(details.montant_estime) : null;
+  const hasMontant = montant != null && Number.isFinite(montant) && montant > 0;
+  const selectedType = details.type_procedure as AOType | '';
+  const requiresValidation = !!selectedType && !TYPES_SANS_VALIDATION.includes(selectedType);
+  const available = typesForMontant(hasMontant ? montant : null);
+  const typeOptions = selectedType && !available.includes(selectedType) ? [...available, selectedType] : available;
+  const montantInvalid = showMontantTypeError && !!selectedType && hasMontant && !montantFitsType(selectedType, montant as number);
+
+  useEffect(() => {
+    if (!hasMontant || selectedType) return;
+    if (available.length === 1) set('type_procedure', available[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [montant]);
+
   return (
     <div>
       <h3 className="text-lg font-bold mb-5" style={{ color: '#1C4532' }}>{isArabic ? 'التفاصيل والنوع' : 'Détails & type'}</h3>
       <div className="grid sm:grid-cols-2 gap-4">
         <div><label className={lbl}>{isArabic ? 'المرجع' : 'Référence'} *</label><input className={field} value={details.reference} onChange={(e) => set('reference', e.target.value)} /></div>
-        <div><label className={lbl}>{isArabic ? 'المبلغ التقديري (DA)' : 'Montant estimé (DA)'} *</label><input type="number" className={field} value={details.montant_estime} onChange={(e) => set('montant_estime', e.target.value)} /></div>
-        <div className="sm:col-span-2"><label className={lbl}>{isArabic ? 'العنوان' : 'Titre'} *</label><input className={field} value={details.titre} onChange={(e) => set('titre', e.target.value)} /></div>
-        <div className="sm:col-span-2"><label className={lbl}>{isArabic ? 'الوصف' : 'Description'}</label><textarea rows={3} className={field} value={details.description} onChange={(e) => set('description', e.target.value)} /></div>
-        <div className="sm:col-span-2">
-          <label className={lbl}>{isArabic ? 'نوع الإجراء' : 'Type de procédure'} *</label>
-          <select className={field} value={details.type_procedure} onChange={(e) => set('type_procedure', e.target.value)}>
-            <option value="">{isArabic ? '— اختر —' : '— Choisir —'}</option>
-            {(Object.keys(AO_TYPE_META) as AOType[]).map((t) => (
-              <option key={t} value={t}>{isArabic ? AO_TYPE_META[t].ar : AO_TYPE_META[t].fr}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {details.type_procedure && !TYPES_SANS_VALIDATION.includes(details.type_procedure as AOType) && (
-        <div className="mt-5 pt-5 border-t border-gray-100">
-          <label className={lbl}>{isArabic ? 'لجنة COPEO' : 'Commission COPEO'} *</label>
-          <select className={field} value={selectedCommissionId} onChange={(e) => setSelectedCommissionId(e.target.value)}>
-            <option value="">{isArabic ? '— اختر اللجنة —' : '— Choisir la commission —'}</option>
-            {commissions.map((c: CommissionEvaluation) => (
-              <option key={c.id_comission} value={c.id_comission}>
-                {c.nom_comission || `COPEO #${c.id_comission}`} {c.categorie ? `— ${c.categorie}` : ''}
-              </option>
-            ))}
-          </select>
-          {commissions.length === 0 && (
-            <p className="text-xs text-amber-600 mt-2">
-              {isArabic ? 'أنشئ لجنة COPEO في صفحة اللجان قبل إرسال المناقصة.' : 'Créez une commission COPEO dans la page Commissions avant de soumettre.'}
+        <div>
+          <label className={lbl}>{isArabic ? 'المبلغ التقديري (DA)' : 'Montant estimé (DA)'} *</label>
+          <input
+            type="number"
+            value={details.montant_estime}
+            onChange={(e) => set('montant_estime', e.target.value)}
+            className={`w-full mt-1 px-4 py-2.5 rounded-xl text-sm border focus:outline-none ${montantInvalid ? 'bg-red-50 border-red-400 text-red-600 focus:border-red-500' : 'bg-[#F4F7F4] border-transparent focus:border-[#97A675]'}`}
+          />
+          {montantInvalid && selectedType && (
+            <p className="text-xs text-red-500 mt-1">
+              {isArabic ? 'المبلغ غير مناسب لهذا النوع.' : 'Montant incompatible.'}
             </p>
           )}
         </div>
-      )}
+        <div className="sm:col-span-2"><label className={lbl}>{isArabic ? 'العنوان' : 'Titre'} *</label><input className={field} value={details.titre} onChange={(e) => set('titre', e.target.value)} /></div>
+        <div>
+          <label className={lbl}>{isArabic ? 'الولاية' : 'Wilaya'} {requiresValidation ? '*' : ''}</label>
+          <select className={field} value={details.wilaya} onChange={(e) => set('wilaya', e.target.value)}>
+            <option value="">{isArabic ? '— اختر الولاية —' : '— Choisir la wilaya —'}</option>
+            {ALGERIAN_WILAYAS.map((w) => <option key={w} value={w}>{w}</option>)}
+          </select>
+        </div>
+        <div><label className={lbl}>{isArabic ? 'القطاع' : 'Secteur'} {requiresValidation ? '*' : ''}</label><input className={field} value={details.secteur} onChange={(e) => set('secteur', e.target.value)} /></div>
+        <div className="sm:col-span-2"><label className={lbl}>{isArabic ? 'الموقع' : 'Localisation'}</label><input className={field} value={details.localisation} onChange={(e) => set('localisation', e.target.value)} /></div>
+        <div className="sm:col-span-2"><label className={lbl}>{isArabic ? 'الوصف' : 'Description'}</label><textarea rows={3} className={field} value={details.description} onChange={(e) => set('description', e.target.value)} /></div>
+        <div className="sm:col-span-2">
+          <label className={lbl}>{isArabic ? 'نوع الإجراء' : 'Type de procédure'} *</label>
+          <select className={field} value={details.type_procedure} onChange={(e) => set('type_procedure', e.target.value)} disabled={!hasMontant}>
+            <option value="">{hasMontant ? (isArabic ? '— اختر —' : '— Choisir —') : (isArabic ? 'المبلغ أولا' : "Montant d'abord")}</option>
+            {typeOptions.map((t) => <option key={t} value={t}>{isArabic ? AO_TYPE_META[t].ar : AO_TYPE_META[t].fr}</option>)}
+          </select>
+        </div>
+      </div>
 
       {!noPlanning && details.type_procedure && (
         <div className="mt-5 pt-5 border-t border-gray-100">
@@ -577,7 +635,7 @@ function DetailsStep({ isArabic, details, setDetails, noPlanning, commissions, s
 
 // ─── Step 3: OE selection ─────────────────────────────────────────────────────
 function OEStep({ isArabic, type, operateurs, selected, setSelected, search, setSearch, docRef, docs, setDocs }: any) {
-  const single = type === 'gre_a_gre';
+  const single = type === 'gre_a_gre' || type === 'consultation';
   const toggle = (id: string | number) => {
     if (single) { setSelected([id]); return; }
     setSelected((cur: (string | number)[]) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
@@ -654,7 +712,7 @@ function OEStep({ isArabic, type, operateurs, selected, setSelected, search, set
 }
 
 // ─── Step 4: Review ───────────────────────────────────────────────────────────
-function ReviewStep({ isArabic, details, docs, selectedOEs, commissions, selectedCommissionId }: any) {
+function ReviewStep({ isArabic, details, docs, selectedOEs }: any) {
   const row = (k: string, v: string) => (
     <div className="flex justify-between py-2 border-b border-gray-50">
       <span className="text-xs text-gray-400">{k}</span>
@@ -662,7 +720,6 @@ function ReviewStep({ isArabic, details, docs, selectedOEs, commissions, selecte
     </div>
   );
   const t = aoTypeLabel(details.type_procedure, isArabic ? 'ar' : 'fr');
-  const commission = commissions.find((c: CommissionEvaluation) => String(c.id_comission) === String(selectedCommissionId));
   return (
     <div>
       <h3 className="text-lg font-bold mb-5" style={{ color: '#1C4532' }}>{isArabic ? 'مراجعة وإرسال' : 'Révision & soumission'}</h3>
@@ -670,7 +727,6 @@ function ReviewStep({ isArabic, details, docs, selectedOEs, commissions, selecte
       {row(isArabic ? 'العنوان' : 'Titre', details.titre)}
       {row(isArabic ? 'النوع' : 'Type', t)}
       {row(isArabic ? 'المبلغ' : 'Montant', details.montant_estime ? `${Number(details.montant_estime).toLocaleString('fr-DZ')} DA` : '')}
-      {commission && row(isArabic ? 'اللجنة' : 'Commission', commission.nom_comission || `COPEO #${commission.id_comission}`)}
       {row(isArabic ? 'الوثائق' : 'Documents', `${docs.length}`)}
       {selectedOEs.length > 0 && row(isArabic ? 'المتعاملون المحددون' : 'Opérateurs sélectionnés', `${selectedOEs.length}`)}
       <p className="text-xs text-gray-400 mt-4">

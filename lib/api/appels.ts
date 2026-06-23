@@ -18,6 +18,7 @@ export interface AppelOffre {
   validated_by?: string | number;
   id_doc_cdc?: number | string;
   created_at?: string;
+  updated_at?: string;
   validationDeadline?: string;
   suivis?: AppelOffreSuivi[];
   date_publication?: string;

@@ -11,15 +11,15 @@ const ASSIGNED_REFS = [
   'REF-2024-0011', 'REF-2024-0012', 'REF-2024-0013', 'REF-2024-0014', 'REF-2024-0015',
 ];
 const MY_DOSSIERS = DOSSIERS.filter(d => ASSIGNED_REFS.includes(d.reference));
-const EN_COURS    = MY_DOSSIERS.filter(d => d.status === 'En cours');
-const EN_RETARD   = MY_DOSSIERS.filter(d => d.status === 'En retard');
+const EN_COURS = MY_DOSSIERS.filter(d => d.status === 'En cours');
+const EN_RETARD = MY_DOSSIERS.filter(d => d.status === 'En retard');
 
 const ROWS_PER_PAGE = 10;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function joursDeRetard(d: Dossier): number {
-  const soumis   = new Date(d.dateSoumission);
-  const delai    = parseInt(d.delaiEvaluation);
+  const soumis = new Date(d.dateSoumission);
+  const delai = parseInt(d.delaiEvaluation);
   const echeance = new Date(soumis.getTime() + delai * 24 * 60 * 60 * 1000);
   const diff = Math.floor((Date.now() - echeance.getTime()) / (1000 * 60 * 60 * 24));
   return Math.max(1, diff); // always at least 1j if retard
@@ -29,15 +29,15 @@ function buildChartData() {
   let gt7 = 0, b3_7 = 0, lt3 = 0, today = 0;
   EN_RETARD.forEach(d => {
     const j = joursDeRetard(d);
-    if (j === 0)     today++;
-    else if (j < 3)  lt3++;
+    if (j === 0) today++;
+    else if (j < 3) lt3++;
     else if (j <= 7) b3_7++;
-    else             gt7++;
+    else gt7++;
   });
   return [
-    { label: '> 7',        value: gt7,   fill: '#EF4444' },
-    { label: '3–7',        value: b3_7,  fill: '#F97316' },
-    { label: '< 3',        value: lt3,   fill: '#EAB308' },
+    { label: '> 7', value: gt7, fill: '#EF4444' },
+    { label: '3–7', value: b3_7, fill: '#F97316' },
+    { label: '< 3', value: lt3, fill: '#EAB308' },
     { label: "Aujourd'hui", value: today, fill: '#3B82F6' },
   ];
 }
@@ -45,10 +45,10 @@ function buildChartData() {
 const CHART_DATA = buildChartData();
 
 const STATUS_BADGE: Record<string, string> = {
-  'En cours':   'text-blue-700',
-  'En retard':  'text-red-600',
+  'En cours': 'text-blue-700',
+  'En retard': 'text-red-600',
   'En attente': 'text-amber-700',
-  'Prêt':       'text-emerald-700',
+  'Prêt': 'text-emerald-700',
 };
 
 function CustomTooltip({ active, payload, label }: any) {
@@ -61,7 +61,7 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-type Tab     = 'apercu' | 'en-cours' | 'en-retard';
+type Tab = 'apercu' | 'en-cours' | 'en-retard';
 type SortDir = 'asc' | 'desc' | null;
 
 function ColHeader({ label, sortKey, sortBy, sortDir, onSort }: {
@@ -86,9 +86,9 @@ function ColHeader({ label, sortKey, sortBy, sortDir, onSort }: {
 
 // ─── En Cours table ───────────────────────────────────────────────────────────
 function EnCoursTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
-  const [sortBy,  setSortBy]  = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
-  const [page,    setPage]    = useState(1);
+  const [page, setPage] = useState(1);
 
   const handleSort = (key: string) => {
     if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -100,9 +100,9 @@ function EnCoursTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
     if (!sortBy) return list;
     return list.sort((a, b) => {
       const av = sortBy === 'reference' ? a.reference : sortBy === 'operateur' ? a.operateur
-               : sortBy === 'date' ? a.dateSoumission : sortBy === 'delai' ? a.delaiEvaluation : a.status;
+        : sortBy === 'date' ? a.dateSoumission : sortBy === 'delai' ? a.delaiEvaluation : a.status;
       const bv = sortBy === 'reference' ? b.reference : sortBy === 'operateur' ? b.operateur
-               : sortBy === 'date' ? b.dateSoumission : sortBy === 'delai' ? b.delaiEvaluation : b.status;
+        : sortBy === 'date' ? b.dateSoumission : sortBy === 'delai' ? b.delaiEvaluation : b.status;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
   }, [sortBy, sortDir]);
@@ -130,7 +130,7 @@ function EnCoursTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
                 className="border-b border-gray-50 hover:bg-blue-50/40 cursor-pointer transition-colors">
                 <td className="px-4 py-3 text-gray-300">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                   </svg>
                 </td>
                 <td className="px-4 py-3">
@@ -148,16 +148,16 @@ function EnCoursTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
           </tbody>
         </table>
       </div>
-      {total > 1 && }
+      {total > 1 && <Pagination currentPage={page} totalPages={total} onPageChange={setPage} totalItems={sorted.length} rowsPerPage={ROWS_PER_PAGE} />}
     </div>
   );
 }
 
 // ─── En Retard table ──────────────────────────────────────────────────────────
 function EnRetardTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
-  const [sortBy,  setSortBy]  = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
-  const [page,    setPage]    = useState(1);
+  const [page, setPage] = useState(1);
 
   const handleSort = (key: string) => {
     if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -199,7 +199,7 @@ function EnRetardTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
                 className="border-b border-gray-50 hover:bg-red-50/40 cursor-pointer transition-colors">
                 <td className="px-4 py-3 text-gray-300">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                   </svg>
                 </td>
                 <td className="px-4 py-3">
@@ -218,7 +218,7 @@ function EnRetardTable({ onVoir }: { onVoir: (d: Dossier) => void }) {
           </tbody>
         </table>
       </div>
-      {total > 1 && }
+      {total > 1 && <Pagination currentPage={page} totalPages={total} onPageChange={setPage} totalItems={sorted.length} rowsPerPage={ROWS_PER_PAGE} />}
     </div>
   );
 }
@@ -269,8 +269,8 @@ export default function VuePersonnelleAdminView({ onVoirDossier }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('apercu');
 
   const TABS = [
-    { id: 'apercu'    as Tab, label: 'Aperçu' },
-    { id: 'en-cours'  as Tab, label: 'En Cours',  count: EN_COURS.length },
+    { id: 'apercu' as Tab, label: 'Aperçu' },
+    { id: 'en-cours' as Tab, label: 'En Cours', count: EN_COURS.length },
     { id: 'en-retard' as Tab, label: 'En Retard', count: EN_RETARD.length, red: true },
   ];
 
@@ -279,16 +279,14 @@ export default function VuePersonnelleAdminView({ onVoirDossier }: Props) {
       <div className="border-b border-gray-200 -mx-6 -mt-6 px-6 mb-6 flex items-center gap-0 bg-white">
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-5 py-3.5 text-sm font-semibold relative transition-all ${
-              activeTab === tab.id ? 'text-[#00738C]' : 'text-gray-500 hover:text-gray-800'
-            }`}>
+            className={`flex items-center gap-1.5 px-5 py-3.5 text-sm font-semibold relative transition-all ${activeTab === tab.id ? 'text-[#00738C]' : 'text-gray-500 hover:text-gray-800'
+              }`}>
             {tab.label}
             {tab.count !== undefined && (
-              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
-                activeTab === tab.id
+              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${activeTab === tab.id
                   ? tab.red ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
                   : 'bg-gray-100 text-gray-500'
-              }`}>{tab.count}</span>
+                }`}>{tab.count}</span>
             )}
             {activeTab === tab.id && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: '#00738C' }} />
@@ -297,8 +295,8 @@ export default function VuePersonnelleAdminView({ onVoirDossier }: Props) {
         ))}
       </div>
 
-      {activeTab === 'apercu'    && <ApercuTab onTabChange={setActiveTab} />}
-      {activeTab === 'en-cours'  && <EnCoursTable onVoir={onVoirDossier} />}
+      {activeTab === 'apercu' && <ApercuTab onTabChange={setActiveTab} />}
+      {activeTab === 'en-cours' && <EnCoursTable onVoir={onVoirDossier} />}
       {activeTab === 'en-retard' && <EnRetardTable onVoir={onVoirDossier} />}
     </div>
   );

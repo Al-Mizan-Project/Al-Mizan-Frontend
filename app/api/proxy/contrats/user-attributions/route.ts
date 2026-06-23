@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
 
 const CONTRATS_BASE = process.env.NEXT_PUBLIC_CONTRATS_SERVICE_URL?.replace(/\/$/, '') || 'http://localhost:8000';
 const SOUMISSIONS_BASE = process.env.NEXT_PUBLIC_SOUMISSIONS_SERVICE_URL?.replace(/\/$/, '') || 'http://localhost:8000';
@@ -78,10 +76,10 @@ function computeAttributionStatus(attribution: AttributionApiItem): 'En Attente'
     return 'En Attente';
   }
 
-  // Use creation date age to decide "En Retard" so older submissions are considered late
-  const createdAt = parseIsoDate(attribution.created_at);
-  if (createdAt) {
-    const ageDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+  // Use assignment date if validated_by is set, otherwise creation date
+  const baseDate = parseIsoDate(attribution.validated_by ? attribution.updated_at : attribution.created_at);
+  if (baseDate) {
+    const ageDays = Math.floor((Date.now() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
     return ageDays > 7 ? 'En Retard' : 'En Cours';
   }
 
@@ -98,16 +96,6 @@ function buildInternalServiceHeaders(authHeader: string | null): Record<string, 
     headers['X-Internal-Service-Token'] = internalToken;
   }
   return headers;
-}
-
-async function writeDebugBackendResponse(data: unknown) {
-  try {
-    const debugFile = path.join(process.cwd(), 'app', '[lang]', 'debug_backend_response.json');
-    const json = JSON.stringify(data, null, 2) + '\n';
-    await fs.writeFile(debugFile, json, 'utf-8');
-  } catch (error) {
-    console.warn('Unable to write debug backend response file:', error);
-  }
 }
 
 async function fetchJson(url: string, init: RequestInit) {
@@ -138,7 +126,7 @@ export async function GET(req: NextRequest) {
 
   const actualUserId = userIdQuery || authDebug.data?.user_id || authDebug.data?.id_utilisateur || null;
   const actualMemberId = memberQuery || authDebug.data?.id_membre || null;
-  const actualRole = normalizeRole(roleQuery ?? getUserRoleFromAuthDebug(authDebug.data) ?? null);
+  const actualRole = normalizeRole(roleQuery ?? getUserRoleFromAuthDebug(authDebug.data) ?? undefined);
 
   const upstreamParams = new URLSearchParams();
   if (actualRole?.includes('resp_valid_intern')) {
@@ -183,8 +171,8 @@ export async function GET(req: NextRequest) {
     if (defResp.ok && Array.isArray(defResp.data)) {
       definitiveAttributions = defResp.data as AttributionApiItem[];
     }
-  } catch (err) {
-    console.warn('Failed to fetch definitive attributions', err);
+  } catch {
+    definitiveAttributions = [];
   }
 
   const byId: Record<number, AttributionApiItem> = {};
@@ -216,8 +204,8 @@ export async function GET(req: NextRequest) {
         if (soumissionResponse.ok && soumissionResponse.data) {
           soumissionMap[soumissionId] = soumissionResponse.data;
         }
-      } catch (error) {
-        console.warn('Failed to fetch soumission details', error);
+      } catch {
+        return;
       }
     }),
   );
@@ -234,8 +222,6 @@ export async function GET(req: NextRequest) {
     membre_id: actualMemberId,
     attributions: enrichedAttributions,
   };
-
-  void writeDebugBackendResponse(responsePayload);
 
   return NextResponse.json(responsePayload);
 }

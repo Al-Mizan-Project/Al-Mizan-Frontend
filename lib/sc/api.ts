@@ -19,6 +19,44 @@ interface ReqOptions {
   form?: FormData;
 }
 
+function detailFromPayload(payload: unknown, fallback: string): string {
+  const detailText = (value: unknown): string | null => {
+    if (value == null || value === '') return null;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) {
+      const parts = value.map((item) => detailText(item)).filter(Boolean);
+      return parts.length ? parts.join(', ') : null;
+    }
+    if (typeof value !== 'object') return null;
+
+    const objectValue = value as Record<string, unknown>;
+    const nestedDetails = detailText(objectValue.details);
+    if (nestedDetails) return nestedDetails;
+
+    const nestedDirect = detailText(objectValue.detail ?? objectValue.message ?? objectValue.error ?? objectValue.erreur);
+    if (nestedDirect) return nestedDirect;
+
+    for (const [key, child] of Object.entries(objectValue)) {
+      if (['code', 'status'].includes(key)) continue;
+      const text = detailText(child);
+      if (text) return `${key}: ${text}`;
+    }
+
+    return null;
+  };
+
+  if (!payload || typeof payload !== 'object') return detailText(payload) || fallback;
+  const data = payload as Record<string, unknown>;
+  return detailText(data.error)
+    || detailText(data.details)
+    || detailText(data.detail)
+    || detailText(data.message)
+    || detailText(data.erreur)
+    || detailText(data)
+    || fallback;
+}
+
 /** Low-level proxied request. Attaches auth, auto-refreshes on 401, throws on non-2xx. */
 export async function proxy<T>(service: ProxyService, path: string, opts: ReqOptions = {}): Promise<T> {
   const params = new URLSearchParams({ path });
@@ -46,14 +84,20 @@ export async function proxy<T>(service: ProxyService, path: string, opts: ReqOpt
     let detail = `HTTP ${res.status}`;
     try {
       const data = await res.json();
-      detail = data?.detail || data?.message || data?.error || detail;
+      detail = detailFromPayload(data, detail);
     } catch {
       /* keep default */
     }
     throw new ApiFailure(res.status, detail);
   }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  const text = await res.text();
+  if (!text.trim()) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as T;
+  }
 }
 
 export class ApiFailure extends Error {
@@ -89,6 +133,10 @@ async function safeOne<T>(fn: () => Promise<T>): Promise<T | null> {
   }
 }
 
+function sameId(a: unknown, b: unknown): boolean {
+  return a !== undefined && a !== null && b !== undefined && b !== null && String(a) === String(b);
+}
+
 // ---------------------------------------------------------------------------
 // Types (kept minimal — only what the SC frontend reads/writes)
 // ---------------------------------------------------------------------------
@@ -99,6 +147,11 @@ export interface AppelOffre {
   titre?: string;
   description?: string;
   type_procedure?: string;
+  type_prestation?: string;
+  visibilite?: string;
+  wilaya?: string;
+  secteur?: string;
+  localisation?: string;
   montant_estime?: string | number;
   date_publication?: string | null;
   date_limite_soumission?: string | null;
@@ -119,7 +172,7 @@ export interface AppelOffre {
   updated_at?: string;
 }
 
-type AppelOffreWrite = Partial<Omit<AppelOffre, 'operateurs_invites'>> & {
+type AppelOffreWrite = Partial<Omit<AppelOffre, 'operateurs_invites' | 'commission_id' | 'validation_level' | 'statut' | 'etat_execution' | 'validated_by'>> & {
   operateurs_invites?: number[];
 };
 
@@ -160,12 +213,15 @@ export interface CommissionInterne {
   membres?: CommissionInterneMembre[];
 }
 
+export type CommissionInterneType = 'parmanante' | 'adhoc';
+
 export interface CommissionEvaluation {
   id_comission: number;
-  id_service?: number;
+  id_service?: number | string;
   nom_comission?: string;
   categorie?: string;
   membres?: CommissionEvaluationMembre[];
+  ct?: { id_utilisateur: number }[];
 }
 
 export interface CommissionEvaluationMembre {
@@ -177,13 +233,18 @@ export interface CommissionEvaluationMembre {
 
 export interface CommissionInterneMembre {
   id?: number;
-  id_membre: number;
-  id_commision_interne?: number;
+  id_membre: string | number;
+  id_service?: number;
+  id_utilisateur?: number | null;
+  nom?: string | null;
+  prenom?: string | null;
+  fonction?: string | null;
+  role?: string | null;
 }
 
 export interface RegistreEntry {
-  id?: number;
-  id_comission?: number;
+  id?: number | string;
+  id_comission?: number | string;
   id_soumission: number;
   numero_ordre: number;
   nom_oe: string;
@@ -193,31 +254,48 @@ export interface RegistreEntry {
 }
 
 export interface SoumissionLite {
+  id?: number | string;
   id_soumission: number;
   id_appel_offre?: number;
+  id_appel_offres?: number;
+  appel_id?: number;
   id_soumissionnaire?: number;
   date_soumission?: string;
   montant_financier?: string | number | null;
   statut?: string;
 }
 
+// Returned by collaborator / OE-responsable account creation. An activation link is emailed to
+// the new account; no password is exposed to the Service Contractant.
+export interface CompteCreationResult {
+  message?: string;
+  id_membre?: string | number;
+  id_utilisateur?: string | number;
+  organisation_id?: string | number;
+  operateur_id?: string | number;
+  email?: string;
+}
+
 export interface DemandeOE {
   id?: number | string;
-  nom_officiel?: string;
+  nom_organisation?: string;
   email_contact?: string;
   statut?: string;
-  created_at?: string;
+  cree_le?: string;
   id_service_contractant?: number;
 }
 
-export interface Clarification {
+export interface RecoursLite {
   id?: number | string;
-  id_appel_offres?: number;
-  question?: string;
-  reponse?: string | null;
-  auteur?: string;
+  id_recours?: number | string;
+  id_appel_offre?: number | string;
+  id_appel_offres?: number | string;
+  appel_id?: number | string;
+  id_soumission?: number | string;
   statut?: string;
+  motif?: string;
   created_at?: string;
+  date_depot?: string;
 }
 
 export interface OperateurRegistre {
@@ -257,11 +335,8 @@ export const scApi = {
   updateAppel: (id: number | string, data: AppelOffreWrite) =>
     proxy<AppelOffre>('appels', `appels-offres/${id}`, { method: 'PATCH', body: data }),
 
-  linkCommission: (id: number | string, commissionId: number | string) =>
-    proxy<AppelOffre>('appels', `appels-offres/${id}`, { method: 'PATCH', body: { commission_id: String(commissionId) } }),
-
   attachDocument: (appelId: number | string, documentId: number) =>
-    proxy('appels', `appels-offres/${appelId}/documents`, { method: 'POST', body: { id_document: documentId } }),
+    proxy('appels', `appels-offres/${appelId}/documents/${documentId}`, { method: 'POST', body: {} }),
 
   submitForValidation: (id: number | string) =>
     proxy('appels', `appels-offres/${id}/soumettre-validation`, { method: 'POST', body: {} }),
@@ -275,14 +350,21 @@ export const scApi = {
   ouvrirPlis: (id: number | string) =>
     proxy('appels', `appels-offres/${id}/ouvrir-plis`, { method: 'POST', body: {} }),
 
-  annulerAppel: (id: number | string, motif: string) =>
-    proxy('appels', `appels-offres/${id}/annuler`, { method: 'POST', body: { motif } }),
-
   deleteDraft: (id: number | string) =>
     proxy('appels', `appels-offres/${id}`, { method: 'DELETE' }),
 
   listAppelDocuments: (id: number | string) =>
     safeList<{ id_document: number; nom?: string }>(() => proxy('appels', `appels-offres/${id}/documents`)),
+
+  getDocumentMeta: (id: number | string) =>
+    safeOne<{ id_document: number; nom?: string; type_document?: string; storage_url?: string }>(() => proxy('documents', `documents/${id}`)),
+
+  // Streams the document bytes through the proxy and returns an object URL for in-app preview.
+  documentBlobUrl: async (id: number | string): Promise<string> => {
+    const res = await authedFetch(`/api/proxy/documents?path=api/documents/${id}/`, { headers: { Accept: '*/*' } });
+    if (!res.ok) throw new ApiFailure(res.status, `HTTP ${res.status}`);
+    return URL.createObjectURL(await res.blob());
+  },
 
   countSoumissions: async (id: number | string): Promise<number> => {
     const list = await safeList<unknown>(() => proxy('appels', `appels-offres/${id}/soumissions`));
@@ -303,16 +385,16 @@ export const scApi = {
 
   // ----- Internal validation queue -----
   listValidationQueue: (commissionId?: number) =>
-    safeList<AppelOffre>(() => proxy('appels', 'appels-offres', { query: { statut: 'non validé', commission_id: commissionId } })),
+    safeList<AppelOffre>(() => proxy('appels', 'appels-offres', { query: { statut: 'non_valide', commission_id: commissionId } })),
 
-  assignValidator: (id: number | string, membreId: string | number) =>
-    proxy('appels', `appels-offres/${id}/affecter-validateur`, { method: 'POST', body: { validated_by: membreId } }),
+  assignValidator: (id: number | string, validatorId: string | number) =>
+    proxy('appels', `appels-offres/${id}/affecter-validateur`, { method: 'POST', body: { validator_id: validatorId } }),
 
-  validerMarche: (id: number | string, commentaire = '') =>
-    proxy('appels', `appels-offres/${id}/valider`, { method: 'POST', body: { commentaire } }),
+  validerMarche: (id: number | string, commentaire = '', validatedBy?: string | number) =>
+    proxy('appels', `appels-offres/${id}/valider`, { method: 'POST', body: { commentaire, validated_by: validatedBy } }),
 
-  rejeterMarche: (id: number | string, motif: string) =>
-    proxy('appels', `appels-offres/${id}/refuser`, { method: 'POST', body: { motif } }),
+  rejeterMarche: (id: number | string, motif: string, validatedBy?: string | number) =>
+    proxy('appels', `appels-offres/${id}/refuser`, { method: 'POST', body: { motif, validated_by: validatedBy } }),
 
   // ----- Attribution (contrats_service: attributions-provisoires) -----
   listAttributionsProvisoires: (commissionId?: number) =>
@@ -336,17 +418,11 @@ export const scApi = {
   listMembres: (orgId: string | number) =>
     safeList<Membre>(() => proxy('acteurs', `organisations/${orgId}/membres/`)),
 
-  createCollaborateur: (data: Partial<Membre> & { id_organisation: string | number; role: string }) =>
-    proxy<Membre>('acteurs', 'membres/creer-collaborateur/', { method: 'POST', body: data }),
+  createCollaborateur: (data: Partial<Membre> & { id_organisation: string | number; role: string; password?: string }) =>
+    proxy<CompteCreationResult>('acteurs', 'membres/creer-collaborateur/', { method: 'POST', body: data }),
 
-  updateMembre: (id: string | number, data: Partial<Membre>) =>
+  updateMembre: (id: string | number, data: { nom?: string; prenom?: string; telephone?: string; fonction?: string }) =>
     proxy<Membre>('acteurs', `membres/${id}/`, { method: 'PATCH', body: data }),
-
-  deactivateMembre: (id: string | number) =>
-    proxy('acteurs', `membres/${id}/`, { method: 'DELETE' }),
-
-  assignRole: (id: string | number, role: string) =>
-    proxy<Membre>('acteurs', `membres/${id}/`, { method: 'PATCH', body: { role } }),
 
   // ----- Commissions -----
   // COPEO commissions live in evaluations_service because registre/CT/state read from that table.
@@ -398,29 +474,46 @@ export const scApi = {
     safeList<SoumissionLite>(() => proxy('soumissions', `by-commission/${commissionId}/`)),
 
   // ----- Demandes d'inscription OE (acteurs_service, scoped to the SC) -----
-  listDemandesOE: (_serviceId?: string | number) =>
-    safeList<DemandeOE>(() => proxy('acteurs', 'service-contractant/demandes/')),
+  // Only pending requests are listed; approved/refused ones drop out after a refresh.
+  listDemandesOE: (serviceId?: string | number) =>
+    safeList<DemandeOE>(() => proxy('acteurs', 'service-contractant/demandes/', { query: { statut: 'EN_ATTENTE', id_service_contractant: serviceId } })),
 
   approveDemandeOE: (id: string | number) =>
-    proxy('acteurs', `service-contractant/demandes/${id}/approuver/`, { method: 'POST', body: {} }),
+    proxy<CompteCreationResult>('acteurs', `service-contractant/demandes/${id}/approuver/`, { method: 'POST', body: {} }),
 
   refuseDemandeOE: (id: string | number, motif: string) =>
-    proxy('acteurs', `service-contractant/demandes/${id}/rejeter/`, { method: 'POST', body: { motif_rejet: motif } }),
-
-  // ----- Clarifications -----
-  listClarifications: (serviceId?: string | number) =>
-    safeList<Clarification>(() => proxy('appels', 'clarifications/', { query: { id_service_contractant: serviceId } })),
-
-  repondreClarification: (id: string | number, reponse: string) =>
-    proxy('appels', `clarifications/${id}/repondre/`, { method: 'POST', body: { reponse } }),
+    proxy('acteurs', `service-contractant/demandes/${id}/rejeter/`, { method: 'POST', body: { motif } }),
 
   // ----- Registre OE (for restreint / gré à gré selection) -----
   listOperateurs: (query: { secteur?: string; wilaya?: string; search?: string } = {}) =>
     safeList<OperateurRegistre>(() => proxy('acteurs', 'admin/organisations/operateurs/', { query })),
 
   // ----- Recours (read + respond only; lifecycle owned by the recours team) -----
-  listRecours: (appelId?: number | string) =>
-    safeList<{ id: number | string; statut?: string; motif?: string; created_at?: string }>(
+  listRecours: async (appelId?: number | string) => {
+    const items = await safeList<RecoursLite>(
       () => proxy('recours', 'api/recours/', { query: { id_appel_offre: appelId } }),
-    ),
+    );
+    return items.map((item) => ({ ...item, id: item.id ?? item.id_recours }));
+  },
+  listRecoursForAppel: async (appelId: number | string) => {
+    const [items, soumissions] = await Promise.all([
+      safeList<RecoursLite>(() => proxy('recours', 'api/recours/', { query: { id_appel_offre: appelId } })),
+      safeList<SoumissionLite>(() => proxy('appels', `appels-offres/${appelId}/soumissions`)),
+    ]);
+    const soumissionIds = new Set(
+      soumissions
+        .map((soumission) => soumission.id_soumission ?? soumission.id)
+        .filter((value) => value !== undefined && value !== null)
+        .map(String),
+    );
+
+    return items
+      .filter((item) => {
+        const directAppelId = item.id_appel_offre ?? item.id_appel_offres ?? item.appel_id;
+        if (directAppelId !== undefined && directAppelId !== null) return sameId(directAppelId, appelId);
+        if (item.id_soumission !== undefined && item.id_soumission !== null) return soumissionIds.has(String(item.id_soumission));
+        return false;
+      })
+      .map((item) => ({ ...item, id: item.id ?? item.id_recours }));
+  },
 };

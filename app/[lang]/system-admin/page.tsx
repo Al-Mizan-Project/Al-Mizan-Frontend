@@ -17,6 +17,7 @@ import { DocumentStoreProvider } from '@/lib/document-store';
 import DemandesOEPage        from '@/components/DemandesOEPage';
 import DemandeReviewPage     from '@/components/DemandeReviewPage';
 import OrganisationsListPage from '@/components/OrganisationsListPage';
+import SaucissonnageView     from '@/components/SaucissonnageView';
 import { DemandeOE, Organisation } from '@/lib/types';
 
 export type SystemAdminPage =
@@ -30,7 +31,8 @@ export type SystemAdminPage =
   | 'operateurs-organisations'
   | 'tutelle'
   | 'service-contractant'
-  | 'commission-externe';
+  | 'commission-externe'
+  | 'saucissonnage';
 
 type OverlayPage = 'profil' | 'parametres' | 'notifications' | null;
 
@@ -46,6 +48,7 @@ const PAGE_TITLES: Record<SystemAdminPage, { title: string; breadcrumb: string }
   'parametres-generaux':      { title: 'Paramètres généraux',                    breadcrumb: 'Configuration' },
   'audit':                    { title: 'Audit & Logs',                           breadcrumb: 'Sécurité' },
   'rapports-systeme':         { title: 'Rapports système',                       breadcrumb: 'Analyses' },
+  'saucissonnage':            { title: 'Détection du Saucissonnage',             breadcrumb: 'IA & Conformité' },
 };
 
 const OVERLAY_TITLES: Record<NonNullable<OverlayPage>, { title: string; breadcrumb: string }> = {
@@ -160,6 +163,10 @@ function SystemAdminDashboardInner() {
           )}
           {!overlayPage && activePage === 'rapports-systeme' && (
             <div className="p-8 text-center text-gray-500">Rapports système (en construction)</div>
+          )}
+
+          {!overlayPage && activePage === 'saucissonnage' && (
+            <SaucissonnageView />
           )}
         </main>
       </div>

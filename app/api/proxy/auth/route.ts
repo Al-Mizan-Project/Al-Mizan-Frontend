@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { proxyRequest } from '../_utils';
 
-const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL || 'http://localhost:8080';
+const AUTH_BASE = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL || 'http://localhost:8000';
 
 const options = {
   baseUrl: AUTH_BASE,
@@ -16,7 +16,7 @@ export function GET(req: NextRequest) {
 export function POST(req: NextRequest) {
   return proxyRequest(req, 'POST', {
     ...options,
-    defaultPath: 'login',
+    defaultPath: 'auth/login',
     includeInternalToken: false,
   });
 }

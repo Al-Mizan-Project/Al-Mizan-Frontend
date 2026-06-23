@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8082';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -40,7 +40,7 @@ api.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token');
       if (refreshToken) {
         try {
-          const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+          const { data } = await axios.post('/api/proxy/auth?path=auth/refresh', {
             refresh: refreshToken,
           });
           localStorage.setItem('access_token', data.access);
@@ -75,10 +75,62 @@ export interface LoginResponse {
   };
 }
 
+export class AuthAPIError extends Error {
+  status: number;
+  code: 'INVALID_CREDENTIALS' | 'LOGIN_FAILED';
+
+  constructor(message: string, status: number, code: AuthAPIError['code']) {
+    super(message);
+    this.name = 'AuthAPIError';
+    Object.setPrototypeOf(this, AuthAPIError.prototype);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function getAuthErrorMessage(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object') return undefined;
+
+  const data = payload as Record<string, unknown>;
+  const directMessage = data.detail ?? data.message ?? data.error;
+
+  if (typeof directMessage === 'string') return directMessage;
+  if (Array.isArray(directMessage) && typeof directMessage[0] === 'string') {
+    return directMessage[0];
+  }
+
+  if (directMessage && typeof directMessage === 'object') {
+    const nested = directMessage as Record<string, unknown>;
+    if (typeof nested.message === 'string') return nested.message;
+    if (typeof nested.detail === 'string') return nested.detail;
+  }
+
+  return undefined;
+}
+
 export const authAPI = {
+  // Use a clean axios call (not the shared `api` instance) so a stale/expired access token in
+  // localStorage is never attached to the login request — DRF rejects a bad bearer with 401 even
+  // on an AllowAny endpoint.
   login: async (email: string, password: string): Promise<LoginResponse> => {
-    const { data } = await api.post('/auth/login', { email, password });
-    return data;
+    const response = await axios.post<unknown>('/api/proxy/auth?path=auth/login', { email, password }, {
+      headers: { 'Content-Type': 'application/json' },
+      validateStatus: () => true,
+    });
+
+    if (response.status >= 200 && response.status < 300) {
+      return response.data as LoginResponse;
+    }
+
+    if ([400, 401, 403].includes(response.status)) {
+      throw new AuthAPIError('Identifiants incorrects', response.status, 'INVALID_CREDENTIALS');
+    }
+
+    throw new AuthAPIError(
+      getAuthErrorMessage(response.data) || 'Connexion impossible pour le moment',
+      response.status,
+      'LOGIN_FAILED',
+    );
   },
 };
 
@@ -276,7 +328,6 @@ updateEvalFinanciere: async (commissionId: string, id_soumission: number, payloa
 },
 
 lockFinanciereOffer: async (commissionId: string, id_soumission: number) => {
-  console.log('lockFinanciere', commissionId, id_soumission);
   const { data } = await api.post(`/commissions/${commissionId}/eval-financiere/lock/`, { id_soumission });
   return data;
 },
@@ -358,4 +409,58 @@ export const ctAPI = {
     const { data } = await api.post(`/commissions/${commissionId}/rapport-ct/`, payload);
     return data;
   },
+};
+
+// ─── Responsable / Membre detail (admin organisation views) ──────────────────
+
+export interface ResponsablePayload {
+  prenom: string;
+  nom: string;
+  telephone?: string;
+  fonction?: string;
+  email: string;
+  password?: string;
+}
+
+export interface ResponsableResult {
+  message: string;
+  id_membre: string;
+  created: boolean;
+  id_utilisateur?: number;
+  activation_url?: string;
+  temporary_password?: string;
+}
+
+// Upsert: crée le responsable s'il n'existe pas, sinon met à jour ses infos.
+export const upsertResponsable = async (
+  organisationId: string,
+  payload: ResponsablePayload
+): Promise<ResponsableResult> => {
+  const { data } = await api.post(`/organisations/${organisationId}/responsable/`, payload);
+  return data;
+};
+
+export interface MembreDetail {
+  id_membre: string;
+  nom: string;
+  prenom: string;
+  telephone: string;
+  fonction: string;
+  created_at: string;
+  updated_at: string;
+  organisation: {
+    id_organisation: string;
+    nom_officiel: string;
+    type_entite: string;
+    type_entite_display: string;
+    adresse_siege: string;
+    email_contact: string;
+    wilaya?: string;
+    secteur?: string;
+  };
+}
+
+export const fetchMembreDetail = async (idMembre: string): Promise<MembreDetail> => {
+  const { data } = await api.get(`/membres/${idMembre}/`);
+  return data;
 };

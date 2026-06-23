@@ -94,6 +94,7 @@ function mapToFileRecord(appel: CommissionAppelBackendItem): fileRecord {
     etape: appel.etape || 'Évaluation Administrative',
     delayDays: appel.delayDays || 0,
     validator: validatorInfo,
+    statutValidation: appel.statut || 'Inconnu',
   };
 }
 

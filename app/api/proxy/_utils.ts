@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mkdir, writeFile, readFile } from 'fs/promises';
-import path from 'path';
 
 interface ProxyOptions {
   baseUrl: string;
@@ -34,9 +32,6 @@ function buildUpstreamUrl(req: NextRequest, baseUrl: string, defaultPath?: strin
 
   return upstreamUrl.toString();
 }
-
-const DEBUG_RESPONSE_FILE = path.resolve(process.cwd(), 'app', '[lang]', 'debug_backend_response_2.json');
-const CONTRACTANT_MEMBRES_DEBUG_FILE = path.resolve(process.cwd(), 'app', '[lang]', 'debug_contractant_membres_pour_utilisateur.json');
 
 async function buildRequestInit(req: NextRequest, method: string, includeInternalToken: boolean, internalTokenEnvVar?: string) {
   const authHeader = req.headers.get('authorization');
@@ -79,33 +74,6 @@ async function buildRequestInit(req: NextRequest, method: string, includeInterna
   }
 
   return init;
-}
-
-async function _writeDebugResponseIfNeeded(req: NextRequest, payload: string) {
-  const requestUrl = new URL(req.url);
-  const debugPath = requestUrl.searchParams.get('path');
-  if (!debugPath) {
-    return;
-  }
-
-  const debugWriteMap: Record<string, string> = {
-    'appels-offres/commission-interne/dossiers': DEBUG_RESPONSE_FILE,
-    'appels-offres/commission-externe/dossiers': DEBUG_RESPONSE_FILE,
-    'services-contractants/1/commissions/membres-pour-utilisateur': CONTRACTANT_MEMBRES_DEBUG_FILE,
-  };
-
-  const debugFile = debugWriteMap[debugPath || ''];
-  if (!debugFile) {
-    return;
-  }
-
-  try {
-    await mkdir(path.dirname(debugFile), { recursive: true });
-    await writeFile(debugFile, payload, 'utf8');
-    console.log(`[PROXY DEBUG] wrote response to ${debugFile}`);
-  } catch (error) {
-    console.error(`[PROXY DEBUG ERROR] unable to write debug file: ${error}`);
-  }
 }
 
 function buildProxyResponse(upstream: Response, payload: string) {
@@ -155,40 +123,6 @@ function isBinaryResponse(upstream: Response): boolean {
   return false;
 }
 
-async function _tryReadDebugResponseFile(debugPath: string | null): Promise<string | null> {
-  if (!debugPath) {
-    return null;
-  }
-
-  // Map paths to debug files
-  const debugFileMapping: Record<string, string> = {
-    'appels-offres/commission/dossiers': 'debug_backend_response_3.json',
-    'appels-offres/commission-interne/dossiers': 'debug_backend_response_2.json',
-    'appels-offres/commission-externe/dossiers': 'debug_backend_response_2.json',
-  };
-
-  const debugFileName = debugFileMapping[debugPath];
-  if (!debugFileName) {
-    return null;
-  }
-
-  // Only serve debug responses for legacy commission-interne/externe endpoints.
-  // The unified commission endpoint must call the real backend.
-  if (debugPath === 'appels-offres/commission/dossiers') {
-    return null;
-  }
-
-  try {
-    const debugFile = path.resolve(process.cwd(), 'app', '[lang]', debugFileName);
-    const payload = await readFile(debugFile, 'utf8');
-    console.log(`[PROXY DEBUG] serving response from ${debugFileName}`);
-    return payload;
-  } catch (error) {
-    // File doesn't exist, proceed with normal proxy
-    return null;
-  }
-}
-
 export async function proxyRequest(req: NextRequest, method: string, options: ProxyOptions) {
   let upstreamUrl: string | null = null;
   try {
@@ -203,31 +137,7 @@ export async function proxyRequest(req: NextRequest, method: string, options: Pr
       return NextResponse.json({ error: 'Path parameter is required' }, { status: 400 });
     }
 
-    const requestUrl = new URL(req.url);
-    const debugPath = requestUrl.searchParams.get('path');
-
-    // Try to serve from debug file first
-    if (method === 'GET') {
-      const debugPayload = await _tryReadDebugResponseFile(debugPath);
-      if (debugPayload) {
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        return new NextResponse(debugPayload, {
-          status: 200,
-          headers,
-        });
-      }
-    }
-
     const requestInit = await buildRequestInit(req, method, options.includeInternalToken !== false, options.internalTokenEnvVar);
-    
-    // Debug logging
-    const requestInitHeaders = requestInit.headers as Record<string, string>;
-    console.log(`[PROXY] ${method} ${upstreamUrl}`);
-    console.log(`[PROXY] Headers:`, {
-      Authorization: requestInitHeaders['Authorization'] ? `${String(requestInitHeaders['Authorization']).substring(0, 20)}...` : 'MISSING',
-      'Content-Type': requestInitHeaders['Content-Type'],
-    });
 
     const upstream = await fetch(
       upstreamUrl,
@@ -240,22 +150,18 @@ export async function proxyRequest(req: NextRequest, method: string, options: Pr
 
     // Handle binary file downloads (StreamingHttpResponse from Django)
     if (isBinaryResponse(upstream)) {
-      console.log(`[PROXY] Binary response detected, streaming as binary`);
       const body = await upstream.arrayBuffer();
       return buildBinaryProxyResponse(upstream, body);
     }
 
     const payload = await upstream.text();
-    await _writeDebugResponseIfNeeded(req, payload);
     return buildProxyResponse(upstream, payload);
   } catch (error) {
-    // improved error logging for debugging upstream failures
     const urlForLogging = upstreamUrl || 'unknown URL';
-    console.error(`[PROXY ERROR] ${options.errorLabel} ${method} ${urlForLogging}`, error);
     return NextResponse.json(
       {
         error: `${options.errorLabel} error`,
-        detail: String(error),
+        detail: `${method} ${urlForLogging}: ${String(error)}`,
       },
       { status: 502 }
     );
